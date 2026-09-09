@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Test - GenerateJurnalInv</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .debug-section { margin: 20px 0; padding: 15px; border: 2px solid #007bff; border-radius: 5px; }
+        .debug-section h3 { margin-top: 0; color: #007bff; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        button { padding: 12px 20px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        input, select { padding: 10px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; width: 200px; }
+        .result { margin-top: 10px; padding: 15px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid #007bff; font-family: monospace; }
+        .debug-console { background: #000; color: #00ff00; padding: 15px; margin: 10px 0; font-family: monospace; font-size: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-left: 10px; }
+        .status-pending { background: #ffc107; color: #212529; }
+        .status-pass { background: #28a745; color: white; }
+        .status-fail { background: #dc3545; color: white; }
+        .code-block { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐛 Debug Test Suite - GenerateJurnalInv</h1>
+        <p class="info">Comprehensive debugging and testing for all GenerateJurnalInv functions</p>
+        
+        <div class="debug-section">
+            <h3>📊 Test Status Dashboard</h3>
+            <div id="dashboard">
+                <div>Connection Test: <span id="conn-status" class="status-badge status-pending">Pending</span></div>
+                <div>Session Test: <span id="session-status" class="status-badge status-pending">Pending</span></div>
+                <div>WebMethod Test: <span id="webmethod-status" class="status-badge status-pending">Pending</span></div>
+                <div>Data Validation: <span id="validation-status" class="status-badge status-pending">Pending</span></div>
+            </div>
+        </div>
+
+        <div class="test-grid">
+            <!-- Connection Test -->
+            <div class="debug-section">
+                <h3>🔌 Connection Test</h3>
+                <button class="btn-primary" onclick="testConnection()">Test Database Connection</button>
+                <button class="btn-warning" onclick="testConnectionString()">Test Connection String</button>
+                <div id="connection-result" class="result"></div>
+            </div>
+
+            <!-- Session Test -->
+            <div class="debug-section">
+                <h3>🔐 Session Test</h3>
+                <button class="btn-primary" onclick="testSession()">Test Session Management</button>
+                <button class="btn-warning" onclick="testSessionData()">Test Session Data</button>
+                <div id="session-result" class="result"></div>
+            </div>
+
+            <!-- WebMethod Test -->
+            <div class="debug-section">
+                <h3>🌐 WebMethod Test</h3>
+                <button class="btn-primary" onclick="testAllWebMethods()">Test All WebMethods</button>
+                <button class="btn-info" onclick="testWebMethodParams()">Test Parameters</button>
+                <div id="webmethod-result" class="result"></div>
+            </div>
+
+            <!-- Data Validation -->
+            <div class="debug-section">
+                <h3>✅ Data Validation Test</h3>
+                <input type="text" id="testData" placeholder="Test data" value='{"test": "data"}' />
+                <button class="btn-success" onclick="testDataValidation()">Test Data Validation</button>
+                <button class="btn-warning" onclick="testInvalidData()">Test Invalid Data</button>
+                <div id="validation-result" class="result"></div>
+            </div>
+
+            <!-- Performance Test -->
+            <div class="debug-section">
+                <h3>⚡ Performance Test</h3>
+                <button class="btn-primary" onclick="testPerformance()">Test Response Time</button>
+                <button class="btn-info" onclick="testConcurrentRequests()">Test Concurrent Requests</button>
+                <div id="performance-result" class="result"></div>
+            </div>
+
+            <!-- Error Simulation -->
+            <div class="debug-section">
+                <h3>🚨 Error Simulation</h3>
+                <button class="btn-danger" onclick="simulateErrors()">Simulate Various Errors</button>
+                <button class="btn-warning" onclick="testErrorRecovery()">Test Error Recovery</button>
+                <div id="error-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Debug Console -->
+        <div class="debug-section">
+            <h3>🐛 Debug Console</h3>
+            <button class="btn-info" onclick="clearDebug()">Clear Console</button>
+            <button class="btn-warning" onclick="exportDebugLog()">Export Log</button>
+            <div id="debugConsole" class="debug-console"></div>
+        </div>
+
+        <!-- Code Inspection -->
+        <div class="debug-section">
+            <h3>🔍 Code Inspection</h3>
+            <button class="btn-primary" onclick="inspectCode()">Inspect Current Code</button>
+            <button class="btn-info" onclick="checkDependencies()">Check Dependencies</button>
+            <div id="inspection-result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        let debugLog = [];
+        let testResults = {};
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+            console.log(logEntry);
+            debugLog.push(logEntry);
+            $("#debugConsole").append(`<div>${logEntry}</div>`);
+            $("#debugConsole").scrollTop($("#debugConsole")[0].scrollHeight);
+        }
+
+        function clearDebug() {
+            $("#debugConsole").empty();
+            debugLog = [];
+        }
+
+        function exportDebugLog() {
+            const logText = debugLog.join('\n');
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'debug_log_' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+            a.click();
+        }
+
+        function updateStatus(elementId, status, message) {
+            const element = $(`#${elementId}`);
+            element.removeClass('status-pending status-pass status-fail');
+            element.addClass(`status-${status}`);
+            element.text(status === 'pass' ? 'Pass' : status === 'fail' ? 'Fail' : 'Pending');
+            log(`${elementId}: ${message}`, status === 'pass' ? 'success' : status === 'fail' ? 'error' : 'info');
+        }
+
+        // Connection Test
+        function testConnection() {
+            log("Testing database connection...");
+            updateStatus('conn-status', 'pending', 'Testing...');
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({ search: "", dateFrom: "", dateTo: "" }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                timeout: 10000,
+                success: function (response) {
+                    try {
+                        const data = JSON.parse(response.d);
+                        if (data && Array.isArray(data)) {
+                            updateStatus('conn-status', 'pass', `Connection successful. Retrieved ${data.length} records`);
+                        } else {
+                            updateStatus('conn-status', 'pass', 'Connection successful but no data returned');
+                        }
+                    } catch (e) {
+                        updateStatus('conn-status', 'fail', `Connection successful but JSON parse error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    updateStatus('conn-status', 'fail', `Connection failed: ${error} (${status})`);
+                    log(`Connection error details: ${xhr.responseText}`, 'error');
+                }
+            });
+        }
+
+        function testConnectionString() {
+            log("Testing connection string configuration...");
+            
+            // Test if we can access the page
+            $.ajax({
+                type: "GET",
+                url: "GenerateJurnalInv.aspx",
+                success: function (response) {
+                    if (response.includes("GenerateJurnalInv")) {
+                        log("Page accessible - connection string likely configured", 'success');
+                    } else {
+                        log("Page accessible but content unexpected", 'warning');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log(`Page access failed: ${error}`, 'error');
+                }
+            });
+        }
+
+        // Session Test
+        function testSession() {
+            log("Testing session management...");
+            updateStatus('session-status', 'pending', 'Testing...');
+            
+            // Test session across multiple requests
+            let requestCount = 0;
+            const maxRequests = 3;
+            
+            function makeRequest() {
+                requestCount++;
+                log(`Session test request ${requestCount}/${maxRequests}`);
+                
+                $.ajax({
+                    type: "POST",
+                    url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                    data: JSON.stringify({ search: "", dateFrom: "", dateTo: "" }),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function (response) {
+                        if (requestCount >= maxRequests) {
+                            updateStatus('session-status', 'pass', 'Session maintained across multiple requests');
+                        } else {
+                            setTimeout(makeRequest, 500);
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        updateStatus('session-status', 'fail', `Session test failed: ${error}`);
+                    }
+                });
+            }
+            
+            makeRequest();
+        }
+
+        function testSessionData() {
+            log("Testing session data persistence...");
+            
+            // Test if session data is properly stored
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({ search: "test", dateFrom: "", dateTo: "" }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    log("Session data test completed", 'success');
+                },
+                error: function (xhr, status, error) {
+                    log(`Session data test failed: ${error}`, 'error');
+                }
+            });
+        }
+
+        // WebMethod Test
+        function testAllWebMethods() {
+            log("Testing all WebMethods...");
+            updateStatus('webmethod-status', 'pending', 'Testing...');
+            
+            const webMethods = [
+                { name: 'GetJurnalHeader', data: { search: "", dateFrom: "", dateTo: "" } },
+                { name: 'GetJurnalDetail', data: { id_sales_invoice: 1 } },
+                { name: 'SaveAsDraftJurnalInvoice', data: { jsonData: JSON.stringify([]) } },
+                { name: 'UploadFile', data: new FormData() }
+            ];
+            
+            let completedTests = 0;
+            let passedTests = 0;
+            
+            webMethods.forEach((method, index) => {
+                setTimeout(() => {
+                    log(`Testing WebMethod: ${method.name}`);
+                    
+                    $.ajax({
+                        type: "POST",
+                        url: `GenerateJurnalInv.aspx/${method.name}`,
+                        data: method.name === 'UploadFile' ? method.data : JSON.stringify(method.data),
+                        contentType: method.name === 'UploadFile' ? false : "application/json; charset=utf-8",
+                        dataType: "json",
+                        processData: method.name === 'UploadFile' ? false : true,
+                        success: function (response) {
+                            log(`WebMethod ${method.name}: Success`, 'success');
+                            passedTests++;
+                        },
+                        error: function (xhr, status, error) {
+                            log(`WebMethod ${method.name}: Failed - ${error}`, 'error');
+                        },
+                        complete: function () {
+                            completedTests++;
+                            if (completedTests === webMethods.length) {
+                                const successRate = Math.round((passedTests / completedTests) * 100);
+                                updateStatus('webmethod-status', passedTests === completedTests ? 'pass' : 'fail', 
+                                    `${passedTests}/${completedTests} WebMethods passed (${successRate}%)`);
+                            }
+                        }
+                    });
+                }, index * 1000);
+            });
+        }
+
+        function testWebMethodParams() {
+            log("Testing WebMethod parameters...");
+            
+            // Test various parameter combinations
+            const testCases = [
+                { search: "test", dateFrom: "2024-01-01", dateTo: "2024-12-31" },
+                { search: "", dateFrom: "", dateTo: "" },
+                { search: "invalid", dateFrom: "invalid", dateTo: "invalid" }
+            ];
+            
+            testCases.forEach((testCase, index) => {
+                setTimeout(() => {
+                    log(`Testing parameters: ${JSON.stringify(testCase)}`);
+                    
+                    $.ajax({
+                        type: "POST",
+                        url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                        data: JSON.stringify(testCase),
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json",
+                        success: function (response) {
+                            log(`Parameter test ${index + 1}: Success`, 'success');
+                        },
+                        error: function (xhr, status, error) {
+                            log(`Parameter test ${index + 1}: Failed - ${error}`, 'error');
+                        }
+                    });
+                }, index * 500);
+            });
+        }
+
+        // Data Validation Test
+        function testDataValidation() {
+            log("Testing data validation...");
+            updateStatus('validation-status', 'pending', 'Testing...');
+            
+            const testData = $("#testData").val();
+            
+            try {
+                const parsed = JSON.parse(testData);
+                log("JSON validation: Pass", 'success');
+                
+                // Test data structure
+                if (typeof parsed === 'object') {
+                    updateStatus('validation-status', 'pass', 'Data validation passed');
+                } else {
+                    updateStatus('validation-status', 'fail', 'Data structure invalid');
+                }
+            } catch (e) {
+                updateStatus('validation-status', 'fail', `JSON validation failed: ${e.message}`);
+            }
+        }
+
+        function testInvalidData() {
+            log("Testing invalid data handling...");
+            
+            const invalidData = [
+                null,
+                undefined,
+                "",
+                "invalid json",
+                "{}",
+                "[]"
+            ];
+            
+            invalidData.forEach((data, index) => {
+                setTimeout(() => {
+                    log(`Testing invalid data ${index + 1}: ${data}`);
+                    
+                    $.ajax({
+                        type: "POST",
+                        url: "GenerateJurnalInv.aspx/SaveAsDraftJurnalInvoice",
+                        data: JSON.stringify({ jsonData: JSON.stringify(data) }),
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json",
+                        success: function (response) {
+                            log(`Invalid data ${index + 1}: Handled gracefully`, 'success');
+                        },
+                        error: function (xhr, status, error) {
+                            log(`Invalid data ${index + 1}: Error - ${error}`, 'error');
+                        }
+                    });
+                }, index * 300);
+            });
+        }
+
+        // Performance Test
+        function testPerformance() {
+            log("Testing performance...");
+            
+            const startTime = performance.now();
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({ search: "", dateFrom: "", dateTo: "" }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    const endTime = performance.now();
+                    const duration = Math.round(endTime - startTime);
+                    log(`Performance test: ${duration}ms`, duration < 2000 ? 'success' : 'warning');
+                },
+                error: function (xhr, status, error) {
+                    log(`Performance test failed: ${error}`, 'error');
+                }
+            });
+        }
+
+        function testConcurrentRequests() {
+            log("Testing concurrent requests...");
+            
+            const concurrentCount = 5;
+            let completedCount = 0;
+            
+            for (let i = 0; i < concurrentCount; i++) {
+                $.ajax({
+                    type: "POST",
+                    url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                    data: JSON.stringify({ search: "", dateFrom: "", dateTo: "" }),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function (response) {
+                        completedCount++;
+                        log(`Concurrent request ${completedCount}/${concurrentCount} completed`);
+                    },
+                    error: function (xhr, status, error) {
+                        completedCount++;
+                        log(`Concurrent request ${completedCount}/${concurrentCount} failed: ${error}`, 'error');
+                    }
+                });
+            }
+        }
+
+        // Error Simulation
+        function simulateErrors() {
+            log("Simulating various errors...");
+            
+            // Test network errors
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/NonExistentMethod",
+                data: JSON.stringify({}),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    log("Unexpected success for non-existent method", 'warning');
+                },
+                error: function (xhr, status, error) {
+                    log(`Expected error for non-existent method: ${error}`, 'success');
+                }
+            });
+            
+            // Test invalid parameters
+            setTimeout(() => {
+                $.ajax({
+                    type: "POST",
+                    url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                    data: JSON.stringify({ id_sales_invoice: "invalid" }),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function (response) {
+                        log("Invalid parameter handled gracefully", 'success');
+                    },
+                    error: function (xhr, status, error) {
+                        log(`Invalid parameter error: ${error}`, 'error');
+                    }
+                });
+            }, 1000);
+        }
+
+        function testErrorRecovery() {
+            log("Testing error recovery...");
+            
+            // Test recovery after error
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({ search: "", dateFrom: "", dateTo: "" }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    log("Recovery test: Success after error simulation", 'success');
+                },
+                error: function (xhr, status, error) {
+                    log(`Recovery test failed: ${error}`, 'error');
+                }
+            });
+        }
+
+        // Code Inspection
+        function inspectCode() {
+            log("Inspecting current code...");
+            
+            // Check if required functions exist
+            const requiredFunctions = ['loadJurnal', 'loadDetail', 'updateSelectedItems'];
+            const missingFunctions = [];
+            
+            requiredFunctions.forEach(func => {
+                if (typeof window[func] !== 'function') {
+                    missingFunctions.push(func);
+                }
+            });
+            
+            if (missingFunctions.length === 0) {
+                log("All required functions found", 'success');
+            } else {
+                log(`Missing functions: ${missingFunctions.join(', ')}`, 'error');
+            }
+            
+            // Check jQuery availability
+            if (typeof $ !== 'undefined') {
+                log("jQuery is available", 'success');
+            } else {
+                log("jQuery is not available", 'error');
+            }
+        }
+
+        function checkDependencies() {
+            log("Checking dependencies...");
+            
+            // Check for required libraries
+            const dependencies = [
+                { name: 'jQuery', check: () => typeof $ !== 'undefined' },
+                { name: 'JSON', check: () => typeof JSON !== 'undefined' },
+                { name: 'FormData', check: () => typeof FormData !== 'undefined' }
+            ];
+            
+            dependencies.forEach(dep => {
+                if (dep.check()) {
+                    log(`${dep.name}: Available`, 'success');
+                } else {
+                    log(`${dep.name}: Not available`, 'error');
+                }
+            });
+        }
+
+        // Initialize
+        $(document).ready(function() {
+            log("🐛 Debug Test Suite initialized");
+            log("Browser: " + navigator.userAgent);
+            log("jQuery version: " + $.fn.jquery);
+            
+            // Auto-run basic tests
+            setTimeout(() => {
+                testConnection();
+                inspectCode();
+                checkDependencies();
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 

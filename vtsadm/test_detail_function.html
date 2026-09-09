@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Detail Function</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { padding: 10px 15px; margin: 5px; }
+        input { padding: 5px; margin: 5px; }
+        #result { margin-top: 10px; padding: 10px; background: #f5f5f5; }
+        .debug { background: #f0f0f0; padding: 10px; margin: 10px 0; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Test Detail Function - GenerateJurnalInv</h1>
+    
+    <div class="test-section">
+        <h3>Test GetJurnalHeader First</h3>
+        <button onclick="testGetHeader()">Get Header Data</button>
+        <div id="headerResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test GetJurnalDetail</h3>
+        <input type="number" id="detailId" placeholder="Sales Invoice ID" value="1" />
+        <button onclick="testGetDetail()">Test Detail</button>
+        <button onclick="testGetDetailWithInvalidId()">Test Invalid ID</button>
+        <div id="detailResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Debug Console</h3>
+        <div id="debugConsole" class="debug"></div>
+        <button onclick="clearDebug()">Clear Debug</button>
+    </div>
+
+    <script>
+        function log(message) {
+            console.log(message);
+            $("#debugConsole").append("<div>" + new Date().toLocaleTimeString() + ": " + message + "</div>");
+        }
+
+        function clearDebug() {
+            $("#debugConsole").empty();
+        }
+
+        function testGetHeader() {
+            log("Testing GetJurnalHeader...");
+            $("#headerResult").html('<span class="info">Loading header data...</span>');
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({
+                    search: "",
+                    dateFrom: "",
+                    dateTo: ""
+                }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        var data = JSON.parse(response.d);
+                        log("Header response received: " + data.length + " records");
+                        
+                        if (data && data.length > 0) {
+                            var firstId = data[0].id_sales_invoice;
+                            log("First record ID: " + firstId);
+                            $("#detailId").val(firstId);
+                            
+                            $("#headerResult").html('<span class="success">Success! Found ' + data.length + ' records. First ID: ' + firstId + '</span>');
+                        } else {
+                            $("#headerResult").html('<span class="info">No data returned</span>');
+                        }
+                    } catch (e) {
+                        log("Error parsing header response: " + e.message);
+                        $("#headerResult").html('<span class="error">Error parsing response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log("Header AJAX Error: " + error);
+                    log("Response Text: " + xhr.responseText);
+                    $("#headerResult").html('<span class="error">AJAX Error: ' + error + '</span>');
+                }
+            });
+        }
+
+        function testGetDetail() {
+            var id = $("#detailId").val();
+            log("Testing GetJurnalDetail with ID: " + id);
+            $("#detailResult").html('<span class="info">Loading detail for ID: ' + id + '...</span>');
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                data: JSON.stringify({ id_sales_invoice: parseInt(id) }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    log("Detail response received");
+                    try {
+                        var data = JSON.parse(response.d);
+                        log("Detail data parsed: " + (data ? data.length : 0) + " records");
+                        
+                        if (data && data.length > 0) {
+                            $("#detailResult").html('<span class="success">Detail loaded! Found ' + data.length + ' detail records</span><br><pre>' + JSON.stringify(data.slice(0, 2), null, 2) + '</pre>');
+                        } else {
+                            $("#detailResult").html('<span class="info">No detail data returned for ID: ' + id + '</span>');
+                        }
+                    } catch (e) {
+                        log("Error parsing detail response: " + e.message);
+                        log("Raw response: " + JSON.stringify(response));
+                        $("#detailResult").html('<span class="error">Error parsing detail response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log("Detail AJAX Error: " + error);
+                    log("Status: " + status);
+                    log("Response Text: " + xhr.responseText);
+                    $("#detailResult").html('<span class="error">Detail AJAX Error: ' + error + '</span>');
+                }
+            });
+        }
+
+        function testGetDetailWithInvalidId() {
+            log("Testing GetJurnalDetail with invalid ID: -1");
+            $("#detailResult").html('<span class="info">Testing with invalid ID...</span>');
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                data: JSON.stringify({ id_sales_invoice: -1 }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    log("Invalid ID response received");
+                    try {
+                        var data = JSON.parse(response.d);
+                        if (data.error) {
+                            $("#detailResult").html('<span class="success">Correctly handled invalid ID: ' + data.error + '</span>');
+                        } else {
+                            $("#detailResult").html('<span class="info">Invalid ID response: ' + JSON.stringify(data) + '</span>');
+                        }
+                    } catch (e) {
+                        log("Error parsing invalid ID response: " + e.message);
+                        $("#detailResult").html('<span class="error">Error parsing invalid ID response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log("Invalid ID AJAX Error: " + error);
+                    $("#detailResult").html('<span class="error">Invalid ID AJAX Error: ' + error + '</span>');
+                }
+            });
+        }
+
+        // Auto-run header test on page load
+        $(document).ready(function() {
+            log("Page loaded, starting tests...");
+            setTimeout(function() {
+                testGetHeader();
+            }, 500);
+        });
+    </script>
+</body>
+</html> 

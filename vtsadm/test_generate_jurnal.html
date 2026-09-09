@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test GenerateJurnalInv - Enhanced</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .warning { color: orange; }
+        button { padding: 10px 15px; margin: 5px; }
+        input { padding: 5px; margin: 5px; }
+        #result { margin-top: 10px; padding: 10px; background: #f5f5f5; }
+        .test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .test-item { border: 1px solid #ccc; padding: 10px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>Test GenerateJurnalInv - Enhanced Features</h1>
+    
+    <div class="test-grid">
+        <div class="test-section">
+            <h3>Test AJAX Call - Header</h3>
+            <input type="text" id="search" placeholder="Search term" />
+            <input type="date" id="dateFrom" />
+            <input type="date" id="dateTo" />
+            <button onclick="testAjax()">Test AJAX</button>
+            <div id="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Page Load</h3>
+            <button onclick="testPageLoad()">Test Page Load</button>
+            <div id="pageResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Detail View</h3>
+            <input type="number" id="detailId" placeholder="Sales Invoice ID" value="1" />
+            <button onclick="testDetail()">Test Detail</button>
+            <div id="detailResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Save as Draft</h3>
+            <button onclick="testSaveAsDraft()">Test Save as Draft</button>
+            <div id="saveResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Upload File</h3>
+            <input type="file" id="testFile" accept=".xlsx,.xls" />
+            <button onclick="testUpload()">Test Upload</button>
+            <div id="uploadResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test All Features</h3>
+            <button onclick="testAllFeatures()">Test All</button>
+            <div id="allResult"></div>
+        </div>
+    </div>
+
+    <script>
+        function testAjax() {
+            $('#result').html('<span class="info">Testing AJAX call...</span>');
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({
+                    search: $('#search').val() || "",
+                    dateFrom: $('#dateFrom').val() || "",
+                    dateTo: $('#dateTo').val() || ""
+                }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        var data = JSON.parse(response.d);
+                        if (data && data.length > 0) {
+                            $('#result').html('<span class="success">Success! Found ' + data.length + ' records</span><br><pre>' + JSON.stringify(data.slice(0, 2), null, 2) + '</pre>');
+                        } else {
+                            $('#result').html('<span class="info">No data returned</span>');
+                        }
+                    } catch (e) {
+                        $('#result').html('<span class="error">Error parsing response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    $('#result').html('<span class="error">AJAX Error: ' + error + '</span><br><pre>' + xhr.responseText + '</pre>');
+                }
+            });
+        }
+
+        function testPageLoad() {
+            $('#pageResult').html('<span class="info">Testing page load...</span>');
+            
+            $.get('GenerateJurnalInv.aspx', function(data) {
+                if (data.indexOf('Generate Jurnal Invoice') !== -1) {
+                    $('#pageResult').html('<span class="success">Page loads successfully!</span>');
+                } else {
+                    $('#pageResult').html('<span class="error">Page content not as expected</span>');
+                }
+            }).fail(function(xhr, status, error) {
+                $('#pageResult').html('<span class="error">Page load failed: ' + error + '</span>');
+            });
+        }
+
+        function testDetail() {
+            var id = $('#detailId').val();
+            $('#detailResult').html('<span class="info">Testing detail view for ID: ' + id + '...</span>');
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                data: JSON.stringify({ id_sales_invoice: parseInt(id) }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        var data = JSON.parse(response.d);
+                        if (data && data.length > 0) {
+                            $('#detailResult').html('<span class="success">Detail loaded! Found ' + data.length + ' detail records</span><br><pre>' + JSON.stringify(data.slice(0, 2), null, 2) + '</pre>');
+                        } else {
+                            $('#detailResult').html('<span class="info">No detail data returned</span>');
+                        }
+                    } catch (e) {
+                        $('#detailResult').html('<span class="error">Error parsing detail response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    $('#detailResult').html('<span class="error">Detail AJAX Error: ' + error + '</span><br><pre>' + xhr.responseText + '</pre>');
+                }
+            });
+        }
+
+        function testSaveAsDraft() {
+            $('#saveResult').html('<span class="info">Testing save as draft...</span>');
+            
+            // Sample data for testing
+            var testData = [
+                {
+                    id_sales_invoice: 1,
+                    transaction_no: "TRX-TEST-001",
+                    message: "Test transaction",
+                    remaining: "1000.00",
+                    original_amount: "1000.00",
+                    status: "Active",
+                    subtotal: "900.00",
+                    transaction_date: new Date().toISOString().split('T')[0],
+                    custom_id: "CUST-TEST",
+                    person_display_name: "Test Customer",
+                    detail: []
+                }
+            ];
+
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/SaveAsDraftJurnalInvoice",
+                data: JSON.stringify({ jsonData: JSON.stringify(testData) }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        var result = JSON.parse(response.d);
+                        if (result.status_code === 200) {
+                            $('#saveResult').html('<span class="success">Save as draft successful: ' + result.message + '</span>');
+                        } else {
+                            $('#saveResult').html('<span class="warning">Save as draft completed with status: ' + result.status_code + ' - ' + result.message + '</span>');
+                        }
+                    } catch (e) {
+                        $('#saveResult').html('<span class="error">Error parsing save response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    $('#saveResult').html('<span class="error">Save as draft error: ' + error + '</span><br><pre>' + xhr.responseText + '</pre>');
+                }
+            });
+        }
+
+        function testUpload() {
+            var fileInput = $('#testFile')[0];
+            if (!fileInput.files[0]) {
+                $('#uploadResult').html('<span class="warning">Please select a file first</span>');
+                return;
+            }
+
+            $('#uploadResult').html('<span class="info">Testing file upload...</span>');
+            
+            var formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/UploadFile",
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                    try {
+                        var result = JSON.parse(response.d);
+                        if (result.data) {
+                            $('#uploadResult').html('<span class="success">Upload successful! Found ' + result.data.length + ' records</span><br><pre>' + JSON.stringify(result.data[0], null, 2) + '</pre>');
+                        } else if (result.error) {
+                            $('#uploadResult').html('<span class="error">Upload error: ' + result.error + '</span>');
+                        } else {
+                            $('#uploadResult').html('<span class="warning">Upload completed but no data returned</span>');
+                        }
+                    } catch (e) {
+                        $('#uploadResult').html('<span class="error">Error parsing upload response: ' + e.message + '</span>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    $('#uploadResult').html('<span class="error">Upload error: ' + error + '</span><br><pre>' + xhr.responseText + '</pre>');
+                }
+            });
+        }
+
+        function testAllFeatures() {
+            $('#allResult').html('<span class="info">Testing all features...</span>');
+            
+            var results = [];
+            var tests = [
+                { name: 'Page Load', func: testPageLoad },
+                { name: 'AJAX Header', func: testAjax },
+                { name: 'Detail View', func: testDetail },
+                { name: 'Save as Draft', func: testSaveAsDraft }
+            ];
+
+            var completed = 0;
+            tests.forEach(function(test, index) {
+                setTimeout(function() {
+                    test.func();
+                    completed++;
+                    if (completed === tests.length) {
+                        $('#allResult').html('<span class="success">All tests completed! Check individual results above.</span>');
+                    }
+                }, index * 1000);
+            });
+        }
+
+        // Set default dates
+        $(document).ready(function() {
+            var now = new Date();
+            var first = new Date(now.getFullYear(), now.getMonth(), 1);
+            $('#dateFrom').val(first.toISOString().substring(0, 10));
+            $('#dateTo').val(now.toISOString().substring(0, 10));
+            
+            // Auto-run basic tests
+            setTimeout(function() {
+                testPageLoad();
+                testAjax();
+            }, 500);
+        });
+    </script>
+</body>
+</html> 

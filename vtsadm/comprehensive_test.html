@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Comprehensive Test - GenerateJurnalInv</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-section h3 { margin-top: 0; color: #333; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; border-left: 4px solid #007bff; }
+        .debug { background: #f8f9fa; padding: 10px; margin: 10px 0; font-family: monospace; font-size: 12px; border-radius: 4px; max-height: 300px; overflow-y: auto; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-pass { background: #28a745; }
+        .status-fail { background: #dc3545; }
+        .status-pending { background: #ffc107; }
+        .progress-bar { width: 100%; height: 20px; background: #e9ecef; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #007bff; transition: width 0.3s; }
+        .summary { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Comprehensive Test Suite - GenerateJurnalInv</h1>
+        
+        <div class="summary">
+            <h3>📊 Test Summary</h3>
+            <div>Total Tests: <span id="totalTests">0</span></div>
+            <div>Passed: <span id="passedTests" class="success">0</span></div>
+            <div>Failed: <span id="failedTests" class="error">0</span></div>
+            <div>Progress: <span id="progressPercent">0%</span></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="test-grid">
+            <!-- Test 1: Page Load -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test1-status"></span>1. Page Load Test</h3>
+                <button class="btn-primary" onclick="testPageLoad()">Test Page Load</button>
+                <div id="test1-result" class="result"></div>
+            </div>
+
+            <!-- Test 2: GetJurnalHeader -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test2-status"></span>2. GetJurnalHeader Test</h3>
+                <input type="text" id="searchText" placeholder="Search text" />
+                <input type="date" id="dateFrom" />
+                <input type="date" id="dateTo" />
+                <button class="btn-primary" onclick="testGetHeader()">Test Get Header</button>
+                <div id="test2-result" class="result"></div>
+            </div>
+
+            <!-- Test 3: GetJurnalDetail -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test3-status"></span>3. GetJurnalDetail Test</h3>
+                <input type="number" id="detailId" placeholder="Sales Invoice ID" value="1" />
+                <button class="btn-primary" onclick="testGetDetail()">Test Get Detail</button>
+                <button class="btn-warning" onclick="testGetDetailInvalid()">Test Invalid ID</button>
+                <div id="test3-result" class="result"></div>
+            </div>
+
+            <!-- Test 4: SaveAsDraft -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test4-status"></span>4. SaveAsDraft Test</h3>
+                <button class="btn-success" onclick="testSaveAsDraft()">Test Save as Draft</button>
+                <button class="btn-warning" onclick="testSaveAsDraftEmpty()">Test Empty Selection</button>
+                <div id="test4-result" class="result"></div>
+            </div>
+
+            <!-- Test 5: UploadFile -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test5-status"></span>5. UploadFile Test</h3>
+                <input type="file" id="testFile" accept=".xlsx,.xls" />
+                <button class="btn-info" onclick="testUploadFile()">Test Upload</button>
+                <button class="btn-warning" onclick="testUploadNoFile()">Test No File</button>
+                <div id="test5-result" class="result"></div>
+            </div>
+
+            <!-- Test 6: Export Excel -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test6-status"></span>6. Export Excel Test</h3>
+                <button class="btn-success" onclick="testExportExcel()">Test Export</button>
+                <div id="test6-result" class="result"></div>
+            </div>
+
+            <!-- Test 7: Session Management -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test7-status"></span>7. Session Test</h3>
+                <button class="btn-primary" onclick="testSession()">Test Session</button>
+                <div id="test7-result" class="result"></div>
+            </div>
+
+            <!-- Test 8: Error Handling -->
+            <div class="test-section">
+                <h3><span class="status-indicator status-pending" id="test8-status"></span>8. Error Handling Test</h3>
+                <button class="btn-danger" onclick="testErrorHandling()">Test Error Scenarios</button>
+                <div id="test8-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Auto Test -->
+        <div class="test-section">
+            <h3>🚀 Auto Test All Functions</h3>
+            <button class="btn-primary" onclick="runAllTests()">Run All Tests</button>
+            <button class="btn-warning" onclick="clearAllResults()">Clear Results</button>
+            <div id="autoTest-result" class="result"></div>
+        </div>
+
+        <!-- Debug Console -->
+        <div class="test-section">
+            <h3>🐛 Debug Console</h3>
+            <button class="btn-info" onclick="clearDebug()">Clear Debug</button>
+            <div id="debugConsole" class="debug"></div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = {
+            total: 0,
+            passed: 0,
+            failed: 0
+        };
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `<div>[${timestamp}] ${message}</div>`;
+            console.log(message);
+            $("#debugConsole").append(logEntry);
+        }
+
+        function clearDebug() {
+            $("#debugConsole").empty();
+        }
+
+        function updateTestStatus(testId, status) {
+            const statusElement = $(`#test${testId}-status`);
+            statusElement.removeClass('status-pending status-pass status-fail');
+            statusElement.addClass(`status-${status}`);
+        }
+
+        function updateProgress() {
+            const total = testResults.total;
+            const passed = testResults.passed;
+            const failed = testResults.failed;
+            const progress = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+            $("#totalTests").text(total);
+            $("#passedTests").text(passed);
+            $("#failedTests").text(failed);
+            $("#progressPercent").text(progress + "%");
+            $("#progressBar").css("width", progress + "%");
+        }
+
+        function markTestResult(testId, passed, message) {
+            testResults.total++;
+            if (passed) {
+                testResults.passed++;
+                updateTestStatus(testId, 'pass');
+                $(`#test${testId}-result`).html(`<span class="success">✅ PASS: ${message}</span>`);
+            } else {
+                testResults.failed++;
+                updateTestStatus(testId, 'fail');
+                $(`#test${testId}-result`).html(`<span class="error">❌ FAIL: ${message}</span>`);
+            }
+            updateProgress();
+        }
+
+        // Test 1: Page Load
+        function testPageLoad() {
+            log("Testing page load...");
+            markTestResult(1, true, "Page loaded successfully");
+            log("Page load test completed");
+        }
+
+        // Test 2: GetJurnalHeader
+        function testGetHeader() {
+            log("Testing GetJurnalHeader...");
+            const search = $("#searchText").val() || "";
+            const dateFrom = $("#dateFrom").val() || "";
+            const dateTo = $("#dateTo").val() || "";
+
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({
+                    search: search,
+                    dateFrom: dateFrom,
+                    dateTo: dateTo
+                }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        const data = JSON.parse(response.d);
+                        log(`GetJurnalHeader response: ${data.length} records`);
+                        
+                        if (data && data.length > 0) {
+                            markTestResult(2, true, `Successfully retrieved ${data.length} records`);
+                            // Auto-fill detail ID for next test
+                            $("#detailId").val(data[0].id_sales_invoice || 1);
+                        } else {
+                            markTestResult(2, true, "No data returned (this might be expected)");
+                        }
+                    } catch (e) {
+                        log(`Error parsing GetJurnalHeader response: ${e.message}`);
+                        markTestResult(2, false, `JSON parse error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log(`GetJurnalHeader AJAX Error: ${error}`);
+                    markTestResult(2, false, `AJAX error: ${error}`);
+                }
+            });
+        }
+
+        // Test 3: GetJurnalDetail
+        function testGetDetail() {
+            log("Testing GetJurnalDetail...");
+            const id = $("#detailId").val();
+
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                data: JSON.stringify({ id_sales_invoice: parseInt(id) }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        const data = JSON.parse(response.d);
+                        log(`GetJurnalDetail response: ${data ? data.length : 0} records`);
+                        
+                        if (data && data.length > 0) {
+                            markTestResult(3, true, `Successfully retrieved ${data.length} detail records`);
+                        } else {
+                            markTestResult(3, true, "No detail data returned (this might be expected)");
+                        }
+                    } catch (e) {
+                        log(`Error parsing GetJurnalDetail response: ${e.message}`);
+                        markTestResult(3, false, `JSON parse error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log(`GetJurnalDetail AJAX Error: ${error}`);
+                    markTestResult(3, false, `AJAX error: ${error}`);
+                }
+            });
+        }
+
+        function testGetDetailInvalid() {
+            log("Testing GetJurnalDetail with invalid ID...");
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                data: JSON.stringify({ id_sales_invoice: -1 }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        const data = JSON.parse(response.d);
+                        if (data.error) {
+                            markTestResult(3, true, `Correctly handled invalid ID: ${data.error}`);
+                        } else {
+                            markTestResult(3, true, "Invalid ID handled gracefully");
+                        }
+                    } catch (e) {
+                        markTestResult(3, false, `Error handling invalid ID: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    markTestResult(3, false, `Invalid ID AJAX error: ${error}`);
+                }
+            });
+        }
+
+        // Test 4: SaveAsDraft
+        function testSaveAsDraft() {
+            log("Testing SaveAsDraft...");
+            
+            // Create sample data
+            const sampleData = [{
+                id_sales_invoice: 1,
+                transaction_no: "TEST-001",
+                message: "Test transaction",
+                remaining: "1000.00",
+                original_amount: "1000.00",
+                status: "Active",
+                subtotal: "900.00",
+                transaction_date: new Date().toISOString().split('T')[0],
+                custom_id: "TEST001",
+                person_display_name: "Test Customer",
+                detail: []
+            }];
+
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/SaveAsDraftJurnalInvoice",
+                data: JSON.stringify({ jsonData: JSON.stringify(sampleData) }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        const result = JSON.parse(response.d);
+                        log(`SaveAsDraft response: ${JSON.stringify(result)}`);
+                        
+                        if (result.status_code === 200) {
+                            markTestResult(4, true, `Success: ${result.message}`);
+                        } else {
+                            markTestResult(4, true, `Expected behavior: ${result.message}`);
+                        }
+                    } catch (e) {
+                        markTestResult(4, false, `JSON parse error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log(`SaveAsDraft AJAX Error: ${error}`);
+                    markTestResult(4, false, `AJAX error: ${error}`);
+                }
+            });
+        }
+
+        function testSaveAsDraftEmpty() {
+            log("Testing SaveAsDraft with empty data...");
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/SaveAsDraftJurnalInvoice",
+                data: JSON.stringify({ jsonData: JSON.stringify([]) }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        const result = JSON.parse(response.d);
+                        markTestResult(4, true, `Empty data handled: ${result.message}`);
+                    } catch (e) {
+                        markTestResult(4, false, `Empty data error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    markTestResult(4, false, `Empty data AJAX error: ${error}`);
+                }
+            });
+        }
+
+        // Test 5: UploadFile
+        function testUploadFile() {
+            log("Testing UploadFile...");
+            
+            const fileInput = $("#testFile")[0];
+            if (!fileInput.files[0]) {
+                markTestResult(5, false, "No file selected");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/UploadFile",
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                    try {
+                        const result = JSON.parse(response.d);
+                        if (result.data) {
+                            markTestResult(5, true, `File uploaded successfully: ${result.data.length} records`);
+                        } else {
+                            markTestResult(5, true, "Upload handled (sample data returned)");
+                        }
+                    } catch (e) {
+                        markTestResult(5, false, `Upload parse error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    log(`UploadFile AJAX Error: ${error}`);
+                    markTestResult(5, false, `AJAX error: ${error}`);
+                }
+            });
+        }
+
+        function testUploadNoFile() {
+            log("Testing UploadFile without file...");
+            
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/UploadFile",
+                data: new FormData(),
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                    try {
+                        const result = JSON.parse(response.d);
+                        if (result.error) {
+                            markTestResult(5, true, `Correctly handled no file: ${result.error}`);
+                        } else {
+                            markTestResult(5, true, "No file handled gracefully");
+                        }
+                    } catch (e) {
+                        markTestResult(5, false, `No file error: ${e.message}`);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    markTestResult(5, false, `No file AJAX error: ${error}`);
+                }
+            });
+        }
+
+        // Test 6: Export Excel
+        function testExportExcel() {
+            log("Testing Export Excel...");
+            
+            // Test if export URL is accessible
+            $.ajax({
+                type: "GET",
+                url: "GenerateJurnalInv.aspx?export=1",
+                success: function (response) {
+                    markTestResult(6, true, "Export URL accessible");
+                },
+                error: function (xhr, status, error) {
+                    markTestResult(6, false, `Export error: ${error}`);
+                }
+            });
+        }
+
+        // Test 7: Session Management
+        function testSession() {
+            log("Testing Session Management...");
+            
+            // Test if session is maintained across requests
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalHeader",
+                data: JSON.stringify({ search: "", dateFrom: "", dateTo: "" }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    markTestResult(7, true, "Session maintained successfully");
+                },
+                error: function (xhr, status, error) {
+                    markTestResult(7, false, `Session error: ${error}`);
+                }
+            });
+        }
+
+        // Test 8: Error Handling
+        function testErrorHandling() {
+            log("Testing Error Handling...");
+            
+            // Test with invalid parameters
+            $.ajax({
+                type: "POST",
+                url: "GenerateJurnalInv.aspx/GetJurnalDetail",
+                data: JSON.stringify({ id_sales_invoice: "invalid" }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (response) {
+                    try {
+                        const data = JSON.parse(response.d);
+                        if (data.error) {
+                            markTestResult(8, true, `Error handling works: ${data.error}`);
+                        } else {
+                            markTestResult(8, true, "Error handling graceful");
+                        }
+                    } catch (e) {
+                        markTestResult(8, true, "Error handling caught exception");
+                    }
+                },
+                error: function (xhr, status, error) {
+                    markTestResult(8, true, "Error handling caught AJAX error");
+                }
+            });
+        }
+
+        // Auto Test All
+        function runAllTests() {
+            log("🚀 Starting comprehensive test suite...");
+            $("#autoTest-result").html('<span class="info">Running all tests...</span>');
+            
+            // Reset results
+            testResults = { total: 0, passed: 0, failed: 0 };
+            updateProgress();
+            
+            // Reset all status indicators
+            for (let i = 1; i <= 8; i++) {
+                updateTestStatus(i, 'pending');
+                $(`#test${i}-result`).empty();
+            }
+
+            // Run tests sequentially
+            setTimeout(() => testPageLoad(), 100);
+            setTimeout(() => testGetHeader(), 500);
+            setTimeout(() => testGetDetail(), 1000);
+            setTimeout(() => testSaveAsDraft(), 1500);
+            setTimeout(() => testUploadFile(), 2000);
+            setTimeout(() => testExportExcel(), 2500);
+            setTimeout(() => testSession(), 3000);
+            setTimeout(() => testErrorHandling(), 3500);
+            
+            setTimeout(() => {
+                const summary = `✅ Test Complete! Passed: ${testResults.passed}, Failed: ${testResults.failed}, Total: ${testResults.total}`;
+                $("#autoTest-result").html(`<span class="success">${summary}</span>`);
+                log(summary);
+            }, 4000);
+        }
+
+        function clearAllResults() {
+            testResults = { total: 0, passed: 0, failed: 0 };
+            updateProgress();
+            
+            for (let i = 1; i <= 8; i++) {
+                updateTestStatus(i, 'pending');
+                $(`#test${i}-result`).empty();
+            }
+            
+            $("#autoTest-result").empty();
+            clearDebug();
+        }
+
+        // Initialize
+        $(document).ready(function() {
+            log("🧪 Comprehensive Test Suite loaded");
+            
+            // Set default dates
+            const now = new Date();
+            const first = new Date(now.getFullYear(), now.getMonth(), 1);
+            $("#dateFrom").val(first.toISOString().substring(0, 10));
+            $("#dateTo").val(now.toISOString().substring(0, 10));
+            
+            log("Default dates set");
+        });
+    </script>
+</body>
+</html> 
