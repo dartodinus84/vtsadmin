@@ -118,6 +118,7 @@ namespace vtsadm
                 txtNewTdtID.Value = "";
                 ClType.Open_Combos(CmbStatusOldDevice, Session["ClsTypeDBConnStringSQL"].ToString(), "", "sp_list_device_maint_device_status");
                 CmbStatusOldDevice.SelectedValue = "[Select]";
+                CmbReason.SelectedIndex = 0;
                 txtNewRemark.Text = "";
                 Session["ClsTypeDeviceMaintPicture"] = "";
                 CmdSubmit.Text = "Submit";
@@ -268,6 +269,27 @@ namespace vtsadm
             }
             return sOut;
         }
+        private string getNewRemarkValue()
+        {
+            string sNewRemark = txtNewRemark.Text.ToString();
+            string sReason = "";
+            if (CmbReason.SelectedItem != null)
+            {
+                sReason = CmbReason.SelectedValue.Trim();
+            }
+            if (sReason != "" && sReason != "-- Pilih Reason --")
+            {
+                if (sNewRemark.Trim() != "")
+                {
+                    sNewRemark = sNewRemark.Trim() + " - (Reason " + sReason + ")";
+                }
+                else
+                {
+                    sNewRemark = "(Reason " + sReason + ")";
+                }
+            }
+            return sNewRemark;
+        }
         protected void CmdYesSubmit_ServerClick(object sender, EventArgs e)
         {
             try
@@ -302,7 +324,7 @@ namespace vtsadm
                                             "'" + txtNewTdtID.Value.Trim() + "','" + txtDeviceID.Value.ToString() + "','" + txtNewDeviceID.Value.ToString() + "'," +
                                             "'" + txtTgtID.Value.Trim() + "','" + txtTechnicianID.Value.Trim() + "','" + Session["ClsTypeUserTechnicianID"].ToString() + "','" + txtJobID.Value.Trim() + "'," +
                                             "'" + txtDate.Value.Trim() + "'," +
-                                            "'" + txtWaranty.Value.Trim() + "','" + CmbStatusOldDevice.SelectedItem.Value.Trim() + "','" + txtNewRemark.Text.ToString() + "'," +
+                                            "'" + txtWaranty.Value.Trim() + "','" + CmbStatusOldDevice.SelectedItem.Value.Trim() + "','" + getNewRemarkValue() + "'," +
                                             "'" + Session["ClsTypeDeviceMaintPicture"].ToString() + "','" + CmbCustServerID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
                                     if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                                     {

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
 using System.Globalization;
 using System.Linq;
 using System.Web;
@@ -151,30 +150,6 @@ namespace vtsadm
                     .ToArray();
                 if (servers.Length == 0) return Fail("Pilih company, vehicle, dan server mirror.");
 
-                // Save/update/delete ke GPSB.dbo.vehicle_mirror_realtime ditunda dulu.
-                // var userId = (HttpContext.Current.Session["ClsTypeUserID"] ?? "").ToString();
-                // var userName = (HttpContext.Current.Session["ClsTypeUserFullName"] ?? userId).ToString();
-                // var now = DateTime.Now;
-                // var isEdit = !string.IsNullOrWhiteSpace(form.id);
-                // var connSql = GetSqlClientConnectionString(GetDbConn());
-                // using (var conn = new SqlConnection(connSql))
-                // {
-                //     conn.Open();
-                //     using (var tx = conn.BeginTransaction())
-                //     {
-                //         foreach (var vehicle in selected)
-                //         {
-                //             UpsertRow(conn, tx, form.id, isEdit && selected.Count == 1, company, vehicle, servers, userName, now);
-                //             SaveGpsbMirroring(conn, tx, vehicle.VehicleId, servers, userId);
-                //         }
-                //         tx.Commit();
-                //     }
-                //     foreach (var vehicle in selected)
-                //     {
-                //         SyncLegacyMirror(conn, null, vehicle.TvaId, servers, userId, now);
-                //     }
-                // }
-
                 return new
                 {
                     success = false,
@@ -197,23 +172,6 @@ namespace vtsadm
 
                 var next = string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase) ? "paused" : "active";
 
-                // Update status (jeda/aktif) ditunda dulu.
-                // var userName = (HttpContext.Current.Session["ClsTypeUserFullName"] ?? HttpContext.Current.Session["ClsTypeUserID"] ?? "").ToString();
-                // var userId = (HttpContext.Current.Session["ClsTypeUserID"] ?? "").ToString();
-                // var connSql = GetSqlClientConnectionString(GetDbConn());
-                // using (var conn = new SqlConnection(connSql))
-                // using (var cmd = new SqlCommand(@"
-                // UPDATE GPSB.dbo.vehicle_mirror_realtime
-                // SET is_enabled = @Enabled, usrupd = @UsrUpd, dtmupd = GETDATE()
-                // WHERE vehicle_id = @VehicleId;", conn))
-                // {
-                //     cmd.Parameters.AddWithValue("@Enabled", next == "active" ? 1 : 0);
-                //     cmd.Parameters.AddWithValue("@UsrUpd", userName);
-                //     cmd.Parameters.AddWithValue("@VehicleId", id);
-                //     conn.Open();
-                //     cmd.ExecuteNonQuery();
-                // }
-
                 return new
                 {
                     success = false,
@@ -228,122 +186,13 @@ namespace vtsadm
             }
         }
 
-        /*
-        private static void UpsertRow(SqlConnection conn, SqlTransaction tx, string editId, bool useEditId, CompanyItem company, VehicleItem vehicle, string[] servers, string userName, DateTime now)
-        {
-            var id = useEditId && !string.IsNullOrWhiteSpace(editId) ? editId : Guid.NewGuid().ToString();
-            const string sql = @"
-IF EXISTS (SELECT 1 FROM dbo.trx_server_mirroring WHERE CompanyId = @CompanyId AND VehicleId = @VehicleId)
-BEGIN
-    UPDATE dbo.trx_server_mirroring
-    SET CompanyName = @CompanyName,
-        VehiclePlate = @VehiclePlate,
-        TvaID = @TvaID,
-        MirrorServers = @MirrorServers,
-        Status = 'active',
-        UsrUpd = @UsrUpd,
-        DtmUpd = @DtmUpd
-    WHERE CompanyId = @CompanyId AND VehicleId = @VehicleId;
-END
-ELSE
-BEGIN
-    INSERT INTO dbo.trx_server_mirroring
-        (Id, CompanyId, CompanyName, VehicleId, VehiclePlate, TvaID, MirrorServers, Status, UsrUpd, DtmUpd)
-    VALUES
-        (@Id, @CompanyId, @CompanyName, @VehicleId, @VehiclePlate, @TvaID, @MirrorServers, 'active', @UsrUpd, @DtmUpd);
-END";
-            using (var cmd = new SqlCommand(sql, conn, tx))
-            {
-                cmd.Parameters.AddWithValue("@Id", id);
-                cmd.Parameters.AddWithValue("@CompanyId", company.Id);
-                cmd.Parameters.AddWithValue("@CompanyName", (object)company.Name ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@VehicleId", vehicle.VehicleId);
-                cmd.Parameters.AddWithValue("@VehiclePlate", (object)vehicle.Plate ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@TvaID", string.IsNullOrWhiteSpace(vehicle.TvaId) ? (object)DBNull.Value : vehicle.TvaId);
-                cmd.Parameters.AddWithValue("@MirrorServers", string.Join(",", servers));
-                cmd.Parameters.AddWithValue("@UsrUpd", userName ?? "");
-                cmd.Parameters.AddWithValue("@DtmUpd", now);
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        private static void SyncLegacyMirror(SqlConnection conn, SqlTransaction tx, string tvaId, string[] servers, string userId, DateTime now)
-        {
-            if (string.IsNullOrWhiteSpace(tvaId) || servers == null || servers.Length == 0) return;
-            try
-            {
-                using (var del = new SqlCommand("DELETE FROM dbo.trx_vehicle_mirror_realtime WHERE TvaID = @TvaID", conn, tx))
-                {
-                    del.Parameters.AddWithValue("@TvaID", tvaId);
-                    del.ExecuteNonQuery();
-                }
-                foreach (var server in servers)
-                {
-                    using (var ins = new SqlCommand(@"
-INSERT INTO dbo.trx_vehicle_mirror_realtime (TvaID, MirrorServer, Status, UsrUpd, DtmUpd)
-VALUES (@TvaID, @MirrorServer, 'RG', @UsrUpd, @DtmUpd);", conn, tx))
-                    {
-                        ins.Parameters.AddWithValue("@TvaID", tvaId);
-                        ins.Parameters.AddWithValue("@MirrorServer", server);
-                        ins.Parameters.AddWithValue("@UsrUpd", userId ?? "");
-                        ins.Parameters.AddWithValue("@DtmUpd", now);
-                        ins.ExecuteNonQuery();
-                    }
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        private static void PauseLegacyMirror(SqlConnection conn, string tvaId)
-        {
-            if (string.IsNullOrWhiteSpace(tvaId)) return;
-            try
-            {
-                using (var cmd = new SqlCommand("UPDATE dbo.trx_vehicle_mirror_realtime SET Status = 'DJ' WHERE TvaID = @TvaID", conn))
-                {
-                    cmd.Parameters.AddWithValue("@TvaID", tvaId);
-                    cmd.ExecuteNonQuery();
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        private static void SaveGpsbMirroring(SqlConnection conn, SqlTransaction tx, string vehicleId, string[] servers, string userId)
-        {
-            using (var del = new SqlCommand("usp_delete_mirroring", conn, tx))
-            {
-                del.CommandType = CommandType.StoredProcedure;
-                del.Parameters.AddWithValue("@vehicle_id", vehicleId);
-                del.ExecuteNonQuery();
-            }
-            foreach (var server in servers)
-            {
-                if (string.Equals(server, "pantos", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(server, "jasamarga", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                using (var ins = new SqlCommand("usp_insert_mirroring", conn, tx))
-                {
-                    ins.CommandType = CommandType.StoredProcedure;
-                    ins.Parameters.AddWithValue("@mirror_server", server);
-                    ins.Parameters.AddWithValue("@vehicle_id", vehicleId);
-                    ins.Parameters.AddWithValue("@mirror_vendor_id", "");
-                    ins.ExecuteNonQuery();
-                }
-            }
-        }
-        */
-
         private static List<string> LoadServers()
         {
             var list = new List<string>();
             try
             {
                 var rec = new Recordset();
-                rec.Open("sp_list_mirror_realtime_server ''", GetDbConn());
+                rec.Open("sp_list_server_mirroring_server ''", GetDbConn());
                 if (rec.RecData != null && rec.RecData.Tables.Count > 0)
                 {
                     var table = rec.RecData.Tables[0];
@@ -370,28 +219,35 @@ VALUES (@TvaID, @MirrorServer, 'RG', @UsrUpd, @DtmUpd);", conn, tx))
         private static List<CompanyItem> LoadCompanies()
         {
             var list = new List<CompanyItem>();
-            var connSql = GetSqlClientConnectionString(GetDbConn());
-            using (var conn = new SqlConnection(connSql))
-            using (var cmd = new SqlCommand(@"
-SELECT CustID, FullName
-FROM dbo.mst_customer
-WHERE Status = 'RG'
-ORDER BY FullName;", conn))
+            try
             {
-                conn.Open();
-                using (var r = cmd.ExecuteReader())
+                var rec = new Recordset();
+                rec.Open("sp_list_server_mirroring_company ''", GetDbConn());
+                if (rec.RecData != null && rec.RecData.Tables.Count > 0)
                 {
-                    while (r.Read())
+                    var table = rec.RecData.Tables[0];
+                    foreach (DataRow row in table.Rows)
                     {
+                        var id = GetColumn(row, "CustID", "cust_id");
+                        if (string.IsNullOrWhiteSpace(id)) continue;
+                        if (string.Equals(id, "[Select]", StringComparison.OrdinalIgnoreCase)) continue;
+                        var name = GetColumn(row, "FullName", "Fullname");
+                        if (list.Exists(c => string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase))) continue;
                         list.Add(new CompanyItem
                         {
-                            Id = Convert.ToString(r["CustID"]) ?? "",
-                            Name = Convert.ToString(r["FullName"]) ?? ""
+                            Id = id.Trim(),
+                            Name = string.IsNullOrWhiteSpace(name) ? id.Trim() : name.Trim()
                         });
                     }
                 }
             }
-            return list;
+            catch
+            {
+            }
+
+            return list
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private static List<VehicleItem> LoadVehicles(string companyId)
@@ -400,7 +256,7 @@ ORDER BY FullName;", conn))
             if (string.IsNullOrWhiteSpace(companyId)) return list;
 
             var rec = new Recordset();
-            rec.Open("sp_list_vehicle_assign_customer_selected '" + companyId.Replace("'", "''") + "',''", GetDbConn());
+            rec.Open("sp_list_server_mirroring_vehicle '" + companyId.Replace("'", "''") + "',''", GetDbConn());
             if (rec.RecData != null && rec.RecData.Tables.Count > 0)
             {
                 var table = rec.RecData.Tables[0];
@@ -427,66 +283,33 @@ ORDER BY FullName;", conn))
             var raw = new List<MirrorRow>();
             try
             {
-                var connSql = GetSqlClientConnectionString(GetDbConn());
-                using (var conn = new SqlConnection(connSql))
-                using (var cmd = new SqlCommand(@"
-SELECT
-    a.VehicleID,
-    a.MirrorServer,
-    a.IsEnabled,
-    a.UsrUpd,
-    a.DtmUpd,
-    a.TvaID,
-    a.CustID,
-    a.PoliceNo,
-    a.FullName
-FROM (
-    SELECT a.*, b.FullName
-    FROM (
-        SELECT a.*, b.PoliceNo
-        FROM (
-            SELECT a.*, b.TvaID, b.CustID
-            FROM (
-                SELECT
-                    vehicle_id AS VehicleID,
-                    mirror_server AS MirrorServer,
-                    CAST(CASE WHEN is_enabled = 1 THEN 1 ELSE 0 END AS INT) AS IsEnabled,
-                    usrupd AS UsrUpd,
-                    dtmupd AS DtmUpd
-                FROM GPSB.dbo.vehicle_mirror_realtime WITH (NOLOCK)
-                WHERE vehicle_id IS NOT NULL AND vehicle_id <> '0' AND vehicle_id <> ''
-            ) a
-            LEFT JOIN (
-                SELECT TvaID, VehicleID, CustID
-                FROM trx_vehicle_assign_header WITH (NOLOCK)
-                WHERE Status <> 'DE'
-            ) b ON b.VehicleID = a.VehicleID
-        ) a
-        LEFT JOIN mst_vehicle b WITH (NOLOCK) ON a.VehicleID = b.VehicleID
-    ) a
-    LEFT JOIN mst_customer b WITH (NOLOCK) ON b.CustID = a.CustID
-) a
-WHERE a.CustID IS NOT NULL;", conn))
+                var rec = new Recordset();
+                rec.Open("sp_list_server_mirroring", GetDbConn());
+                if (rec.RecData == null || rec.RecData.Tables.Count == 0)
+                    return new List<MirrorRow>();
+
+                foreach (DataRow row in rec.RecData.Tables[0].Rows)
                 {
-                    conn.Open();
-                    using (var r = cmd.ExecuteReader())
+                    int isEnabled = 0;
+                    if (row.Table.Columns.Contains("IsEnabled") && row["IsEnabled"] != DBNull.Value)
+                        isEnabled = Convert.ToInt32(row["IsEnabled"]);
+
+                    DateTime? updatedAt = null;
+                    if (row.Table.Columns.Contains("DtmUpd") && row["DtmUpd"] != DBNull.Value)
+                        updatedAt = Convert.ToDateTime(row["DtmUpd"]);
+
+                    raw.Add(new MirrorRow
                     {
-                        while (r.Read())
-                        {
-                            raw.Add(new MirrorRow
-                            {
-                                CompanyId = Convert.ToString(r["CustID"]) ?? "",
-                                CompanyName = r["FullName"] == DBNull.Value ? "" : Convert.ToString(r["FullName"]),
-                                VehicleId = Convert.ToString(r["VehicleID"]) ?? "",
-                                VehiclePlate = r["PoliceNo"] == DBNull.Value ? "" : Convert.ToString(r["PoliceNo"]),
-                                TvaId = r["TvaID"] == DBNull.Value ? "" : Convert.ToString(r["TvaID"]),
-                                MirrorServers = new[] { r["MirrorServer"] == DBNull.Value ? "" : Convert.ToString(r["MirrorServer"]) },
-                                Status = (r["IsEnabled"] != DBNull.Value && Convert.ToInt32(r["IsEnabled"]) == 1) ? "active" : "paused",
-                                UpdatedBy = r["UsrUpd"] == DBNull.Value ? "" : Convert.ToString(r["UsrUpd"]),
-                                UpdatedAt = r["DtmUpd"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["DtmUpd"])
-                            });
-                        }
-                    }
+                        CompanyId = GetColumn(row, "CustID"),
+                        CompanyName = GetColumn(row, "FullName"),
+                        VehicleId = GetColumn(row, "VehicleID", "VehicleId"),
+                        VehiclePlate = GetColumn(row, "PoliceNo"),
+                        TvaId = GetColumn(row, "TvaID", "TvaId"),
+                        MirrorServers = new[] { GetColumn(row, "MirrorServer") },
+                        Status = isEnabled == 1 ? "active" : "paused",
+                        UpdatedBy = GetColumn(row, "UsrUpd"),
+                        UpdatedAt = updatedAt
+                    });
                 }
             }
             catch
@@ -527,18 +350,19 @@ WHERE a.CustID IS NOT NULL;", conn))
         {
             try
             {
-                var connSql = GetSqlClientConnectionString(GetDbConn());
-                using (var conn = new SqlConnection(connSql))
-                using (var cmd = new SqlCommand("SELECT COUNT(*) FROM dbo.mst_vehicle WHERE Status = 'RG'", conn))
+                var rec = new Recordset();
+                rec.Open("sp_count_server_mirroring_vehicle", GetDbConn());
+                if (rec.RecData != null && rec.RecData.Tables.Count > 0 && rec.RecData.Tables[0].Rows.Count > 0)
                 {
-                    conn.Open();
-                    return Convert.ToInt32(cmd.ExecuteScalar());
+                    var row = rec.RecData.Tables[0].Rows[0];
+                    if (row[0] != DBNull.Value)
+                        return Convert.ToInt32(row[0]);
                 }
             }
             catch
             {
-                return 0;
             }
+            return 0;
         }
 
         private static object ToClientRow(MirrorRow row)
@@ -562,38 +386,6 @@ WHERE a.CustID IS NOT NULL;", conn))
             };
         }
 
-        /*
-        private static void EnsureTable()
-        {
-            var connSql = GetSqlClientConnectionString(GetDbConn());
-            const string sql = @"
-IF OBJECT_ID('dbo.trx_server_mirroring', 'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.trx_server_mirroring
-    (
-        Id              VARCHAR(36)  NOT NULL CONSTRAINT PK_trx_server_mirroring PRIMARY KEY,
-        CompanyId       VARCHAR(20)  NOT NULL,
-        CompanyName     VARCHAR(200) NULL,
-        VehicleId       VARCHAR(50)  NOT NULL,
-        VehiclePlate    VARCHAR(50)  NULL,
-        TvaID           VARCHAR(20)  NULL,
-        MirrorServers   VARCHAR(1000) NOT NULL,
-        Status          VARCHAR(10)  NOT NULL CONSTRAINT DF_trx_server_mirroring_status DEFAULT ('active'),
-        UsrUpd          VARCHAR(50)  NULL,
-        DtmUpd          DATETIME     NULL
-    );
-    CREATE UNIQUE INDEX UX_trx_server_mirroring_company_vehicle
-        ON dbo.trx_server_mirroring (CompanyId, VehicleId);
-END";
-            using (var conn = new SqlConnection(connSql))
-            using (var cmd = new SqlCommand(sql, conn))
-            {
-                conn.Open();
-                cmd.ExecuteNonQuery();
-            }
-        }
-        */
-
         private static bool IsAuthorized()
         {
             var ctx = HttpContext.Current;
@@ -606,31 +398,6 @@ END";
         private static string GetDbConn()
         {
             return (HttpContext.Current.Session["ClsTypeDBConnStringSQL"] ?? "").ToString();
-        }
-
-        private static string GetSqlClientConnectionString(string connectionString)
-        {
-            if (string.IsNullOrWhiteSpace(connectionString)) return connectionString;
-            var pairs = new List<string>();
-            foreach (var part in connectionString.Split(';'))
-            {
-                var p = part.Trim();
-                if (string.IsNullOrEmpty(p)) continue;
-                var idx = p.IndexOf('=');
-                var key = (idx >= 0 ? p.Substring(0, idx).Trim() : p).ToUpperInvariant();
-                if (key == "PROVIDER") continue;
-                pairs.Add(p);
-            }
-            return string.Join(";", pairs);
-        }
-
-        private static string[] SplitServers(string csv)
-        {
-            if (string.IsNullOrWhiteSpace(csv)) return new string[0];
-            return csv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Where(s => s.Length > 0)
-                .ToArray();
         }
 
         private static string GetColumn(DataRow row, params string[] names)

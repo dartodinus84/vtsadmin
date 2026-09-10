@@ -344,6 +344,22 @@
                     </div>
                     <div class="box-body">
                         <div class="form-group form-group-sm">
+                            <label>Reason</label>
+                            <asp:DropDownList ID="CmbReason" runat="server" CssClass="form-control">
+                                <asp:ListItem Value="">-- Pilih Reason --</asp:ListItem>
+                                <asp:ListItem Value="GPS hang / freeze">GPS hang / freeze</asp:ListItem>
+                                <asp:ListItem Value="GPS tidak menyala">GPS tidak menyala</asp:ListItem>
+                                <asp:ListItem Value="Lokasi kendaraan tidak update">Lokasi kendaraan tidak update</asp:ListItem>
+                                <asp:ListItem Value="GPS tidak online di server">GPS tidak online di server</asp:ListItem>
+                                <asp:ListItem Value="Data GPS terlambat masuk ke server (Dellay)">Data GPS terlambat masuk ke server (Dellay)</asp:ListItem>
+                                <asp:ListItem Value="GPS menunjukkan posisi tidak akurat">GPS menunjukkan posisi tidak akurat</asp:ListItem>
+                                <asp:ListItem Value="GPS tidak membaca ACC/ON-OFF">GPS tidak membaca ACC/ON-OFF</asp:ListItem>
+                                <asp:ListItem Value="GPS cepat panas">GPS cepat panas</asp:ListItem>
+                                <asp:ListItem Value="GPS Indikator GPS/GSM tidak normal">GPS Indikator GPS/GSM tidak normal</asp:ListItem>
+                                <asp:ListItem Value="GPS kembali normal setelah restart">GPS kembali normal setelah restart</asp:ListItem>
+                            </asp:DropDownList>
+                        </div>
+                        <div class="form-group form-group-sm">
                             <label>New Remark</label>
                             <asp:TextBox ID="txtNewRemark" runat="server" class="form-control" placeholder="New Remark ..."></asp:TextBox>
                         </div>

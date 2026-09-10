@@ -98,6 +98,7 @@ namespace vtsadm
                 txtTvdID.Value = "";
 
                 txtNewRemark.Text = "";
+                CmbReason.SelectedIndex = 0;
                 txtTelegram.Text = "";
                 Session["ClsTypeOthersMaintPicture"] = "";
                 CmdSubmit.Text = "Submit";
@@ -182,6 +183,27 @@ namespace vtsadm
             }
             return sOut;
         }
+        private string getNewRemarkValue()
+        {
+            string sNewRemark = txtNewRemark.Text.ToString();
+            string sReason = "";
+            if (CmbReason.SelectedItem != null)
+            {
+                sReason = CmbReason.SelectedValue.Trim();
+            }
+            if (sReason != "" && sReason != "-- Pilih Reason --")
+            {
+                if (sNewRemark.Trim() != "")
+                {
+                    sNewRemark = sNewRemark.Trim() + " - (Reason " + sReason + ")";
+                }
+                else
+                {
+                    sNewRemark = "(Reason " + sReason + ")";
+                }
+            }
+            return sNewRemark;
+        }
         protected void CmdYesSubmit_ServerClick(object sender, EventArgs e)
         {
             try
@@ -197,7 +219,7 @@ namespace vtsadm
                     {
                         strSQL = "sp_insert_others_maint '" + txtTvdID.Value.Trim() + "','" + txtTvaID.Value.Trim() + "','" + txtTdtID.Value.Trim() + "'," +
                                  "'" + txtTgtID.Value.Trim() + "','" + Session["ClsTypeUserTechnicianID"].ToString() + "','" + txtJobID.Value.Trim() + "'," +
-                                 "'" + txtDate.Value.Trim() + "','" + txtNewRemark.Text.ToString() + "'," +
+                                 "'" + txtDate.Value.Trim() + "','" + getNewRemarkValue() + "'," +
                                  "'" + Session["ClsTypeOthersMaintPicture"].ToString() + "','" + Session["ClsTypeUserID"].ToString() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                         {
