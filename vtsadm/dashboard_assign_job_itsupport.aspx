@@ -5184,7 +5184,14 @@
                 }
                 if (reportModalState.editingRowIndex < 0 && remaining <= 0) {
                     if (showFeedback) {
-                        setReportFeedback("Job Order ini sudah ter-assign (" + groupText + ").", true, false);
+                        var assignedCount = reportModalState.deviceGroupId === "ACS"
+                            ? toInt(selected.TotalAssignAcs, 0)
+                            : toInt(selected.TotalAssignGps, 0);
+                        if (assignedCount > 0) {
+                            setReportFeedback("Job Order ini sudah di-assign ke IT Support.", true, false);
+                        } else {
+                            setReportFeedback("Job Order tidak bisa di-assign saat ini.", true, false);
+                        }
                     }
                     return false;
                 }
@@ -6619,7 +6626,14 @@
 
                 if (remainingUnit <= 0) {
                     if (showFeedback) {
-                        setFeedback("Job Order ini sudah ter-assign (" + groupText + ").", true, false);
+                        var assignedCount = selectedGroup === "ACS"
+                            ? toInt(order.TotalAssignAcs, 0)
+                            : toInt(order.TotalAssignGps, 0);
+                        if (assignedCount > 0) {
+                            setFeedback("Job Order ini sudah di-assign ke IT Support.", true, false);
+                        } else {
+                            setFeedback("Job Order tidak bisa di-assign saat ini.", true, false);
+                        }
                     }
                     return false;
                 }

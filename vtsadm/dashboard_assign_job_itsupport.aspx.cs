@@ -497,7 +497,10 @@ namespace vtsadm
                 GetValue(row, "Status"),
                 GetValue(row, "ValueStatus"),
                 GetValue(row, "StatusCode"));
-            string statusNorm = NormalizeJobTrainingStatusCode(rawStatus);
+            if (NormalizeJobTrainingStatusCode(rawStatus) == "close")
+            {
+              continue;
+            }
 
             string jobId = FirstNonEmptyStatic(GetValue(row, "TrainingID"), GetValue(row, "JobID"));
             string custId = GetValue(row, "CustID");
@@ -513,10 +516,10 @@ namespace vtsadm
             int assignedTotal = assignGps + assignAcs;
             string lastAssignDate = trxStat != null ? trxStat.LastAssignDate : string.Empty;
 
+            // IT Support Training/Visit: assign slot is per trx_job_assign_detail, not installation GPS units.
+            // Training JO close status (CL) must not block IT Support scheduling.
             int totalUnit = 1;
-            int remaining = statusNorm == "close"
-                ? 0
-                : Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
+            int remaining = Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
 
             string address = FirstNonEmptyStatic(
                 GetValue(row, "BranchAddress"),

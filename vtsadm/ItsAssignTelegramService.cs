@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
+using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -72,21 +73,41 @@ namespace vtsadm
 
         public static void ProcessWebhook(HttpContext context)
         {
+            if (context == null)
+            {
+                return;
+            }
+
             EnsureTls12();
+            context.Response.ContentType = "text/plain; charset=utf-8";
+
+            if (TryHandleSetupRequest(context))
+            {
+                return;
+            }
 
             string body = string.Empty;
-            if (context.Request.InputStream != null)
+            try
             {
-                using (StreamReader reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
+                if (context.Request.InputStream != null && context.Request.InputStream.CanRead)
                 {
-                    body = reader.ReadToEnd();
+                    using (StreamReader reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
+                    {
+                        body = reader.ReadToEnd();
+                    }
                 }
+            }
+            catch
+            {
+                body = string.Empty;
             }
 
             if (string.IsNullOrWhiteSpace(body))
             {
                 context.Response.StatusCode = 200;
-                context.Response.Write("IT Support Telegram webhook is ready.");
+                context.Response.Write(
+                    "IT Support Telegram webhook is ready.\r\n"
+                    + "Register webhook: add ?setup=itssetup to this URL in your browser.");
                 return;
             }
 
@@ -815,7 +836,7 @@ namespace vtsadm
             return string.Empty;
         }
 
-        private static void SendHtmlMessage(
+        private static bool SendHtmlMessage(
             string apiToken,
             string chatId,
             string text,
@@ -823,14 +844,14 @@ namespace vtsadm
         {
             if (string.IsNullOrWhiteSpace(apiToken) || string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(text))
             {
-                return;
+                return false;
             }
 
             try
             {
                 EnsureTls12();
                 Dictionary<string, object> payload = new Dictionary<string, object>();
-                payload["chat_id"] = chatId;
+                payload["chat_id"] = BuildChatIdPayloadValue(chatId);
                 payload["text"] = text;
                 payload["parse_mode"] = "HTML";
                 if (replyMarkup != null)
@@ -838,18 +859,136 @@ namespace vtsadm
                     payload["reply_markup"] = replyMarkup;
                 }
 
-                JavaScriptSerializer serializer = new JavaScriptSerializer();
-                string json = serializer.Serialize(payload);
-                string url = "https://api.telegram.org/bot" + apiToken.Trim() + "/sendMessage";
-
-                WebClient client = new WebClient();
-                client.Encoding = Encoding.UTF8;
-                client.Headers[HttpRequestHeader.ContentType] = "application/json";
-                client.UploadString(url, json);
+                string response = CallTelegramApi(apiToken, "sendMessage", payload);
+                return !string.IsNullOrWhiteSpace(response) && response.IndexOf("\"ok\":true", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
             {
+                return false;
             }
+        }
+
+        private static object BuildChatIdPayloadValue(string chatId)
+        {
+            long parsed;
+            if (long.TryParse((chatId ?? string.Empty).Trim(), out parsed))
+            {
+                return parsed;
+            }
+
+            return chatId;
+        }
+
+        private static string CallTelegramApi(string apiToken, string method, Dictionary<string, object> payload)
+        {
+            if (string.IsNullOrWhiteSpace(apiToken) || string.IsNullOrWhiteSpace(method))
+            {
+                return string.Empty;
+            }
+
+            EnsureTls12();
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            string json = payload == null ? "{}" : serializer.Serialize(payload);
+            string url = "https://api.telegram.org/bot" + apiToken.Trim() + "/" + method.Trim();
+
+            WebClient client = new WebClient();
+            client.Encoding = Encoding.UTF8;
+            client.Headers[HttpRequestHeader.ContentType] = "application/json";
+            return client.UploadString(url, json);
+        }
+
+        private static string CallTelegramApiGet(string apiToken, string methodWithQuery)
+        {
+            if (string.IsNullOrWhiteSpace(apiToken) || string.IsNullOrWhiteSpace(methodWithQuery))
+            {
+                return string.Empty;
+            }
+
+            EnsureTls12();
+            string url = "https://api.telegram.org/bot" + apiToken.Trim() + "/" + methodWithQuery.Trim();
+            WebClient client = new WebClient();
+            client.Encoding = Encoding.UTF8;
+            return client.DownloadString(url);
+        }
+
+        private static bool TryHandleSetupRequest(HttpContext context)
+        {
+            string setupKey = (context.Request["setup"] ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(setupKey))
+            {
+                return false;
+            }
+
+            string expectedKey = FirstNonEmpty(GetAppSetting("ItsSupportTelegramSetupKey"), "itssetup");
+            if (!setupKey.Equals(expectedKey, StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.Write("Invalid setup key.");
+                return true;
+            }
+
+            string connString = ResolveConnString(context);
+            TelegramConfig config = LoadTelegramConfig(connString);
+            if (!config.HasApiToken)
+            {
+                context.Response.StatusCode = 200;
+                context.Response.Write("Telegram bot token not configured in Web.config (ItsSupportTelegramApiToken).");
+                return true;
+            }
+
+            string webhookUrl = FirstNonEmpty(
+                GetAppSetting("ItsSupportTelegramWebhookUrl"),
+                BuildWebhookUrl(context));
+
+            StringBuilder report = new StringBuilder();
+            report.AppendLine("IT Support Telegram setup");
+            report.AppendLine("Webhook URL: " + webhookUrl);
+            report.AppendLine();
+
+            try
+            {
+                string setResult = CallTelegramApiGet(
+                    config.ApiToken,
+                    "setWebhook?url=" + Uri.EscapeDataString(webhookUrl));
+                report.AppendLine("setWebhook:");
+                report.AppendLine(setResult);
+                report.AppendLine();
+
+                string infoResult = CallTelegramApiGet(config.ApiToken, "getWebhookInfo");
+                report.AppendLine("getWebhookInfo:");
+                report.AppendLine(infoResult);
+                report.AppendLine();
+
+                string meResult = CallTelegramApiGet(config.ApiToken, "getMe");
+                report.AppendLine("getMe:");
+                report.AppendLine(meResult);
+                report.AppendLine();
+                report.AppendLine("Now open the bot in Telegram and send /help or /chatid.");
+            }
+            catch (Exception ex)
+            {
+                report.AppendLine("Setup failed: " + ex.Message);
+            }
+
+            context.Response.StatusCode = 200;
+            context.Response.Write(report.ToString().TrimEnd());
+            return true;
+        }
+
+        private static string BuildWebhookUrl(HttpContext context)
+        {
+            if (context == null || context.Request == null || context.Request.Url == null)
+            {
+                return string.Empty;
+            }
+
+            string appPath = (context.Request.ApplicationPath ?? "/").TrimEnd('/');
+            if (appPath.Length == 0)
+            {
+                appPath = string.Empty;
+            }
+
+            return context.Request.Url.GetLeftPart(UriPartial.Authority) + appPath + "/telegram_itsupport_bot.ashx";
         }
 
         private static void AnswerCallbackQuery(string apiToken, string callbackQueryId)
@@ -861,18 +1000,9 @@ namespace vtsadm
 
             try
             {
-                EnsureTls12();
                 Dictionary<string, object> payload = new Dictionary<string, object>();
                 payload["callback_query_id"] = callbackQueryId;
-
-                JavaScriptSerializer serializer = new JavaScriptSerializer();
-                string json = serializer.Serialize(payload);
-                string url = "https://api.telegram.org/bot" + apiToken.Trim() + "/answerCallbackQuery";
-
-                WebClient client = new WebClient();
-                client.Encoding = Encoding.UTF8;
-                client.Headers[HttpRequestHeader.ContentType] = "application/json";
-                client.UploadString(url, json);
+                CallTelegramApi(apiToken, "answerCallbackQuery", payload);
             }
             catch
             {
@@ -886,8 +1016,98 @@ namespace vtsadm
                 return null;
             }
 
-            DataTable table = dashboard_assign_job.ExecuteJobTrainingQuery(sql, connString);
-            return table != null && table.Rows.Count > 0 ? table : null;
+            try
+            {
+                string trimmed = sql.Trim();
+                if (trimmed.StartsWith("sp_", StringComparison.OrdinalIgnoreCase)
+                    || trimmed.StartsWith("exec", StringComparison.OrdinalIgnoreCase))
+                {
+                    Recordset rec = new Recordset();
+                    rec.Open(trimmed, connString);
+                    DataTable spTable = rec.DataRecord();
+                    return spTable != null && spTable.Rows.Count > 0 ? spTable : null;
+                }
+
+                string sqlConn = ResolveSqlClientConnectionString(connString);
+                if (string.IsNullOrWhiteSpace(sqlConn))
+                {
+                    return null;
+                }
+
+                DataTable table = new DataTable();
+                using (SqlConnection conn = new SqlConnection(sqlConn))
+                {
+                    conn.Open();
+                    using (SqlCommand cmd = new SqlCommand(trimmed, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        cmd.CommandTimeout = 120;
+                        using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+                        {
+                            adapter.Fill(table);
+                        }
+                    }
+                }
+
+                return table.Rows.Count > 0 ? table : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string ResolveSqlClientConnectionString(string rawConnectionString)
+        {
+            if (string.IsNullOrWhiteSpace(rawConnectionString))
+            {
+                return string.Empty;
+            }
+
+            ConnectionStringSettings sqlSettings = ConfigurationManager.ConnectionStrings["VTSADMIN"];
+            if (sqlSettings != null && !string.IsNullOrWhiteSpace(sqlSettings.ConnectionString))
+            {
+                return sqlSettings.ConnectionString.Trim();
+            }
+
+            string trimmed = rawConnectionString.Trim();
+            if (trimmed.IndexOf("provider=", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                try
+                {
+                    string[] parts = trimmed.Split(';');
+                    StringBuilder builder = new StringBuilder();
+                    foreach (string part in parts)
+                    {
+                        string item = (part ?? string.Empty).Trim();
+                        if (item.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        if (item.StartsWith("Provider=", StringComparison.OrdinalIgnoreCase)
+                            || item.StartsWith("Persist Security Info", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (builder.Length > 0)
+                        {
+                            builder.Append(';');
+                        }
+
+                        builder.Append(item);
+                    }
+
+                    return builder.ToString();
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+
+            return trimmed;
         }
 
         private static string ResolveConnString(HttpContext context)
@@ -1038,12 +1258,18 @@ namespace vtsadm
             }
 
             Dictionary<string, object> chat = message["chat"] as Dictionary<string, object>;
-            if (chat == null)
+            if (chat == null || !chat.ContainsKey("id") || chat["id"] == null)
             {
                 return string.Empty;
             }
 
-            return GetDictString(chat, "id");
+            object idValue = chat["id"];
+            if (idValue is int || idValue is long || idValue is short || idValue is decimal || idValue is double)
+            {
+                return Convert.ToInt64(idValue).ToString(CultureInfo.InvariantCulture);
+            }
+
+            return Convert.ToString(idValue).Trim();
         }
 
         private static string TrimButtonLabel(string value, int maxLength)

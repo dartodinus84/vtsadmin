@@ -87,21 +87,7 @@ namespace vtsadm
             var database = GetDatabase();
             var collection = database.GetCollection<BsonDocument>(collectionName);
 
-            var customerFilter = BuildCustomerFilter(customerName);
-            
-            FilterDefinition<BsonDocument> filter;
-            if (!string.IsNullOrWhiteSpace(mapping.DateField))
-            {
-                var dateFilterDef = Builders<BsonDocument>.Filter.And(
-                    Builders<BsonDocument>.Filter.Gte(mapping.DateField, GetStartOfTodayUtc()),
-                    Builders<BsonDocument>.Filter.Lte(mapping.DateField, GetEndOfTodayUtc())
-                );
-                filter = Builders<BsonDocument>.Filter.And(customerFilter, dateFilterDef);
-            }
-            else
-            {
-                filter = customerFilter;
-            }
+            var matchFilter = BuildMatchFilter(mapping, customerName);
 
             // Group by GPS SN and No. Polisi, then count
             var groupStage = new BsonDocument("$group", new BsonDocument
@@ -135,10 +121,9 @@ namespace vtsadm
             var pipeline = new List<BsonDocument>();
             
             // Add match stage for filter
-            if (filter != null)
+            if (matchFilter != null)
             {
-                var matchStage = new BsonDocument("$match", filter.Render(collection.DocumentSerializer, collection.Settings.SerializerRegistry));
-                pipeline.Add(matchStage);
+                pipeline.Add(new BsonDocument("$match", matchFilter));
             }
             
             pipeline.Add(groupStage);
@@ -170,21 +155,44 @@ namespace vtsadm
             return results;
         }
 
-        private static FilterDefinition<BsonDocument> BuildCustomerFilter(string customerName)
+        private static BsonDocument BuildMatchFilter(CollectionFieldMapping mapping, string customerName)
         {
+            var filters = new List<BsonDocument>();
+
             if (string.Equals(customerName, UnknownLabel, StringComparison.OrdinalIgnoreCase))
             {
-                var filters = new List<FilterDefinition<BsonDocument>>
+                filters.Add(new BsonDocument("$or", new BsonArray
                 {
-                    Builders<BsonDocument>.Filter.Exists("company_nm", false),
-                    Builders<BsonDocument>.Filter.Eq("company_nm", BsonNull.Value),
-                    Builders<BsonDocument>.Filter.Eq("company_nm", string.Empty)
-                };
-
-                return Builders<BsonDocument>.Filter.Or(filters);
+                    new BsonDocument("company_nm", new BsonDocument("$exists", false)),
+                    new BsonDocument("company_nm", BsonNull.Value),
+                    new BsonDocument("company_nm", string.Empty)
+                }));
+            }
+            else
+            {
+                filters.Add(new BsonDocument("company_nm", customerName));
             }
 
-            return Builders<BsonDocument>.Filter.Eq("company_nm", customerName);
+            if (!string.IsNullOrWhiteSpace(mapping.DateField))
+            {
+                filters.Add(new BsonDocument(mapping.DateField, new BsonDocument
+                {
+                    { "$gte", GetStartOfTodayUtc() },
+                    { "$lte", GetEndOfTodayUtc() }
+                }));
+            }
+
+            if (filters.Count == 0)
+            {
+                return null;
+            }
+
+            if (filters.Count == 1)
+            {
+                return filters[0];
+            }
+
+            return new BsonDocument("$and", new BsonArray(filters));
         }
 
         private static string GetStringValue(BsonDocument document, string fieldName)
