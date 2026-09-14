@@ -425,7 +425,7 @@ namespace vtsadm
       try
       {
         bool isVisitTab = !IsInstallationTab(activeTab);
-        DataTable raw = LoadJobTrainingHeaderTable(string.Empty);
+        DataTable raw = LoadJobTrainingHeaderTableForItSupport(string.Empty);
         DateTime monthStart = ResolveJobOrderPeriodeMonthStart();
         string viewDateFrom = monthStart.AddYears(-1).ToString("yyyy-MM-dd");
         string viewDateTo = monthStart.AddYears(1).ToString("yyyy-MM-dd");
@@ -489,15 +489,6 @@ namespace vtsadm
 
             bool isVisit = IsVisitCategory(categoryName, categoryId);
             if (isVisitTab != isVisit)
-            {
-              continue;
-            }
-
-            string rawStatus = FirstNonEmptyStatic(
-                GetValue(row, "Status"),
-                GetValue(row, "ValueStatus"),
-                GetValue(row, "StatusCode"));
-            if (NormalizeJobTrainingStatusCode(rawStatus) == "close")
             {
               continue;
             }

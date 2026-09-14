@@ -1910,6 +1910,22 @@ namespace vtsadm
 
         protected static DataTable LoadJobTrainingHeaderTable(string searchKeyword)
         {
+            return LoadJobTrainingHeaderTableFromStoredProcedure(
+                "sp_list_header_job_training",
+                searchKeyword);
+        }
+
+        protected static DataTable LoadJobTrainingHeaderTableForItSupport(string searchKeyword)
+        {
+            return LoadJobTrainingHeaderTableFromStoredProcedure(
+                "sp_list_header_job_training_itsupport",
+                searchKeyword);
+        }
+
+        private static DataTable LoadJobTrainingHeaderTableFromStoredProcedure(
+            string storedProcedureName,
+            string searchKeyword)
+        {
             HttpContext context = HttpContext.Current;
             if (context == null || context.Session == null || context.Session["ClsTypeDBConnStringSQL"] == null)
             {
@@ -1923,12 +1939,18 @@ namespace vtsadm
             }
 
             string safeKeyword = (searchKeyword ?? string.Empty).Replace("'", "''");
+            string spName = (storedProcedureName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(spName))
+            {
+                return new DataTable();
+            }
+
             string openError = string.Empty;
             Recordset rec = new Recordset();
-            rec.Open("sp_list_header_job_training '" + safeKeyword + "'", connString.Trim(), ref openError);
+            rec.Open(spName + " '" + safeKeyword + "'", connString.Trim(), ref openError);
             if (!string.IsNullOrWhiteSpace(openError))
             {
-                throw new InvalidOperationException("sp_list_header_job_training: " + openError);
+                throw new InvalidOperationException(spName + ": " + openError);
             }
 
             return rec.DataRecord() ?? new DataTable();
