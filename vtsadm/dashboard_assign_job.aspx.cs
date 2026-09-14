@@ -42,6 +42,8 @@ namespace vtsadm
             public string Address { get; set; }
             public string MarketingName { get; set; }
             public string DefaultAreaId { get; set; }
+            public int CustomerGpsCount { get; set; }
+            public int CustomerAcsCount { get; set; }
         }
 
         public class JobOrderInformationResponse

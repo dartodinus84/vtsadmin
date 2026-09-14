@@ -444,6 +444,8 @@ namespace vtsadm
         Dictionary<string, string> marketingByTrainingId = ItsSupportAssignData.LoadTrainingMarketingMap();
         Dictionary<string, JobTrxAssignStats> trxStats =
             BuildJobTrainingTrxAssignStatsMap(ResolveJobOrderPeriodeMonthStart());
+        Dictionary<string, ItsSupportAssignData.CustomerDeviceCounts> customerDeviceCounts =
+            ItsSupportAssignData.LoadCustomerGpsAcsCountMap();
 
         DataTable mapped = new DataTable();
         mapped.Columns.Add("JobID");
@@ -467,6 +469,8 @@ namespace vtsadm
         mapped.Columns.Add("TotalUnitAcs", typeof(int));
         mapped.Columns.Add("TotalUnitGpsDone", typeof(int));
         mapped.Columns.Add("TotalUnitAcsDone", typeof(int));
+        mapped.Columns.Add("CustomerGpsCount", typeof(int));
+        mapped.Columns.Add("CustomerAcsCount", typeof(int));
 
         if (raw != null)
         {
@@ -527,6 +531,13 @@ namespace vtsadm
                 ItsSupportAssignData.ResolveMarketingName(jobId, marketingByTrainingId),
                 ItsSupportAssignData.ResolveMarketingName(custId, marketingByCustId));
             string defaultAreaId = customerContext != null ? customerContext.SupAreaID : string.Empty;
+            ItsSupportAssignData.CustomerDeviceCounts deviceCounts = null;
+            if (!string.IsNullOrWhiteSpace(custId) && customerDeviceCounts.ContainsKey(custId))
+            {
+              deviceCounts = customerDeviceCounts[custId];
+            }
+            int customerGpsCount = deviceCounts != null ? deviceCounts.Gps : 0;
+            int customerAcsCount = deviceCounts != null ? deviceCounts.Acs : 0;
 
             DataRow target = mapped.NewRow();
             target["JobID"] = jobId;
@@ -556,6 +567,8 @@ namespace vtsadm
             target["TotalUnitAcs"] = 0;
             target["TotalUnitGpsDone"] = assignGps;
             target["TotalUnitAcsDone"] = assignAcs;
+            target["CustomerGpsCount"] = customerGpsCount;
+            target["CustomerAcsCount"] = customerAcsCount;
             mapped.Rows.Add(target);
           }
         }
@@ -598,7 +611,9 @@ namespace vtsadm
             TotalUnitGps = ParseIntFromColumns(row, "TotalUnitGps"),
             TotalUnitAcs = ParseIntFromColumns(row, "TotalUnitAcs"),
             TotalUnitGpsDone = ParseIntFromColumns(row, "TotalUnitGpsDone"),
-            TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone")
+            TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone"),
+            CustomerGpsCount = ParseIntFromColumns(row, "CustomerGpsCount"),
+            CustomerAcsCount = ParseIntFromColumns(row, "CustomerAcsCount")
           });
         }
       }

@@ -3927,11 +3927,11 @@
                             <span class="assign-info-value" id="assignInfoCustomer">-</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sudah Assign GPS</span>
+                            <span class="assign-info-label">Total GPS Customer</span>
                             <span class="assign-info-value" id="assignInfoRemainingGps">0</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sudah Assign ACS</span>
+                            <span class="assign-info-label">Total ACS Customer</span>
                             <span class="assign-info-value" id="assignInfoRemainingAcs">0</span>
                         </div>
                     </div>
@@ -4068,8 +4068,8 @@
                                 <th>Alamat</th>
                                 <th>Marketing</th>
                                 <th class="assign-jo-device-type-col">Category</th>
-                                <th>Sudah Assign GPS</th>
-                                <th>Sudah Assign ACS</th>
+                                <th>Total GPS Customer</th>
+                                <th>Total ACS Customer</th>
                                 <th title="Tanggal assign terakhir di trx_job_assign_detail">Last Assign</th>
                                 <th>Action</th>
                             </tr>
@@ -4169,11 +4169,11 @@
                             <span class="assign-info-value" id="assignReportInfoCustomer">-</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sudah Assign GPS</span>
+                            <span class="assign-info-label">Total GPS Customer</span>
                             <span class="assign-info-value" id="assignReportRemainingGps">0</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sudah Assign ACS</span>
+                            <span class="assign-info-label">Total ACS Customer</span>
                             <span class="assign-info-value" id="assignReportRemainingAcs">0</span>
                         </div>
                     </div>
@@ -5025,7 +5025,7 @@
                     inputUnit.max = "1";
                 }
                 if (inputHint) {
-                    inputHint.textContent = "Sudah Assign " + groupText + " : " + safeAssigned.toString();
+                    inputHint.textContent = "Sudah Assign IT Support : " + safeAssigned.toString();
                 }
             }
 
@@ -5098,17 +5098,17 @@
 
                 var remainingGps = selected ? toInt(selected.RemainingUnitGps, 0) : 0;
                 var remainingAcs = selected ? toInt(selected.RemainingUnitAcs, 0) : 0;
-                var assignedGps = selected ? toInt(selected.TotalAssignGps, 0) : 0;
-                var assignedAcs = selected ? toInt(selected.TotalAssignAcs, 0) : 0;
+                var customerGps = selected ? getCustomerGpsCount(selected) : 0;
+                var customerAcs = selected ? getCustomerAcsCount(selected) : 0;
                 if (remainGps) {
-                    remainGps.textContent = assignedGps.toString();
+                    remainGps.textContent = customerGps.toString();
                 }
                 if (remainAcs) {
-                    remainAcs.textContent = assignedAcs.toString();
+                    remainAcs.textContent = customerAcs.toString();
                 }
 
                 var selectedRemaining = reportModalState.deviceGroupId === "ACS" ? remainingAcs : remainingGps;
-                var selectedAssigned = reportModalState.deviceGroupId === "ACS" ? assignedAcs : assignedGps;
+                var selectedAssigned = selected ? toInt(selected.TotalAssign, 0) : 0;
                 syncReportAssignInputHint(selectedAssigned);
                 syncReportAreaDropdown();
 
@@ -6507,6 +6507,14 @@
                 return customerId || customerName || "-";
             }
 
+            function getCustomerGpsCount(order) {
+                return toInt(order && order.CustomerGpsCount, 0);
+            }
+
+            function getCustomerAcsCount(order) {
+                return toInt(order && order.CustomerAcsCount, 0);
+            }
+
             function renderSelectedJoText() {
                 var element = document.getElementById("assignPickedJoText");
                 if (!element) {
@@ -6556,14 +6564,14 @@
                 if (customer) {
                     customer.textContent = getCustomerDisplayText(selected);
                 }
-                var assignedGps = toInt(selected.TotalAssignGps, 0);
-                var assignedAcs = toInt(selected.TotalAssignAcs, 0);
-                var selectedAssigned = selectedGroup === "ACS" ? assignedAcs : assignedGps;
+                var customerGps = getCustomerGpsCount(selected);
+                var customerAcs = getCustomerAcsCount(selected);
+                var selectedAssigned = toInt(selected.TotalAssign, 0);
                 if (remainingGps) {
-                    remainingGps.textContent = assignedGps.toString();
+                    remainingGps.textContent = customerGps.toString();
                 }
                 if (remainingAcs) {
-                    remainingAcs.textContent = assignedAcs.toString();
+                    remainingAcs.textContent = customerAcs.toString();
                 }
                 if (inputUnit) {
                     inputUnit.value = "1";
@@ -6595,7 +6603,7 @@
                 }
 
                 if (inputHint) {
-                    inputHint.textContent = "Sudah Assign " + groupText + " : " + safeAssigned.toString();
+                    inputHint.textContent = "Sudah Assign IT Support : " + safeAssigned.toString();
                 }
             }
 
@@ -6664,8 +6672,8 @@
                     var rows = [];
                     for (var i = 0; i < rowsData.length; i++) {
                         var item = rowsData[i];
-                        var assignedGps = toInt(item.TotalAssignGps, 0);
-                        var assignedAcs = toInt(item.TotalAssignAcs, 0);
+                        var assignedGps = getCustomerGpsCount(item);
+                        var assignedAcs = getCustomerAcsCount(item);
                         var lastAssign = item.LastAssignDate || "-";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
