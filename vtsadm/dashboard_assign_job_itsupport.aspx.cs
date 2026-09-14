@@ -17,7 +17,6 @@ namespace vtsadm
       public int AssignGps { get; set; }
       public int AssignAcs { get; set; }
       public string LastAssignDate { get; set; }
-      public string AssignedTechnicianId { get; set; }
     }
 
     protected override string FixedActiveTab
@@ -83,7 +82,7 @@ namespace vtsadm
         string targetStatus,
         string insDeviceTypeId)
     {
-      SaveAssignResponse response = dashboard_assign_job.SaveAssignJob(
+      return dashboard_assign_job.SaveAssignJob(
           assignId,
           jobId,
           custId,
@@ -94,47 +93,6 @@ namespace vtsadm
           areaId,
           targetStatus,
           insDeviceTypeId);
-
-      if (!string.Equals(response.Result, "SUCCESS", StringComparison.OrdinalIgnoreCase)
-          && !string.IsNullOrWhiteSpace(response.Message))
-      {
-        string message = response.Message.Trim();
-        if (message.IndexOf("sisa quantity maintenance", StringComparison.OrdinalIgnoreCase) >= 0
-            || message.IndexOf("melebihi sisa", StringComparison.OrdinalIgnoreCase) >= 0)
-        {
-          response.Message = "Validasi unit GPS/ACS teknisi tidak berlaku untuk Training/Visit. "
-              + "Deploy SQL sp_dashboard_assign_job_itsupport_save.sql lalu coba lagi.";
-        }
-      }
-
-      if (string.Equals(response.Result, "SUCCESS", StringComparison.OrdinalIgnoreCase)
-          && string.Equals((targetStatus ?? string.Empty).Trim(), "AV", StringComparison.OrdinalIgnoreCase)
-          && !string.IsNullOrWhiteSpace(jobId))
-      {
-        try
-        {
-          HttpContext context = HttpContext.Current;
-          if (context != null && context.Session != null)
-          {
-            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
-            DateTime schDateValue;
-            if (!string.IsNullOrWhiteSpace(connString) && DateTime.TryParse(schDate, out schDateValue))
-            {
-              ItsAssignTelegramService.NotifyAfterAssign(
-                  connString,
-                  jobId,
-                  custId,
-                  technicianId,
-                  schDateValue);
-            }
-          }
-        }
-        catch
-        {
-        }
-      }
-
-      return response;
     }
 
     [WebMethod(EnableSession = true)]
@@ -275,43 +233,9 @@ namespace vtsadm
 
     private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingTrxAssignStatsMap(DateTime periodMonthStart)
     {
-      return BuildJobTrainingAssignStatsMap(
-          LoadTrxJobAssignDetailRows(periodMonthStart, periodMonthStart.AddMonths(1)));
-    }
-
-    private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingGlobalAssignStatsMap()
-    {
-      return BuildJobTrainingAssignStatsMap(LoadActiveTrxJobAssignDetailRows());
-    }
-
-    private static DataTable LoadActiveTrxJobAssignDetailRows()
-    {
-      string statusFilter = "WHERE ISNULL(Status, '') NOT IN ('DE')";
-      string[] queries =
-      {
-        "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status, CustID, DeviceGroupID, "
-            + "QtyGPS, QtyACS "
-            + "FROM trx_job_assign_detail WITH (NOLOCK) " + statusFilter,
-        "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status "
-            + "FROM trx_job_assign_detail WITH (NOLOCK) " + statusFilter
-      };
-
-      foreach (string sql in queries)
-      {
-        DataTable details = ExecuteJobTrainingQuery(sql);
-        if (details != null && details.Columns.Count > 0)
-        {
-          return details;
-        }
-      }
-
-      return new DataTable();
-    }
-
-    private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingAssignStatsMap(DataTable details)
-    {
       Dictionary<string, JobTrxAssignStats> map =
           new Dictionary<string, JobTrxAssignStats>(StringComparer.OrdinalIgnoreCase);
+      DataTable details = LoadTrxJobAssignDetailRows(periodMonthStart, periodMonthStart.AddMonths(1));
       if (details == null || details.Rows.Count == 0)
       {
         return map;
@@ -342,10 +266,6 @@ namespace vtsadm
           stats.AssignGps += qtyGps > 0 ? qtyGps : 1;
         }
 
-        string technicianId = FirstNonEmptyStatic(
-            GetValue(row, "TechnicianID"),
-            GetValue(row, "TechnicianId"),
-            GetValue(row, "ITID")).Trim();
         string schDate = FirstNonEmptyStatic(GetValue(row, "SchDate"), GetValue(row, "ScheduleDate"));
         if (!string.IsNullOrWhiteSpace(schDate))
         {
@@ -357,34 +277,14 @@ namespace vtsadm
                 || formatted.CompareTo(stats.LastAssignDate) > 0)
             {
               stats.LastAssignDate = formatted;
-              if (!string.IsNullOrWhiteSpace(technicianId))
-              {
-                stats.AssignedTechnicianId = technicianId;
-              }
             }
           }
-        }
-        else if (string.IsNullOrWhiteSpace(stats.AssignedTechnicianId) && !string.IsNullOrWhiteSpace(technicianId))
-        {
-          stats.AssignedTechnicianId = technicianId;
         }
 
         map[jobId] = stats;
       }
 
       return map;
-    }
-
-    private static bool IsExactJobIdSearchForTransfer(string searchKeyword, string jobId)
-    {
-      string search = (searchKeyword ?? string.Empty).Trim();
-      string id = (jobId ?? string.Empty).Trim();
-      if (string.IsNullOrWhiteSpace(search) || string.IsNullOrWhiteSpace(id))
-      {
-        return false;
-      }
-
-      return search.Equals(id, StringComparison.OrdinalIgnoreCase);
     }
 
     private static DataTable FilterJobOrderInformationByBranch(DataTable source, string branchFilter)
@@ -488,7 +388,7 @@ namespace vtsadm
         BranchOptions = new List<string>(),
         TotalRecords = 0,
         PageIndex = pageIndex < 1 ? 1 : pageIndex,
-        PageSize = pageSize < 1 ? 5 : Math.Min(pageSize, 100),
+        PageSize = pageSize < 1 ? 20 : Math.Min(pageSize, 100),
         TotalPages = 1,
         ErrorMessage = string.Empty
       };
@@ -496,7 +396,7 @@ namespace vtsadm
       try
       {
         bool isVisitTab = !IsInstallationTab(activeTab);
-        DataTable raw = LoadJobTrainingHeaderTableForItSupport(string.Empty);
+        DataTable raw = LoadJobTrainingHeaderTable(string.Empty);
         DateTime monthStart = ResolveJobOrderPeriodeMonthStart();
         string viewDateFrom = monthStart.AddYears(-1).ToString("yyyy-MM-dd");
         string viewDateTo = monthStart.AddYears(1).ToString("yyyy-MM-dd");
@@ -513,9 +413,8 @@ namespace vtsadm
         Dictionary<string, CustomerScheduleContext> customerMap = LoadCustomerScheduleContextMap();
         Dictionary<string, string> marketingByCustId = ItsSupportAssignData.LoadCustomerMarketingMap();
         Dictionary<string, string> marketingByTrainingId = ItsSupportAssignData.LoadTrainingMarketingMap();
-        Dictionary<string, JobTrxAssignStats> trxStats = BuildJobTrainingGlobalAssignStatsMap();
-        Dictionary<string, ItsSupportAssignData.CustomerDeviceCounts> customerDeviceCounts =
-            ItsSupportAssignData.LoadCustomerGpsAcsCountMap();
+        Dictionary<string, JobTrxAssignStats> trxStats =
+            BuildJobTrainingTrxAssignStatsMap(ResolveJobOrderPeriodeMonthStart());
 
         DataTable mapped = new DataTable();
         mapped.Columns.Add("JobID");
@@ -539,11 +438,6 @@ namespace vtsadm
         mapped.Columns.Add("TotalUnitAcs", typeof(int));
         mapped.Columns.Add("TotalUnitGpsDone", typeof(int));
         mapped.Columns.Add("TotalUnitAcsDone", typeof(int));
-        mapped.Columns.Add("CustomerGpsCount", typeof(int));
-        mapped.Columns.Add("CustomerAcsCount", typeof(int));
-        mapped.Columns.Add("IsTransfer", typeof(bool));
-        mapped.Columns.Add("AssignedTechnicianId");
-        mapped.Columns.Add("AssignedTechnicianName");
 
         if (raw != null)
         {
@@ -570,6 +464,15 @@ namespace vtsadm
               continue;
             }
 
+            string rawStatus = FirstNonEmptyStatic(
+                GetValue(row, "Status"),
+                GetValue(row, "ValueStatus"),
+                GetValue(row, "StatusCode"));
+            if (NormalizeJobTrainingStatusCode(rawStatus) == "close")
+            {
+              continue;
+            }
+
             string jobId = FirstNonEmptyStatic(GetValue(row, "TrainingID"), GetValue(row, "JobID"));
             string custId = GetValue(row, "CustID");
             CustomerScheduleContext customerContext = null;
@@ -583,17 +486,11 @@ namespace vtsadm
             int assignAcs = trxStat != null ? trxStat.AssignAcs : 0;
             int assignedTotal = assignGps + assignAcs;
             string lastAssignDate = trxStat != null ? trxStat.LastAssignDate : string.Empty;
-            string assignedTechnicianId = trxStat != null ? (trxStat.AssignedTechnicianId ?? string.Empty) : string.Empty;
-            bool isAssigned = assignedTotal > 0;
-            bool isTransfer = isAssigned && IsExactJobIdSearchForTransfer(searchKeyword, jobId);
-            if (isAssigned && !isTransfer)
-            {
-              continue;
-            }
 
-            // IT Support Training/Visit: one JO -> one IT Support assign slot.
+            // IT Support Training/Visit: assign slot is per trx_job_assign_detail, not installation GPS units.
+            // Training JO close status (CL) must not block IT Support scheduling.
             int totalUnit = 1;
-            int remaining = isTransfer ? 1 : Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
+            int remaining = Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
 
             string address = FirstNonEmptyStatic(
                 GetValue(row, "BranchAddress"),
@@ -610,13 +507,6 @@ namespace vtsadm
                 ItsSupportAssignData.ResolveMarketingName(jobId, marketingByTrainingId),
                 ItsSupportAssignData.ResolveMarketingName(custId, marketingByCustId));
             string defaultAreaId = customerContext != null ? customerContext.SupAreaID : string.Empty;
-            ItsSupportAssignData.CustomerDeviceCounts deviceCounts = null;
-            if (!string.IsNullOrWhiteSpace(custId) && customerDeviceCounts.ContainsKey(custId))
-            {
-              deviceCounts = customerDeviceCounts[custId];
-            }
-            int customerGpsCount = deviceCounts != null ? deviceCounts.Gps : 0;
-            int customerAcsCount = deviceCounts != null ? deviceCounts.Acs : 0;
 
             DataRow target = mapped.NewRow();
             target["JobID"] = jobId;
@@ -646,11 +536,6 @@ namespace vtsadm
             target["TotalUnitAcs"] = 0;
             target["TotalUnitGpsDone"] = assignGps;
             target["TotalUnitAcsDone"] = assignAcs;
-            target["CustomerGpsCount"] = customerGpsCount;
-            target["CustomerAcsCount"] = customerAcsCount;
-            target["IsTransfer"] = isTransfer;
-            target["AssignedTechnicianId"] = assignedTechnicianId;
-            target["AssignedTechnicianName"] = assignedTechnicianId;
             mapped.Rows.Add(target);
           }
         }
@@ -693,12 +578,7 @@ namespace vtsadm
             TotalUnitGps = ParseIntFromColumns(row, "TotalUnitGps"),
             TotalUnitAcs = ParseIntFromColumns(row, "TotalUnitAcs"),
             TotalUnitGpsDone = ParseIntFromColumns(row, "TotalUnitGpsDone"),
-            TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone"),
-            CustomerGpsCount = ParseIntFromColumns(row, "CustomerGpsCount"),
-            CustomerAcsCount = ParseIntFromColumns(row, "CustomerAcsCount"),
-            IsTransfer = ParseBoolFromDataRow(row, "IsTransfer"),
-            AssignedTechnicianId = GetValue(row, "AssignedTechnicianId"),
-            AssignedTechnicianName = GetValue(row, "AssignedTechnicianName")
+            TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone")
           });
         }
       }
@@ -708,30 +588,6 @@ namespace vtsadm
       }
 
       return response;
-    }
-
-    private static bool ParseBoolFromDataRow(DataRow row, string columnName)
-    {
-      if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName))
-      {
-        return false;
-      }
-
-      object value = row[columnName];
-      if (value == null || value == DBNull.Value)
-      {
-        return false;
-      }
-
-      if (value is bool)
-      {
-        return (bool)value;
-      }
-
-      string text = Convert.ToString(value).Trim();
-      return text.Equals("true", StringComparison.OrdinalIgnoreCase)
-          || text.Equals("1", StringComparison.OrdinalIgnoreCase)
-          || text.Equals("yes", StringComparison.OrdinalIgnoreCase);
     }
   }
 }

@@ -42,11 +42,6 @@ namespace vtsadm
             public string Address { get; set; }
             public string MarketingName { get; set; }
             public string DefaultAreaId { get; set; }
-            public int CustomerGpsCount { get; set; }
-            public int CustomerAcsCount { get; set; }
-            public bool IsTransfer { get; set; }
-            public string AssignedTechnicianId { get; set; }
-            public string AssignedTechnicianName { get; set; }
         }
 
         public class JobOrderInformationResponse
@@ -1915,22 +1910,6 @@ namespace vtsadm
 
         protected static DataTable LoadJobTrainingHeaderTable(string searchKeyword)
         {
-            return LoadJobTrainingHeaderTableFromStoredProcedure(
-                "sp_list_header_job_training",
-                searchKeyword);
-        }
-
-        protected static DataTable LoadJobTrainingHeaderTableForItSupport(string searchKeyword)
-        {
-            return LoadJobTrainingHeaderTableFromStoredProcedure(
-                "sp_list_header_job_training_itsupport",
-                searchKeyword);
-        }
-
-        private static DataTable LoadJobTrainingHeaderTableFromStoredProcedure(
-            string storedProcedureName,
-            string searchKeyword)
-        {
             HttpContext context = HttpContext.Current;
             if (context == null || context.Session == null || context.Session["ClsTypeDBConnStringSQL"] == null)
             {
@@ -1944,18 +1923,12 @@ namespace vtsadm
             }
 
             string safeKeyword = (searchKeyword ?? string.Empty).Replace("'", "''");
-            string spName = (storedProcedureName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(spName))
-            {
-                return new DataTable();
-            }
-
             string openError = string.Empty;
             Recordset rec = new Recordset();
-            rec.Open(spName + " '" + safeKeyword + "'", connString.Trim(), ref openError);
+            rec.Open("sp_list_header_job_training '" + safeKeyword + "'", connString.Trim(), ref openError);
             if (!string.IsNullOrWhiteSpace(openError))
             {
-                throw new InvalidOperationException(spName + ": " + openError);
+                throw new InvalidOperationException("sp_list_header_job_training: " + openError);
             }
 
             return rec.DataRecord() ?? new DataTable();
@@ -8092,6 +8065,25 @@ namespace vtsadm
                 if (string.IsNullOrWhiteSpace(response.Message))
                 {
                     response.Message = "Assignment berhasil disimpan.";
+                }
+
+                if (requiresJobAssignment
+                    && string.Equals(normalizedTargetStatus, "AV", StringComparison.OrdinalIgnoreCase)
+                    && IsJobTrainingAssignRequestContext()
+                    && !string.IsNullOrWhiteSpace(jobId))
+                {
+                    try
+                    {
+                        ItsAssignTelegramService.NotifyAfterAssign(
+                            connString,
+                            jobId,
+                            custId,
+                            technicianId,
+                            schDateValue);
+                    }
+                    catch
+                    {
+                    }
                 }
             }
             catch (Exception ex)

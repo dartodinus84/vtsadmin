@@ -50,13 +50,17 @@ namespace vtsadm
 
             string assignId;
             int seq;
-            if (!TryResolveLatestAssignKey(connString, jobId, custId, technicianId, schDate, out assignId, out seq))
+            TryResolveLatestAssignKey(connString, jobId, custId, technicianId, schDate, out assignId, out seq);
+
+            AssignDetail detail = !string.IsNullOrWhiteSpace(assignId)
+                ? LoadAssignDetail(connString, assignId, seq)
+                : null;
+            if (detail == null)
             {
-                return;
+                detail = BuildFallbackAssignDetail(connString, jobId, custId, technicianId, schDate);
             }
 
-            AssignDetail detail = LoadAssignDetail(connString, assignId, seq);
-            if (detail == null)
+            if (detail == null || string.IsNullOrWhiteSpace(detail.JobId))
             {
                 return;
             }
@@ -68,7 +72,7 @@ namespace vtsadm
                 return;
             }
 
-            SendHtmlMessage(config.ApiToken, config.ChatId, text);
+            SendTelegramMessage(config.ApiToken, config.ChatId, text);
         }
 
         public static void ProcessWebhook(HttpContext context)
@@ -415,8 +419,10 @@ namespace vtsadm
             }
 
             EnrichFromTrxRow(connString, detail, assignId, seq);
+            EnrichFromAssignHeader(connString, detail);
             EnrichFromCustomer(connString, detail);
             EnrichFromTrainingOrder(connString, detail);
+            EnrichFromItsSupport(connString, detail);
 
             if (string.IsNullOrWhiteSpace(detail.JobId))
             {
@@ -443,7 +449,8 @@ namespace vtsadm
                 detail.Seq = ParseInt(rec.Fields("Seq"), 1);
                 detail.JobId = FirstNonEmpty(rec.Fields("JobID"), rec.Fields("JoID"));
                 detail.CustomerName = FirstNonEmpty(rec.Fields("Fullname"), rec.Fields("CustomerName"), rec.Fields("Customer"));
-                detail.TechnicianName = FirstNonEmpty(rec.Fields("Name"), rec.Fields("TechnicianName"), rec.Fields("TechnicianID"));
+                detail.TechnicianId = FirstNonEmpty(rec.Fields("TechnicianID"), rec.Fields("ITID"));
+                detail.TechnicianName = FirstNonEmpty(rec.Fields("Name"), rec.Fields("TechnicianName"), detail.TechnicianId);
                 detail.SchDate = ParseDate(FirstNonEmpty(rec.Fields("SchDate"), rec.Fields("ScheduleDate")));
                 detail.Remark = FirstNonEmpty(rec.Fields("Remark"), rec.Fields("Remarks"));
                 detail.MarketingName = FirstNonEmpty(rec.Fields("MarketingName"), rec.Fields("Marketing"));
@@ -492,6 +499,9 @@ namespace vtsadm
                 GetRowString(row, "CustomerName"),
                 GetRowString(row, "Customer"),
                 detail.CustomerName);
+            detail.TechnicianId = FirstNonEmpty(
+                GetRowString(row, "TechnicianID"),
+                detail.TechnicianId);
             detail.TechnicianName = FirstNonEmpty(
                 GetRowString(row, "TechnicianName"),
                 GetRowString(row, "TechnicianID"),
@@ -539,6 +549,134 @@ namespace vtsadm
 
             detail.BranchName = FirstNonEmpty(GetRowString(row, "BranchName"), detail.BranchName);
             detail.MarketingName = FirstNonEmpty(GetRowString(row, "MarketingName"), detail.MarketingName);
+        }
+
+        private static AssignDetail BuildFallbackAssignDetail(
+            string connString,
+            string jobId,
+            string custId,
+            string technicianId,
+            DateTime schDate)
+        {
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                return null;
+            }
+
+            AssignDetail detail = new AssignDetail
+            {
+                JobId = jobId.Trim(),
+                CustId = (custId ?? string.Empty).Trim(),
+                SchDate = schDate,
+                TechnicianId = (technicianId ?? string.Empty).Trim(),
+                TechnicianName = (technicianId ?? string.Empty).Trim()
+            };
+
+            EnrichFromTrainingOrder(connString, detail);
+            EnrichFromCustomer(connString, detail);
+            EnrichFromItsSupport(connString, detail);
+            return detail;
+        }
+
+        private static void EnrichFromAssignHeader(string connString, AssignDetail detail)
+        {
+            if (string.IsNullOrWhiteSpace(detail.AssignId))
+            {
+                return;
+            }
+
+            string assignId = EscapeSqlLiteral(detail.AssignId.Trim());
+            string sql = "SELECT TOP 1 CustID, AreaID, ScheduleDate "
+                + "FROM trx_job_assign_header WITH (NOLOCK) "
+                + "WHERE AssignID = '" + assignId + "' "
+                + "AND ISNULL(Status, '') NOT IN ('DE')";
+
+            DataTable table = ExecuteQuery(connString, sql);
+            if (table == null || table.Rows.Count == 0)
+            {
+                return;
+            }
+
+            DataRow row = table.Rows[0];
+            detail.CustId = FirstNonEmpty(GetRowString(row, "CustID"), detail.CustId);
+            string areaId = GetRowString(row, "AreaID");
+            if (!string.IsNullOrWhiteSpace(areaId))
+            {
+                detail.AreaName = FirstNonEmpty(ResolveSupportAreaLabel(connString, areaId), areaId, detail.AreaName);
+            }
+
+            DateTime? scheduleDate = ParseDate(GetRowString(row, "ScheduleDate"));
+            if (scheduleDate.HasValue)
+            {
+                detail.SchDate = scheduleDate;
+            }
+        }
+
+        private static void EnrichFromItsSupport(string connString, AssignDetail detail)
+        {
+            string technicianKey = FirstNonEmpty(detail.TechnicianId, detail.TechnicianName, string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(technicianKey))
+            {
+                return;
+            }
+
+            string safeKey = EscapeSqlLiteral(technicianKey);
+            string[] queries =
+            {
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Name, ''))) AS Name "
+                    + "FROM mst_itsupport WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(ITID, ''))) = '" + safeKey + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE', 'BL')",
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Name, ''))) AS Name "
+                    + "FROM mst_itsupport WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(UserID, ''))) = '" + safeKey + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE', 'BL')"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteQuery(connString, sql);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                string name = GetRowString(table.Rows[0], "Name");
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    detail.TechnicianName = name;
+                    return;
+                }
+            }
+        }
+
+        private static string ResolveSupportAreaLabel(string connString, string areaId)
+        {
+            if (string.IsNullOrWhiteSpace(areaId))
+            {
+                return string.Empty;
+            }
+
+            string safeAreaId = EscapeSqlLiteral(areaId.Trim());
+            try
+            {
+                Recordset rec = new Recordset();
+                rec.Open("sp_list_support_area '" + safeAreaId + "'", connString);
+                if (rec.RecordCount() > 0)
+                {
+                    return FirstNonEmpty(
+                        rec.Fields("SupAreaName"),
+                        rec.Fields("AreaName"),
+                        rec.Fields("SupportAreaName"),
+                        rec.Fields("Description"),
+                        rec.Fields("SupAreaID"));
+                }
+            }
+            catch
+            {
+            }
+
+            return areaId.Trim();
         }
 
         private static void EnrichFromTrainingOrder(string connString, AssignDetail detail)
@@ -606,55 +744,36 @@ namespace vtsadm
             }
 
             StringBuilder sb = new StringBuilder();
+            string customerName = FirstNonEmpty(detail.CustomerName, detail.CompanyLine, detail.CustId, "-");
+            string itSupportName = FirstNonEmpty(detail.TechnicianName, "-");
+            string remark = FirstNonEmpty(detail.RemarkTraining, detail.Remark, "-");
+            string lokasi = FirstNonEmpty(detail.AreaName, detail.BranchName, "-");
+
             sb.AppendLine("🛠 <b>NOTIFIKASI PENUGASAN PEKERJAAN</b>");
             sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
             sb.AppendLine();
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal JO : <b>" + EscapeHtml(FormatDateId(detail.ReqDate ?? detail.InstallDate)) + "</b>");
-            sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate)) + "</b>");
+            sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             sb.AppendLine();
-            sb.AppendLine("Pelanggan : <b>" + EscapeHtml(detail.CustomerName) + "</b>");
-            sb.AppendLine("IT Support : <b>" + EscapeHtml(detail.TechnicianName) + "</b>");
+            sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
+            sb.AppendLine("IT Support : <b>" + EscapeHtml(itSupportName) + "</b>");
             if (!string.IsNullOrWhiteSpace(detail.MarketingName))
             {
                 sb.AppendLine("Marketing : <b>" + EscapeHtml(detail.MarketingName) + "</b>");
             }
             sb.AppendLine();
             sb.AppendLine("<b>Catatan :</b>");
-            sb.AppendLine(EscapeHtml(FirstNonEmpty(detail.RemarkTraining, detail.Remark, "-")));
+            sb.AppendLine(EscapeHtml(remark));
             sb.AppendLine();
-
-            if (!string.IsNullOrWhiteSpace(detail.CompanyLine)
-                || !string.IsNullOrWhiteSpace(detail.PoliceNo)
-                || !string.IsNullOrWhiteSpace(detail.NoSn)
-                || !string.IsNullOrWhiteSpace(detail.GsmNo))
-            {
-                sb.AppendLine("Company     : <b>" + EscapeHtml(FirstNonEmpty(detail.CompanyLine, detail.CustomerName, "-")) + "</b>");
-                sb.AppendLine("NoPOL       : <b>" + EscapeHtml(FirstNonEmpty(detail.PoliceNo, "-")) + "</b>");
-                sb.AppendLine("Serial No   : <b>" + EscapeHtml(FirstNonEmpty(detail.NoSn, "-")) + "</b>");
-                sb.AppendLine("GSM No      : <b>" + EscapeHtml(FirstNonEmpty(detail.GsmNo, "-")) + "</b>");
-                if (!string.IsNullOrWhiteSpace(detail.AreaName))
-                {
-                    sb.AppendLine("Lokasi      : <b>" + EscapeHtml(detail.AreaName) + "</b>");
-                }
-                if (!string.IsNullOrWhiteSpace(detail.BranchName))
-                {
-                    sb.AppendLine("Branch      : <b>" + EscapeHtml(detail.BranchName) + "</b>");
-                }
-                sb.AppendLine();
-            }
-
+            sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            sb.AppendLine("Lokasi : <b>" + EscapeHtml(lokasi) + "</b>");
+            sb.AppendLine();
             sb.AppendLine("<b>Detail Unit :</b>");
             sb.AppendLine("Job Type  : <b>" + EscapeHtml(FirstNonEmpty(detail.JobType, category, "Training/Visit")) + "</b>");
             sb.AppendLine("No Polisi    : <b>" + EscapeHtml(FirstNonEmpty(detail.PoliceNo, "-")) + "</b>");
             sb.AppendLine("GPS SN      : <b>" + EscapeHtml(FirstNonEmpty(detail.NoSn, "-")) + "</b>");
             sb.AppendLine("GSM No      : <b>" + EscapeHtml(FirstNonEmpty(detail.GsmNo, "-")) + "</b>");
-            sb.AppendLine();
-            sb.AppendLine("AssignID : <b>" + EscapeHtml(detail.AssignId) + "</b> Seq : <b>" + detail.Seq.ToString() + "</b>");
-            if (!string.IsNullOrWhiteSpace(detail.Status))
-            {
-                sb.AppendLine("Status : <b>" + EscapeHtml(detail.Status) + "</b>");
-            }
 
             return sb.ToString().TrimEnd();
         }
@@ -671,29 +790,55 @@ namespace vtsadm
             assignId = string.Empty;
             seq = 1;
 
-            string sql = "SELECT TOP 1 AssignID, Seq FROM trx_job_assign_detail WITH (NOLOCK) "
-                + "WHERE JobID = '" + EscapeSqlLiteral(jobId.Trim()) + "' "
-                + "AND TechnicianID = '" + EscapeSqlLiteral(technicianId.Trim()) + "' "
-                + "AND SchDate = '" + schDate.ToString("yyyy-MM-dd") + "' "
-                + (string.IsNullOrWhiteSpace(custId) ? string.Empty : "AND CustID = '" + EscapeSqlLiteral(custId.Trim()) + "' ")
-                + "ORDER BY Seq DESC";
+            string safeJobId = EscapeSqlLiteral(jobId.Trim());
+            string safeTechnicianId = EscapeSqlLiteral(technicianId.Trim());
+            string safeSchDate = schDate.ToString("yyyy-MM-dd");
+            string activeFilter = "AND ISNULL(Status, '') NOT IN ('DE') ";
+            string techMatch = "LTRIM(RTRIM(ISNULL(TechnicianID, ''))) = '" + safeTechnicianId + "'";
 
-            DataTable table = ExecuteQuery(connString, sql);
-            if (table == null || table.Rows.Count == 0)
+            string[] queries =
             {
-                return false;
+                "SELECT TOP 1 AssignID, Seq FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(JobID, ''))) = '" + safeJobId + "' "
+                    + "AND " + techMatch + " "
+                    + "AND CONVERT(date, SchDate) = '" + safeSchDate + "' "
+                    + activeFilter
+                    + "ORDER BY Seq DESC",
+                "SELECT TOP 1 AssignID, Seq FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(JobID, ''))) = '" + safeJobId + "' "
+                    + "AND " + techMatch + " "
+                    + activeFilter
+                    + "ORDER BY Seq DESC",
+                "SELECT TOP 1 AssignID, Seq FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(JobID, ''))) = '" + safeJobId + "' "
+                    + activeFilter
+                    + "ORDER BY Seq DESC"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteQuery(connString, sql);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                assignId = GetRowString(table.Rows[0], "AssignID");
+                seq = ParseInt(GetRowString(table.Rows[0], "Seq"), 1);
+                if (!string.IsNullOrWhiteSpace(assignId))
+                {
+                    return true;
+                }
             }
 
-            assignId = GetRowString(table.Rows[0], "AssignID");
-            seq = ParseInt(GetRowString(table.Rows[0], "Seq"), 1);
-            return !string.IsNullOrWhiteSpace(assignId);
+            return false;
         }
 
         private static TelegramConfig LoadTelegramConfig(string connString)
         {
             TelegramConfig config = new TelegramConfig();
 
-            // Prefer Web.config appSettings (no DB required for token/chat id).
+            // IT Support Telegram: Web.config only (not par_global / DB).
             config.ApiToken = FirstNonEmpty(
                 GetAppSetting("ItsSupportTelegramApiToken"),
                 GetAppSetting("TelegramApi"));
@@ -703,27 +848,6 @@ namespace vtsadm
             config.UrlTemplate = FirstNonEmpty(
                 GetAppSetting("ItsSupportTelegramUrl"),
                 GetAppSetting("TelegramUrl"));
-
-            if (!string.IsNullOrWhiteSpace(connString))
-            {
-                if (string.IsNullOrWhiteSpace(config.ApiToken))
-                {
-                    config.ApiToken = GetParValue(connString, "TelegramApi");
-                }
-
-                if (string.IsNullOrWhiteSpace(config.ChatId))
-                {
-                    config.ChatId = FirstNonEmpty(
-                        GetParValue(connString, "TelegramChatIDItsSupport"),
-                        GetParValue(connString, "TelegramChatID3"),
-                        GetParValue(connString, "TelegramChatID2"));
-                }
-
-                if (string.IsNullOrWhiteSpace(config.UrlTemplate))
-                {
-                    config.UrlTemplate = GetParValue(connString, "TelegramUrl");
-                }
-            }
 
             config.HasApiToken = !string.IsNullOrWhiteSpace(config.ApiToken);
             config.IsValid = config.HasApiToken && !string.IsNullOrWhiteSpace(config.ChatId);
@@ -836,6 +960,20 @@ namespace vtsadm
             return string.Empty;
         }
 
+        private static bool SendTelegramMessage(
+            string apiToken,
+            string chatId,
+            string text,
+            Dictionary<string, object> replyMarkup = null)
+        {
+            if (SendHtmlMessage(apiToken, chatId, text, replyMarkup))
+            {
+                return true;
+            }
+
+            return SendPlainMessage(apiToken, chatId, StripHtmlTags(text), replyMarkup);
+        }
+
         private static bool SendHtmlMessage(
             string apiToken,
             string chatId,
@@ -866,6 +1004,47 @@ namespace vtsadm
             {
                 return false;
             }
+        }
+
+        private static bool SendPlainMessage(
+            string apiToken,
+            string chatId,
+            string text,
+            Dictionary<string, object> replyMarkup = null)
+        {
+            if (string.IsNullOrWhiteSpace(apiToken) || string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            try
+            {
+                EnsureTls12();
+                Dictionary<string, object> payload = new Dictionary<string, object>();
+                payload["chat_id"] = BuildChatIdPayloadValue(chatId);
+                payload["text"] = text;
+                if (replyMarkup != null)
+                {
+                    payload["reply_markup"] = replyMarkup;
+                }
+
+                string response = CallTelegramApi(apiToken, "sendMessage", payload);
+                return !string.IsNullOrWhiteSpace(response) && response.IndexOf("\"ok\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string StripHtmlTags(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return string.Empty;
+            }
+
+            return System.Text.RegularExpressions.Regex.Replace(text, "<[^>]+>", string.Empty);
         }
 
         private static object BuildChatIdPayloadValue(string chatId)
@@ -1164,6 +1343,16 @@ namespace vtsadm
             return value.Value.ToString("d MMMM yyyy", IndonesianCulture);
         }
 
+        private static string FormatDayDateId(DateTime? value)
+        {
+            if (!value.HasValue)
+            {
+                return "-";
+            }
+
+            return value.Value.ToString("dddd dd/MM/yyyy", IndonesianCulture);
+        }
+
         private static string FormatDateShort(DateTime? value)
         {
             if (!value.HasValue)
@@ -1309,6 +1498,7 @@ namespace vtsadm
             public string JobId { get; set; }
             public string CustId { get; set; }
             public string CustomerName { get; set; }
+            public string TechnicianId { get; set; }
             public string TechnicianName { get; set; }
             public string MarketingName { get; set; }
             public string Remark { get; set; }
