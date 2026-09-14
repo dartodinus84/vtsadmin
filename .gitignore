@@ -404,6 +404,8 @@ vtsadm/obj/
 
 # Upload folder
 vtsadm/Upload/
+vtsadm/Attachment/
+vtsadm/Export/
 
 # Ignore Visual Studio folder
 .vs/
