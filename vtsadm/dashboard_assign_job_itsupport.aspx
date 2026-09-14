@@ -2893,6 +2893,14 @@
             cursor: pointer;
         }
 
+        .assign-jo-transfer-hint {
+            margin-top: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #b45309;
+            line-height: 1.3;
+        }
+
         .assign-jo-empty {
             text-align: center;
             color: #6b7280;
@@ -3939,7 +3947,7 @@
                     <div class="assign-field assign-its-hide-unit" id="assignInputUnitWrap">
                         <label for="assignInputUnit" class="assign-field-label" id="assignInputUnitLabel">Assign GPS Unit</label>
                         <input type="number" id="assignInputUnit" min="1" value="1" placeholder="1" />
-                        <small class="assign-field-hint" id="assignInputUnitHint">Sudah Assign GPS : 0</small>
+                        <small class="assign-field-hint" id="assignInputUnitHint">Sudah Assign IT Support : 0</small>
                     </div>
                     <div class="assign-field">
                         <label for="assignAreaSelect" class="assign-field-label">Area</label>
@@ -4181,7 +4189,7 @@
                     <div class="assign-field assign-its-hide-unit" id="assignReportInputUnitWrap">
                         <label for="assignReportInputUnit" class="assign-field-label" id="assignReportInputUnitLabel">Assign GPS Unit</label>
                         <input type="number" id="assignReportInputUnit" min="1" value="1" placeholder="Input assign GPS unit" />
-                        <small class="assign-field-hint" id="assignReportInputUnitHint">Sudah Assign GPS : 0</small>
+                        <small class="assign-field-hint" id="assignReportInputUnitHint">Sudah Assign IT Support : 0</small>
                     </div>
                     <div class="assign-field">
                         <label for="assignReportAreaSelect" class="assign-field-label">Area</label>
@@ -5016,6 +5024,8 @@
                 var inputHint = document.getElementById("assignReportInputUnitHint");
                 var safeAssigned = Math.max(0, toInt(assignedUnit, 0));
                 var groupText = reportModalState.deviceGroupId === "ACS" ? "ACS" : "GPS";
+                var selected = getCurrentReportOrder();
+                var transferHint = getJobOrderTransferLabel(selected);
                 if (inputLabel) {
                     inputLabel.textContent = "Assign " + groupText + " Unit";
                 }
@@ -5025,7 +5035,7 @@
                     inputUnit.max = "1";
                 }
                 if (inputHint) {
-                    inputHint.textContent = "Sudah Assign IT Support : " + safeAssigned.toString();
+                    inputHint.textContent = transferHint || ("Sudah Assign IT Support : " + safeAssigned.toString());
                 }
             }
 
@@ -5096,8 +5106,6 @@
                     customer.textContent = selected ? getCustomerDisplayText(selected) : "-";
                 }
 
-                var remainingGps = selected ? toInt(selected.RemainingUnitGps, 0) : 0;
-                var remainingAcs = selected ? toInt(selected.RemainingUnitAcs, 0) : 0;
                 var customerGps = selected ? getCustomerGpsCount(selected) : 0;
                 var customerAcs = selected ? getCustomerAcsCount(selected) : 0;
                 if (remainGps) {
@@ -5107,7 +5115,7 @@
                     remainAcs.textContent = customerAcs.toString();
                 }
 
-                var selectedRemaining = reportModalState.deviceGroupId === "ACS" ? remainingAcs : remainingGps;
+                var selectedRemaining = selected ? toInt(selected.RemainingUnit, 0) : 0;
                 var selectedAssigned = selected ? toInt(selected.TotalAssign, 0) : 0;
                 syncReportAssignInputHint(selectedAssigned);
                 syncReportAreaDropdown();
@@ -5116,33 +5124,9 @@
                     input.value = "1";
                 }
 
-                var disableGps = remainingGps <= 0;
-                var disableAcs = remainingAcs <= 0 || normalizeJoTypeForApi(reportModalState.joType) === "maintenance";
-                var groupButtons = document.querySelectorAll("#assignReportDeviceGroupWrap .assign-jo-type-btn");
-                for (var idx = 0; idx < groupButtons.length; idx++) {
-                    var btn = groupButtons[idx];
-                    var grp = normalizeDeviceGroup(btn.getAttribute("data-device-group"));
-                    if (grp === "GPS") {
-                        btn.disabled = disableGps;
-                    } else if (grp === "ACS") {
-                        btn.disabled = disableAcs;
-                    }
-                }
-
-                if (reportModalState.deviceGroupId === "GPS" && disableGps && !disableAcs) {
-                    reportModalState.deviceGroupId = "ACS";
-                    selectedRemaining = remainingAcs;
-                    syncReportAssignInputHint(selectedRemaining);
-                } else if (reportModalState.deviceGroupId === "ACS" && disableAcs && !disableGps) {
-                    reportModalState.deviceGroupId = "GPS";
-                    selectedRemaining = remainingGps;
-                    syncReportAssignInputHint(selectedRemaining);
-                }
-                setActiveReportAssignButtons();
-
                 if (assignBtn) {
                     var isEditing = reportModalState.editingRowIndex >= 0;
-                    var canAssignNew = selected && selectedRemaining > 0;
+                    var canAssignNew = selected && (selectedRemaining > 0 || isJobOrderTransfer(selected));
                     var bothZero = !canAssignNew && !isEditing;
                     assignBtn.disabled = bothZero || reportModalState.isSaving;
                     var isAssignLoading = reportModalState.isSaving && reportModalState.submitAction === "assign";
@@ -5170,11 +5154,7 @@
                     return false;
                 }
 
-                var remaining = reportModalState.deviceGroupId === "ACS"
-                    ? toInt(selected.RemainingUnitAcs, 0)
-                    : toInt(selected.RemainingUnitGps, 0);
-                var qty = 1;
-                var groupText = reportModalState.deviceGroupId === "ACS" ? "ACS" : "GPS";
+                var remaining = toInt(selected.RemainingUnit, 0);
                 var selectedAreaId = normalizeAreaId(reportModalState.selectedAreaId);
                 if (!selectedAreaId) {
                     if (showFeedback) {
@@ -5182,13 +5162,11 @@
                     }
                     return false;
                 }
-                if (reportModalState.editingRowIndex < 0 && remaining <= 0) {
+                if (reportModalState.editingRowIndex < 0 && remaining <= 0 && !isJobOrderTransfer(selected)) {
                     if (showFeedback) {
-                        var assignedCount = reportModalState.deviceGroupId === "ACS"
-                            ? toInt(selected.TotalAssignAcs, 0)
-                            : toInt(selected.TotalAssignGps, 0);
+                        var assignedCount = toInt(selected.TotalAssign, 0);
                         if (assignedCount > 0) {
-                            setReportFeedback("Job Order ini sudah di-assign ke IT Support.", true, false);
+                            setReportFeedback("Job Order ini sudah di-assign ke IT Support. Cari dengan Job ID untuk memindahkan.", true, false);
                         } else {
                             setReportFeedback("Job Order tidak bisa di-assign saat ini.", true, false);
                         }
@@ -5360,10 +5338,8 @@
                     ? "AD"
                     : (reportModalState.targetStatus || "AV").toUpperCase();
                 var isAvailableStatus = selectedStatus === "AV";
-                var selectedDeviceGroup = normalizeJoTypeForApi(reportModalState.joType) === "maintenance"
-                    ? "GPS"
-                    : normalizeDeviceGroup(reportModalState.deviceGroupId);
-                var selectedOrder = getCurrentReportOrder();
+                        var selectedDeviceGroup = "";
+                        var selectedOrder = getCurrentReportOrder();
                 if (isAvailableStatus && !selectedOrder) {
                     setReportFeedback("Belum ada JO yang dipilih.", true, false);
                     return;
@@ -5378,6 +5354,9 @@
                 var selectedAreaId = "";
                 if (isAvailableStatus) {
                     if (!validateReportAssignInput(true)) {
+                        return;
+                    }
+                    if (!confirmJobOrderTransfer(selectedOrder, reportModalState.technicianId)) {
                         return;
                     }
                     qty = 1;
@@ -6515,6 +6494,36 @@
                 return toInt(order && order.CustomerAcsCount, 0);
             }
 
+            function isJobOrderTransfer(order) {
+                if (!order) {
+                    return false;
+                }
+                if (order.IsTransfer === true || order.IsTransfer === "true" || order.IsTransfer === 1) {
+                    return true;
+                }
+                return toInt(order.TotalAssign, 0) > 0 && toInt(order.RemainingUnit, 0) > 0;
+            }
+
+            function getJobOrderTransferLabel(order) {
+                if (!isJobOrderTransfer(order)) {
+                    return "";
+                }
+                var assignedTo = (order.AssignedTechnicianName || order.AssignedTechnicianId || "").trim();
+                return assignedTo ? ("Pindah dari IT Support: " + assignedTo) : "Pindah ke IT Support ini";
+            }
+
+            function confirmJobOrderTransfer(order, technicianId) {
+                if (!isJobOrderTransfer(order)) {
+                    return true;
+                }
+                var assignedTo = (order.AssignedTechnicianId || order.AssignedTechnicianName || "").trim();
+                if (assignedTo && technicianId && assignedTo.toUpperCase() === String(technicianId).toUpperCase()) {
+                    return window.confirm("Job Order ini sudah di-assign ke IT Support ini. Lanjutkan untuk memperbarui jadwal/area?");
+                }
+                var transferText = getJobOrderTransferLabel(order);
+                return window.confirm(transferText + ". Lanjutkan?");
+            }
+
             function renderSelectedJoText() {
                 var element = document.getElementById("assignPickedJoText");
                 if (!element) {
@@ -6591,6 +6600,8 @@
                 var normalizedGroup = normalizeDeviceGroup(assignModalState.deviceGroupId);
                 var groupText = getDeviceGroupDisplayText(normalizedGroup);
                 var safeAssigned = Math.max(0, toInt(assignedUnit, 0));
+                var selected = getSelectedOrder();
+                var transferHint = getJobOrderTransferLabel(selected);
 
                 if (inputLabel) {
                     inputLabel.textContent = "Assign " + groupText + " Unit";
@@ -6603,7 +6614,7 @@
                 }
 
                 if (inputHint) {
-                    inputHint.textContent = "Sudah Assign IT Support : " + safeAssigned.toString();
+                    inputHint.textContent = transferHint || ("Sudah Assign IT Support : " + safeAssigned.toString());
                 }
             }
 
@@ -6621,9 +6632,7 @@
                     return false;
                 }
 
-                var selectedGroup = normalizeDeviceGroup(assignModalState.deviceGroupId);
-                var groupText = getDeviceGroupDisplayText(selectedGroup);
-                var remainingUnit = getRemainingUnitByDeviceGroup(order, selectedGroup);
+                var remainingUnit = toInt(order.RemainingUnit, 0);
                 var selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
                 if (!selectedAreaId) {
                     if (showFeedback) {
@@ -6632,13 +6641,11 @@
                     return false;
                 }
 
-                if (remainingUnit <= 0) {
+                if (remainingUnit <= 0 && !isJobOrderTransfer(order)) {
                     if (showFeedback) {
-                        var assignedCount = selectedGroup === "ACS"
-                            ? toInt(order.TotalAssignAcs, 0)
-                            : toInt(order.TotalAssignGps, 0);
+                        var assignedCount = toInt(order.TotalAssign, 0);
                         if (assignedCount > 0) {
-                            setFeedback("Job Order ini sudah di-assign ke IT Support.", true, false);
+                            setFeedback("Job Order ini sudah di-assign ke IT Support. Cari dengan Job ID untuk memindahkan.", true, false);
                         } else {
                             setFeedback("Job Order tidak bisa di-assign saat ini.", true, false);
                         }
@@ -6675,11 +6682,17 @@
                         var assignedGps = getCustomerGpsCount(item);
                         var assignedAcs = getCustomerAcsCount(item);
                         var lastAssign = item.LastAssignDate || "-";
+                        var transferMode = isJobOrderTransfer(item);
+                        var transferLabel = getJobOrderTransferLabel(item);
+                        var pickLabel = transferMode ? "Pindah" : "Pilih";
+                        var transferBadge = transferMode
+                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(transferLabel) + "</div>"
+                            : "";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
                             : "";
                         rows.push("<tr>" +
-                            "<td>" + escapeHtml(item.JobID) + "</td>" +
+                            "<td>" + escapeHtml(item.JobID) + transferBadge + "</td>" +
                             "<td>" + escapeHtml(getCustomerDisplayText(item)) + "</td>" +
                             "<td>" + escapeHtml(item.BranchName || "-") + "</td>" +
                             "<td class=\"assign-jo-address-col\">" + escapeHtml(item.Address || "-") + "</td>" +
@@ -6688,7 +6701,7 @@
                             "<td>" + escapeHtml(assignedGps.toString()) + "</td>" +
                             "<td>" + escapeHtml(assignedAcs.toString()) + "</td>" +
                             "<td>" + escapeHtml(lastAssign) + "</td>" +
-                            "<td><button type=\"button\" class=\"assign-jo-pick-btn\" data-pick-index=\"" + i + "\">Pilih</button></td>" +
+                            "<td><button type=\"button\" class=\"assign-jo-pick-btn\" data-pick-index=\"" + i + "\">" + escapeHtml(pickLabel) + "</button></td>" +
                             "</tr>");
                     }
                     body.innerHTML = rows.join("");
@@ -7675,9 +7688,7 @@
 
                         var selectedStatus = (assignModalState.targetStatus || "AV").toUpperCase();
                         var isAvailableStatus = selectedStatus === "AV";
-                        var selectedDeviceGroup = normalizeJoTypeForApi(assignModalState.joType) === "maintenance"
-                            ? "GPS"
-                            : normalizeDeviceGroup(assignModalState.deviceGroupId);
+                        var selectedDeviceGroup = "";
                         var order = getSelectedOrder();
                         if (isAvailableStatus && !order) {
                             setFeedback("Belum ada JO yang dapat dipilih.", true, false);
@@ -7704,6 +7715,9 @@
                         var fallbackDisplay = selectedStatus;
                         if (isAvailableStatus) {
                             if (!validateAssignUnitInput(true)) {
+                                return;
+                            }
+                            if (!confirmJobOrderTransfer(order, technicianId)) {
                                 return;
                             }
                             selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
@@ -7767,9 +7781,7 @@
 
                         var selectedStatus = assignModalState.administrationTargetStatus === "UD" ? "UD" : "AD";
                         var isAvailableStatus = selectedStatus === "AV";
-                        var selectedDeviceGroup = normalizeJoTypeForApi(assignModalState.joType) === "maintenance"
-                            ? "GPS"
-                            : normalizeDeviceGroup(assignModalState.deviceGroupId);
+                        var selectedDeviceGroup = "";
                         var order = getSelectedOrder();
                         if (isAvailableStatus && !order) {
                             setFeedback("Belum ada JO yang dapat dipilih.", true, false);
@@ -7796,6 +7808,9 @@
                         var fallbackDisplay = selectedStatus;
                         if (isAvailableStatus) {
                             if (!validateAssignUnitInput(true)) {
+                                return;
+                            }
+                            if (!confirmJobOrderTransfer(order, technicianId)) {
                                 return;
                             }
                             selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
