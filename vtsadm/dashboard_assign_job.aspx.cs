@@ -2788,7 +2788,8 @@ namespace vtsadm
             string fromText = dateFrom.ToString("yyyy-MM-dd");
             string toText = dateToExclusive.ToString("yyyy-MM-dd");
             string dateFilter = "WHERE SchDate >= '" + fromText.Replace("'", "''") + "' "
-                + "AND SchDate < '" + toText.Replace("'", "''") + "'";
+                + "AND SchDate < '" + toText.Replace("'", "''") + "' "
+                + "AND ISNULL(Status, '') NOT IN ('DE') ";
 
             string[] queries =
             {
@@ -8066,6 +8067,25 @@ namespace vtsadm
                 {
                     response.Message = "Assignment berhasil disimpan.";
                 }
+
+                if (requiresJobAssignment
+                    && string.Equals(normalizedTargetStatus, "AV", StringComparison.OrdinalIgnoreCase)
+                    && IsJobTrainingAssignRequestContext()
+                    && !string.IsNullOrWhiteSpace(jobId))
+                {
+                    try
+                    {
+                        ItsAssignTelegramService.NotifyAfterAssign(
+                            connString,
+                            jobId,
+                            custId,
+                            technicianId,
+                            schDateValue);
+                    }
+                    catch
+                    {
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -8705,7 +8725,8 @@ namespace vtsadm
 
             int affectRows = 0;
             string executeMessage = string.Empty;
-            string sql = "sp_dashboard_assign_job_save '"
+            string saveProcedure = ResolveSaveAssignStoredProcedureName(jobId);
+            string sql = saveProcedure + " '"
                 + EscapeSqlLiteral(TrimToLength(jobId, 10)) + "','"
                 + EscapeSqlLiteral(TrimToLength(custId, 10)) + "','"
                 + EscapeSqlLiteral(TrimToLength(technicianId, 10)) + "','"
@@ -8735,6 +8756,17 @@ namespace vtsadm
                 : executeMessage;
 
             return response;
+        }
+
+        protected static string ResolveSaveAssignStoredProcedureName(string jobId)
+        {
+            if (IsJobTrainingAssignRequestContext()
+                && !string.IsNullOrWhiteSpace((jobId ?? string.Empty).Trim()))
+            {
+                return "sp_dashboard_assign_job_itsupport_save";
+            }
+
+            return "sp_dashboard_assign_job_save";
         }
 
         private static SaveAssignResponse ExecuteUpdateStatusOnlyOnce(

@@ -4412,7 +4412,7 @@
                 supAreaId: ""
             };
             var assignDocumentEventsBound = false;
-            var assignJoPageSize = 5;
+            var assignJoPageSize = 20;
             var assignNewInstallPageUrl = "<%= ResolveUrl("~/installation_job_new.aspx") %>";
             var closedJobRequestToken = 0;
             var dayTotalJoRequestToken = 0;
@@ -5537,6 +5537,9 @@
                         setReportFeedback((result && result.Message) || "Assign job berhasil dihapus.", false, true);
                         loadCompletedReportModalData(false);
                         refreshAvailabilityAfterSave(reportModalState.technicianId, reportModalState.schDate, "AV", function () { }, reportModalState.activeCell);
+                        if (typeof fetchJobOrderInformation === "function") {
+                            fetchJobOrderInformation();
+                        }
                     },
                     function (errorMessage) {
                         setReportFeedback("Gagal menghapus assign job. " + (errorMessage || ""), true, false);
@@ -6440,7 +6443,7 @@
                     + "&searchKeyword=" + encodeURIComponent(assignModalState.joSearchText || "")
                     + "&branchFilter=" + encodeURIComponent(assignModalState.joBranchFilter || "")
                     + "&pageIndex=" + encodeURIComponent(String(assignModalState.joPage || 1))
-                    + "&pageSize=" + encodeURIComponent(String(assignJoPageSize || 5));
+                    + "&pageSize=" + encodeURIComponent(String(assignJoPageSize || 20));
 
                 var request = new XMLHttpRequest();
                 request.open("GET", url, true);

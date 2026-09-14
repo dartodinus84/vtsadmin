@@ -82,7 +82,7 @@ namespace vtsadm
         string targetStatus,
         string insDeviceTypeId)
     {
-      SaveAssignResponse response = dashboard_assign_job.SaveAssignJob(
+      return dashboard_assign_job.SaveAssignJob(
           assignId,
           jobId,
           custId,
@@ -93,35 +93,6 @@ namespace vtsadm
           areaId,
           targetStatus,
           insDeviceTypeId);
-
-      if (string.Equals(response.Result, "SUCCESS", StringComparison.OrdinalIgnoreCase)
-          && string.Equals((targetStatus ?? string.Empty).Trim(), "AV", StringComparison.OrdinalIgnoreCase)
-          && !string.IsNullOrWhiteSpace(jobId))
-      {
-        try
-        {
-          HttpContext context = HttpContext.Current;
-          if (context != null && context.Session != null)
-          {
-            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
-            DateTime schDateValue;
-            if (!string.IsNullOrWhiteSpace(connString) && DateTime.TryParse(schDate, out schDateValue))
-            {
-              ItsAssignTelegramService.NotifyAfterAssign(
-                  connString,
-                  jobId,
-                  custId,
-                  technicianId,
-                  schDateValue);
-            }
-          }
-        }
-        catch
-        {
-        }
-      }
-
-      return response;
     }
 
     [WebMethod(EnableSession = true)]
@@ -260,11 +231,27 @@ namespace vtsadm
       return new DateTime(today.Year, today.Month, 1);
     }
 
-    private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingTrxAssignStatsMap(DateTime periodMonthStart)
+    private static bool IsActiveAssignDetailRow(DataRow row)
+    {
+      if (row == null)
+      {
+        return false;
+      }
+
+      string status = FirstNonEmptyStatic(
+          GetValue(row, "Status"),
+          GetValue(row, "StatusCode")).Trim().ToUpperInvariant();
+      return status != "DE";
+    }
+
+    private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingGlobalAssignStatsMap()
     {
       Dictionary<string, JobTrxAssignStats> map =
           new Dictionary<string, JobTrxAssignStats>(StringComparer.OrdinalIgnoreCase);
-      DataTable details = LoadTrxJobAssignDetailRows(periodMonthStart, periodMonthStart.AddMonths(1));
+      DataTable details = ExecuteJobTrainingQuery(
+          "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status, DeviceGroupID, QtyGPS, QtyACS "
+          + "FROM trx_job_assign_detail WITH (NOLOCK) "
+          + "WHERE ISNULL(Status, '') NOT IN ('DE')");
       if (details == null || details.Rows.Count == 0)
       {
         return map;
@@ -272,6 +259,11 @@ namespace vtsadm
 
       foreach (DataRow row in details.Rows)
       {
+        if (!IsActiveAssignDetailRow(row))
+        {
+          continue;
+        }
+
         string jobId = FirstNonEmptyStatic(GetValue(row, "JobID"), GetValue(row, "TrainingID")).Trim();
         if (string.IsNullOrWhiteSpace(jobId))
         {
@@ -417,7 +409,7 @@ namespace vtsadm
         BranchOptions = new List<string>(),
         TotalRecords = 0,
         PageIndex = pageIndex < 1 ? 1 : pageIndex,
-        PageSize = pageSize < 1 ? 5 : Math.Min(pageSize, 100),
+        PageSize = pageSize < 1 ? 20 : Math.Min(pageSize, 100),
         TotalPages = 1,
         ErrorMessage = string.Empty
       };
@@ -442,8 +434,7 @@ namespace vtsadm
         Dictionary<string, CustomerScheduleContext> customerMap = LoadCustomerScheduleContextMap();
         Dictionary<string, string> marketingByCustId = ItsSupportAssignData.LoadCustomerMarketingMap();
         Dictionary<string, string> marketingByTrainingId = ItsSupportAssignData.LoadTrainingMarketingMap();
-        Dictionary<string, JobTrxAssignStats> trxStats =
-            BuildJobTrainingTrxAssignStatsMap(ResolveJobOrderPeriodeMonthStart());
+        Dictionary<string, JobTrxAssignStats> trxStats = BuildJobTrainingGlobalAssignStatsMap();
 
         DataTable mapped = new DataTable();
         mapped.Columns.Add("JobID");
