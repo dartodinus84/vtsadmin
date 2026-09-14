@@ -397,7 +397,10 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+vtsadm/bin/Debug/*
+vtsadm/bin/Release/*
 vtsadm/obj/Debug/*
+vtsadm/obj/Release/*
 /vtsadm/obj/Debug/DesignTimeResolveAssemblyReferencesInput.cache
 vtsadm/obj/Debug/DesignTimeResolveAssemblyReferencesInput.cache
 *.vspscc
