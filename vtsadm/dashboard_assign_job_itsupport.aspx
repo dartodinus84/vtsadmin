@@ -5537,6 +5537,9 @@
                         setReportFeedback((result && result.Message) || "Assign job berhasil dihapus.", false, true);
                         loadCompletedReportModalData(false);
                         refreshAvailabilityAfterSave(reportModalState.technicianId, reportModalState.schDate, "AV", function () { }, reportModalState.activeCell);
+                        if (typeof fetchJobOrderInformation === "function") {
+                            fetchJobOrderInformation();
+                        }
                     },
                     function (errorMessage) {
                         setReportFeedback("Gagal menghapus assign job. " + (errorMessage || ""), true, false);

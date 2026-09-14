@@ -231,11 +231,27 @@ namespace vtsadm
       return new DateTime(today.Year, today.Month, 1);
     }
 
-    private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingTrxAssignStatsMap(DateTime periodMonthStart)
+    private static bool IsActiveAssignDetailRow(DataRow row)
+    {
+      if (row == null)
+      {
+        return false;
+      }
+
+      string status = FirstNonEmptyStatic(
+          GetValue(row, "Status"),
+          GetValue(row, "StatusCode")).Trim().ToUpperInvariant();
+      return status != "DE";
+    }
+
+    private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingGlobalAssignStatsMap()
     {
       Dictionary<string, JobTrxAssignStats> map =
           new Dictionary<string, JobTrxAssignStats>(StringComparer.OrdinalIgnoreCase);
-      DataTable details = LoadTrxJobAssignDetailRows(periodMonthStart, periodMonthStart.AddMonths(1));
+      DataTable details = ExecuteJobTrainingQuery(
+          "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status, DeviceGroupID, QtyGPS, QtyACS "
+          + "FROM trx_job_assign_detail WITH (NOLOCK) "
+          + "WHERE ISNULL(Status, '') NOT IN ('DE')");
       if (details == null || details.Rows.Count == 0)
       {
         return map;
@@ -243,6 +259,11 @@ namespace vtsadm
 
       foreach (DataRow row in details.Rows)
       {
+        if (!IsActiveAssignDetailRow(row))
+        {
+          continue;
+        }
+
         string jobId = FirstNonEmptyStatic(GetValue(row, "JobID"), GetValue(row, "TrainingID")).Trim();
         if (string.IsNullOrWhiteSpace(jobId))
         {
@@ -413,8 +434,7 @@ namespace vtsadm
         Dictionary<string, CustomerScheduleContext> customerMap = LoadCustomerScheduleContextMap();
         Dictionary<string, string> marketingByCustId = ItsSupportAssignData.LoadCustomerMarketingMap();
         Dictionary<string, string> marketingByTrainingId = ItsSupportAssignData.LoadTrainingMarketingMap();
-        Dictionary<string, JobTrxAssignStats> trxStats =
-            BuildJobTrainingTrxAssignStatsMap(ResolveJobOrderPeriodeMonthStart());
+        Dictionary<string, JobTrxAssignStats> trxStats = BuildJobTrainingGlobalAssignStatsMap();
 
         DataTable mapped = new DataTable();
         mapped.Columns.Add("JobID");

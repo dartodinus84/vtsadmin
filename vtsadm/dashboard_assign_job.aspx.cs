@@ -2788,7 +2788,8 @@ namespace vtsadm
             string fromText = dateFrom.ToString("yyyy-MM-dd");
             string toText = dateToExclusive.ToString("yyyy-MM-dd");
             string dateFilter = "WHERE SchDate >= '" + fromText.Replace("'", "''") + "' "
-                + "AND SchDate < '" + toText.Replace("'", "''") + "'";
+                + "AND SchDate < '" + toText.Replace("'", "''") + "' "
+                + "AND ISNULL(Status, '') NOT IN ('DE') ";
 
             string[] queries =
             {
