@@ -1,4 +1,4 @@
-<%@ Page Title="" Language="C#" MasterPageFile="~/Site.Master" AutoEventWireup="true" CodeBehind="dashboard_assign_job.aspx.cs" Inherits="vtsadm.dashboard_assign_job_itsupport" EnableEventValidation="false" %>
+<%@ Page Title="" Language="C#" MasterPageFile="~/Site.Master" AutoEventWireup="true" CodeBehind="dashboard_assign_job_itsupport.aspx.cs" Inherits="vtsadm.dashboard_assign_job_itsupport" EnableEventValidation="false" %>
 
 <asp:Content ID="Content1" ContentPlaceHolderID="ContentPlaceHolder1" runat="server">
     <style>
@@ -1824,6 +1824,40 @@
         .assign-report-status.pending {
             background: #ffedd5;
             color: #9a3412;
+        }
+
+        .assign-jo-filter-wrap {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .assign-jo-filter-wrap select {
+            min-width: 180px;
+            max-width: 280px;
+        }
+
+        .assign-jo-address-col {
+            max-width: 220px;
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        .assign-its-hide-unit {
+            display: none !important;
+        }
+
+        .assign-report-edit-btn {
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            background: #fffbeb;
+            color: #92400e;
+            font-size: 11px;
+            font-weight: 700;
+            min-height: 30px;
+            padding: 4px 10px;
+            cursor: pointer;
         }
 
         .assign-report-delete-btn {
@@ -3893,19 +3927,19 @@
                             <span class="assign-info-value" id="assignInfoCustomer">-</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sisa GPS</span>
+                            <span class="assign-info-label">Sudah Assign GPS</span>
                             <span class="assign-info-value" id="assignInfoRemainingGps">0</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sisa ACS</span>
+                            <span class="assign-info-label">Sudah Assign ACS</span>
                             <span class="assign-info-value" id="assignInfoRemainingAcs">0</span>
                         </div>
                     </div>
 
-                    <div class="assign-field">
+                    <div class="assign-field assign-its-hide-unit" id="assignInputUnitWrap">
                         <label for="assignInputUnit" class="assign-field-label" id="assignInputUnitLabel">Assign GPS Unit</label>
-                        <input type="number" id="assignInputUnit" min="1" value="1" placeholder="Input assign GPS unit" />
-                        <small class="assign-field-hint" id="assignInputUnitHint">Sisa GPS : 0</small>
+                        <input type="number" id="assignInputUnit" min="1" value="1" placeholder="1" />
+                        <small class="assign-field-hint" id="assignInputUnitHint">Sudah Assign GPS : 0</small>
                     </div>
                     <div class="assign-field">
                         <label for="assignAreaSelect" class="assign-field-label">Area</label>
@@ -4018,6 +4052,12 @@
                     <input type="text" id="assignJoSearchInput" placeholder="Search Job Order..." />
                     <button type="button" id="assignJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
+                <div class="assign-jo-filter-wrap">
+                    <label for="assignJoBranchFilter">Branch</label>
+                    <select id="assignJoBranchFilter">
+                        <option value="">SEMUA Branch</option>
+                    </select>
+                </div>
                 <div class="assign-jo-table-wrap">
                     <table class="assign-jo-table">
                         <thead>
@@ -4025,10 +4065,12 @@
                                 <th>Job Order</th>
                                 <th>Customer</th>
                                 <th>Branch Name</th>
-                                <th class="assign-jo-device-type-col">Device Type</th>
-                                <th>Sisa GPS</th>
-                                <th>Sisa ACS</th>
-                                <th>Last Assign / Day</th>
+                                <th>Alamat</th>
+                                <th>Marketing</th>
+                                <th class="assign-jo-device-type-col">Category</th>
+                                <th>Sudah Assign GPS</th>
+                                <th>Sudah Assign ACS</th>
+                                <th title="Tanggal assign terakhir di trx_job_assign_detail">Last Assign</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -4127,19 +4169,19 @@
                             <span class="assign-info-value" id="assignReportInfoCustomer">-</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sisa GPS</span>
+                            <span class="assign-info-label">Sudah Assign GPS</span>
                             <span class="assign-info-value" id="assignReportRemainingGps">0</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Sisa ACS</span>
+                            <span class="assign-info-label">Sudah Assign ACS</span>
                             <span class="assign-info-value" id="assignReportRemainingAcs">0</span>
                         </div>
                     </div>
 
-                    <div class="assign-field">
+                    <div class="assign-field assign-its-hide-unit" id="assignReportInputUnitWrap">
                         <label for="assignReportInputUnit" class="assign-field-label" id="assignReportInputUnitLabel">Assign GPS Unit</label>
                         <input type="number" id="assignReportInputUnit" min="1" value="1" placeholder="Input assign GPS unit" />
-                        <small class="assign-field-hint" id="assignReportInputUnitHint">Sisa GPS : 0</small>
+                        <small class="assign-field-hint" id="assignReportInputUnitHint">Sudah Assign GPS : 0</small>
                     </div>
                     <div class="assign-field">
                         <label for="assignReportAreaSelect" class="assign-field-label">Area</label>
@@ -4325,6 +4367,8 @@
                 selectedOrder: null,
                 joPage: 1,
                 joSearchText: "",
+                joBranchFilter: "",
+                joBranchOptions: [],
                 joRows: [],
                 joTotalPages: 1,
                 joTotalRecords: 0,
@@ -4352,6 +4396,7 @@
                 supAreaId: "",
                 selectedAreaId: "",
                 selectedOrder: null,
+                editingRowIndex: -1,
                 rows: [],
                 totalUnitSelesai: 0,
                 totalUnitBelumSelesai: 0,
@@ -4844,6 +4889,7 @@
                     var statusText = row.StatusText || row.StatusCode || (isCompleted ? "Selesai" : "Belum Selesai");
                     var badgeClass = isCompleted ? "assign-report-status done" : "assign-report-status pending";
                     var canDelete = row.CanDelete && !getIsTechnicianUser();
+                    var canEdit = canDelete;
                     var detailButton = "<button type=\"button\" class=\"assign-report-detail-btn\" data-row-index=\"" + i + "\">Detail</button>";
                     var installButton = "";
                     if (!isCompleted && isScheduleRowNewInstall(row)) {
@@ -4852,10 +4898,13 @@
                             installButton = "<a class=\"assign-report-install-btn\" href=\"" + escapeHtml(installUrl) + "\" title=\"Input Training\">Training</a>";
                         }
                     }
+                    var editButton = canEdit
+                        ? "<button type=\"button\" class=\"assign-report-edit-btn\" data-row-index=\"" + i + "\">Edit</button>"
+                        : "";
                     var deleteButton = canDelete
                         ? "<button type=\"button\" class=\"assign-report-delete-btn\" data-row-index=\"" + i + "\">Delete</button>"
                         : "";
-                    var actionButton = "<div class=\"assign-report-action-wrap\">" + detailButton + installButton + deleteButton + "</div>";
+                    var actionButton = "<div class=\"assign-report-action-wrap\">" + detailButton + installButton + editButton + deleteButton + "</div>";
                     html.push("<tr>"
                         + "<td class=\"col-action\">" + actionButton + "</td>"
                         + "<td><span class=\"" + badgeClass + "\">" + escapeHtml(statusText) + "</span></td>"
@@ -4961,21 +5010,22 @@
                 return reportModalState.selectedOrder;
             }
 
-            function syncReportAssignInputHint(remainingUnit) {
+            function syncReportAssignInputHint(assignedUnit) {
                 var inputUnit = document.getElementById("assignReportInputUnit");
                 var inputLabel = document.getElementById("assignReportInputUnitLabel");
                 var inputHint = document.getElementById("assignReportInputUnitHint");
-                var safeRemaining = Math.max(0, toInt(remainingUnit, 0));
+                var safeAssigned = Math.max(0, toInt(assignedUnit, 0));
                 var groupText = reportModalState.deviceGroupId === "ACS" ? "ACS" : "GPS";
                 if (inputLabel) {
                     inputLabel.textContent = "Assign " + groupText + " Unit";
                 }
                 if (inputUnit) {
-                    inputUnit.placeholder = "Input assign " + groupText + " unit";
-                    inputUnit.max = safeRemaining.toString();
+                    inputUnit.value = "1";
+                    inputUnit.placeholder = "1";
+                    inputUnit.max = "1";
                 }
                 if (inputHint) {
-                    inputHint.textContent = "Sisa " + groupText + " : " + safeRemaining.toString();
+                    inputHint.textContent = "Sudah Assign " + groupText + " : " + safeAssigned.toString();
                 }
             }
 
@@ -5048,24 +5098,22 @@
 
                 var remainingGps = selected ? toInt(selected.RemainingUnitGps, 0) : 0;
                 var remainingAcs = selected ? toInt(selected.RemainingUnitAcs, 0) : 0;
+                var assignedGps = selected ? toInt(selected.TotalAssignGps, 0) : 0;
+                var assignedAcs = selected ? toInt(selected.TotalAssignAcs, 0) : 0;
                 if (remainGps) {
-                    remainGps.textContent = remainingGps.toString();
+                    remainGps.textContent = assignedGps.toString();
                 }
                 if (remainAcs) {
-                    remainAcs.textContent = remainingAcs.toString();
+                    remainAcs.textContent = assignedAcs.toString();
                 }
 
                 var selectedRemaining = reportModalState.deviceGroupId === "ACS" ? remainingAcs : remainingGps;
-                syncReportAssignInputHint(selectedRemaining);
+                var selectedAssigned = reportModalState.deviceGroupId === "ACS" ? assignedAcs : assignedGps;
+                syncReportAssignInputHint(selectedAssigned);
                 syncReportAreaDropdown();
 
                 if (input) {
-                    if (!input.value || toInt(input.value, 0) < 1) {
-                        input.value = "1";
-                    }
-                    if (toInt(input.value, 0) > selectedRemaining) {
-                        input.value = selectedRemaining.toString();
-                    }
+                    input.value = "1";
                 }
 
                 var disableGps = remainingGps <= 0;
@@ -5093,11 +5141,15 @@
                 setActiveReportAssignButtons();
 
                 if (assignBtn) {
-                    var bothZero = remainingGps <= 0 && remainingAcs <= 0;
+                    var isEditing = reportModalState.editingRowIndex >= 0;
+                    var canAssignNew = selected && selectedRemaining > 0;
+                    var bothZero = !canAssignNew && !isEditing;
                     assignBtn.disabled = bothZero || reportModalState.isSaving;
                     var isAssignLoading = reportModalState.isSaving && reportModalState.submitAction === "assign";
                     assignBtn.classList.toggle("is-loading", isAssignLoading);
-                    assignBtn.textContent = isAssignLoading ? "Saving..." : "Assign";
+                    assignBtn.textContent = isAssignLoading
+                        ? "Saving..."
+                        : (isEditing ? "Simpan Perubahan" : "Assign");
                 }
                 if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(reportModalState.selectedAreaId)) {
                     areaSelect.value = normalizeAreaId(reportModalState.selectedAreaId);
@@ -5111,8 +5163,7 @@
                 }
 
                 var selected = getCurrentReportOrder();
-                var input = document.getElementById("assignReportInputUnit");
-                if (!selected || !input) {
+                if (!selected) {
                     if (showFeedback) {
                         setReportFeedback("Job Order wajib dipilih untuk status Available.", true, false);
                     }
@@ -5122,7 +5173,7 @@
                 var remaining = reportModalState.deviceGroupId === "ACS"
                     ? toInt(selected.RemainingUnitAcs, 0)
                     : toInt(selected.RemainingUnitGps, 0);
-                var qty = toInt(input.value, 0);
+                var qty = 1;
                 var groupText = reportModalState.deviceGroupId === "ACS" ? "ACS" : "GPS";
                 var selectedAreaId = normalizeAreaId(reportModalState.selectedAreaId);
                 if (!selectedAreaId) {
@@ -5131,22 +5182,9 @@
                     }
                     return false;
                 }
-                if (remaining <= 0) {
+                if (reportModalState.editingRowIndex < 0 && remaining <= 0) {
                     if (showFeedback) {
-                        setReportFeedback("Sisa " + groupText + " sudah habis.", true, false);
-                    }
-                    return false;
-                }
-                if (qty <= 0) {
-                    if (showFeedback) {
-                        setReportFeedback("Input unit assign minimal 1.", true, false);
-                    }
-                    return false;
-                }
-                if (qty > remaining) {
-                    input.value = remaining.toString();
-                    if (showFeedback) {
-                        setReportFeedback("Assign " + groupText + " melebihi sisa " + groupText, true, false);
+                        setReportFeedback("Job Order ini sudah ter-assign (" + groupText + ").", true, false);
                     }
                     return false;
                 }
@@ -5236,6 +5274,7 @@
                 reportModalState.schDate = (cell.getAttribute("data-date") || "").trim();
                 reportModalState.rows = [];
                 reportModalState.selectedOrder = null;
+                reportModalState.editingRowIndex = -1;
                 reportModalState.joType = "new_install";
                 reportModalState.deviceGroupId = "GPS";
                 reportModalState.targetStatus = "AV";
@@ -5334,45 +5373,115 @@
                     if (!validateReportAssignInput(true)) {
                         return;
                     }
-                    qty = toInt(document.getElementById("assignReportInputUnit") ? document.getElementById("assignReportInputUnit").value : "0", 0);
+                    qty = 1;
                     selectedAreaId = normalizeAreaId(reportModalState.selectedAreaId);
+                }
+
+                var editingRowIndex = reportModalState.editingRowIndex;
+                var editingRow = editingRowIndex >= 0 ? ((reportModalState.rows || [])[editingRowIndex] || null) : null;
+
+                function finishAssignSave(result) {
+                    setReportFeedback((result && result.Message) || "Assignment berhasil disimpan.", false, true);
+                    reportModalState.selectedOrder = null;
+                    reportModalState.editingRowIndex = -1;
+                    loadCompletedReportModalData(false);
+                    refreshAvailabilityAfterSave(reportModalState.technicianId, reportModalState.schDate, "AV", function () {
+                        setReportAssignSaving(false);
+                    }, reportModalState.activeCell);
+                }
+
+                function runSaveAssign() {
+                    callAssignPageMethod(
+                        "SaveAssignJob",
+                        {
+                            assignId: "",
+                            jobId: selectedOrder ? (selectedOrder.JobID || "") : "",
+                            custId: selectedOrder ? (selectedOrder.Customer || "") : "",
+                            technicianId: reportModalState.technicianId,
+                            schDate: reportModalState.schDate,
+                            qtyAssign: qty,
+                            deviceGroupId: selectedDeviceGroup,
+                            areaId: selectedAreaId,
+                            targetStatus: selectedStatus,
+                            insDeviceTypeId: getInsDeviceTypeId(reportModalState.joType, selectedOrder)
+                        },
+                        function (result) {
+                            var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
+                            if (!success) {
+                                setReportAssignSaving(false);
+                                setReportFeedback((result && result.Message) || "Gagal menyimpan assignment.", true, false);
+                                return;
+                            }
+                            finishAssignSave(result);
+                        },
+                        function (errorMessage) {
+                            setReportAssignSaving(false);
+                            setReportFeedback("Gagal menyimpan assignment. " + (errorMessage || ""), true, false);
+                        });
+                }
+
+                if (editingRow && editingRow.AssignID) {
+                    callAssignPageMethod(
+                        "DeleteScheduleAssign",
+                        {
+                            assignId: editingRow.AssignID || "",
+                            seq: toInt(editingRow.Seq, -1)
+                        },
+                        function (deleteResult) {
+                            var deleteSuccess = (deleteResult && deleteResult.Result ? deleteResult.Result : "").toUpperCase() === "SUCCESS";
+                            if (!deleteSuccess) {
+                                setReportAssignSaving(false);
+                                setReportFeedback((deleteResult && deleteResult.Message) || "Gagal menghapus assign sebelum edit.", true, false);
+                                return;
+                            }
+                            runSaveAssign();
+                        },
+                        function (errorMessage) {
+                            setReportAssignSaving(false);
+                            setReportFeedback("Gagal menghapus assign sebelum edit. " + (errorMessage || ""), true, false);
+                        });
+                    return;
                 }
 
                 setReportAssignSaving(true);
                 setReportFeedback("Menyimpan assignment...", false, false);
-                callAssignPageMethod(
-                    "SaveAssignJob",
-                    {
-                        assignId: "",
-                        jobId: selectedOrder ? (selectedOrder.JobID || "") : "",
-                        custId: selectedOrder ? (selectedOrder.Customer || "") : "",
-                        technicianId: reportModalState.technicianId,
-                        schDate: reportModalState.schDate,
-                        qtyAssign: qty,
-                        deviceGroupId: selectedDeviceGroup,
-                        areaId: selectedAreaId,
-                        targetStatus: selectedStatus,
-                        insDeviceTypeId: getInsDeviceTypeId(reportModalState.joType, selectedOrder)
-                    },
-                    function (result) {
-                        var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
-                        if (!success) {
-                            setReportAssignSaving(false);
-                            setReportFeedback((result && result.Message) || "Gagal menyimpan assignment.", true, false);
-                            return;
-                        }
+                runSaveAssign();
+            }
 
-                        setReportFeedback((result && result.Message) || "Assignment berhasil disimpan.", false, true);
-                        reportModalState.selectedOrder = null;
-                        loadCompletedReportModalData(false);
-                        refreshAvailabilityAfterSave(reportModalState.technicianId, reportModalState.schDate, "AV", function () {
-                            setReportAssignSaving(false);
-                        }, reportModalState.activeCell);
-                    },
-                    function (errorMessage) {
-                        setReportAssignSaving(false);
-                        setReportFeedback("Gagal menyimpan assignment. " + (errorMessage || ""), true, false);
-                    });
+            function editAssignFromReportRow(rowIndex) {
+                if (getIsTechnicianUser()) {
+                    setReportFeedback("User IT Support tidak memiliki akses untuk mengedit assignment.", true, false);
+                    return;
+                }
+
+                var rows = reportModalState.rows || [];
+                if (rowIndex < 0 || rowIndex >= rows.length) {
+                    return;
+                }
+
+                var row = rows[rowIndex] || {};
+                if (!row.CanDelete) {
+                    return;
+                }
+
+                reportModalState.editingRowIndex = rowIndex;
+                reportModalState.targetStatus = "AV";
+                reportModalState.selectedOrder = {
+                    JobID: row.JobID || "",
+                    Customer: row.CustID || "",
+                    CustomerName: row.Customer || "",
+                    BranchName: "",
+                    RemainingUnitGps: 1,
+                    RemainingUnitAcs: 0,
+                    TotalAssignGps: 0,
+                    TotalAssignAcs: 0,
+                    DefaultAreaId: row.AreaID || ""
+                };
+                reportModalState.selectedAreaId = normalizeAreaId(row.AreaID || "");
+                var jobTypeText = ((row.JobType || "") + "").toLowerCase();
+                reportModalState.joType = jobTypeText.indexOf("visit") >= 0 ? "maintenance" : "new_install";
+                renderReportAssignForm();
+                setReportFeedback("Mode edit: ubah Area lalu klik Simpan Perubahan.", false, false);
             }
 
             function deleteAssignFromReportRow(rowIndex) {
@@ -6249,7 +6358,46 @@
             }
 
             function getJoInfoTableColspan() {
-                return normalizeJoTypeForApi(assignModalState.joType) === "installation" ? 8 : 7;
+                return normalizeJoTypeForApi(assignModalState.joType) === "installation" ? 11 : 10;
+            }
+
+            function renderJoBranchFilterOptions(branchOptions, selectedValue) {
+                var select = document.getElementById("assignJoBranchFilter");
+                if (!select) {
+                    return;
+                }
+                var selected = (selectedValue || "").trim();
+                var options = ["<option value=\"\">SEMUA Branch</option>"];
+                var rows = branchOptions || [];
+                for (var i = 0; i < rows.length; i++) {
+                    var branchName = (rows[i] || "").toString().trim();
+                    if (!branchName) {
+                        continue;
+                    }
+                    var isSelected = branchName === selected;
+                    options.push("<option value=\"" + escapeHtml(branchName) + "\"" + (isSelected ? " selected" : "") + ">" + escapeHtml(branchName) + "</option>");
+                }
+                select.innerHTML = options.join("");
+            }
+
+            function applySelectedOrderAreaFromCustomer(order, stateObject) {
+                if (!order || !stateObject) {
+                    return;
+                }
+                var defaultAreaId = normalizeAreaId(order.DefaultAreaId || "");
+                if (defaultAreaId) {
+                    stateObject.selectedAreaId = defaultAreaId;
+                    if (stateObject.supAreaId !== defaultAreaId) {
+                        stateObject.supAreaId = defaultAreaId;
+                        fetchAreaOptions(defaultAreaId, function () {
+                            if (isCompletedReportModalOpen()) {
+                                syncReportAreaDropdown();
+                            } else {
+                                syncAssignAreaDropdown();
+                            }
+                        });
+                    }
+                }
             }
 
             function syncJoDeviceTypeColumnVisibility() {
@@ -6283,6 +6431,7 @@
                     + "?action=load_job_order"
                     + "&activeTab=" + encodeURIComponent(normalizeJoTypeForApi(assignModalState.joType))
                     + "&searchKeyword=" + encodeURIComponent(assignModalState.joSearchText || "")
+                    + "&branchFilter=" + encodeURIComponent(assignModalState.joBranchFilter || "")
                     + "&pageIndex=" + encodeURIComponent(String(assignModalState.joPage || 1))
                     + "&pageSize=" + encodeURIComponent(String(assignJoPageSize || 5));
 
@@ -6313,6 +6462,8 @@
                         assignModalState.joTotalPages = (data && data.TotalPages) ? data.TotalPages : 1;
                         assignModalState.joTotalRecords = (data && data.TotalRecords) ? data.TotalRecords : 0;
                         assignModalState.joPage = (data && data.PageIndex) ? data.PageIndex : 1;
+                        assignModalState.joBranchOptions = (data && data.BranchOptions) ? data.BranchOptions : [];
+                        renderJoBranchFilterOptions(assignModalState.joBranchOptions, assignModalState.joBranchFilter);
                         renderJoInfoTable((data && data.ErrorMessage) ? data.ErrorMessage : "");
                     } catch (ex) {
                         assignModalState.joRows = [];
@@ -6398,47 +6549,46 @@
                 if (customer) {
                     customer.textContent = getCustomerDisplayText(selected);
                 }
+                var assignedGps = toInt(selected.TotalAssignGps, 0);
+                var assignedAcs = toInt(selected.TotalAssignAcs, 0);
+                var selectedAssigned = selectedGroup === "ACS" ? assignedAcs : assignedGps;
                 if (remainingGps) {
-                    remainingGps.textContent = toInt(selected.RemainingUnitGps, 0).toString();
+                    remainingGps.textContent = assignedGps.toString();
                 }
                 if (remainingAcs) {
-                    remainingAcs.textContent = toInt(selected.RemainingUnitAcs, 0).toString();
+                    remainingAcs.textContent = assignedAcs.toString();
                 }
                 if (inputUnit) {
-                    inputUnit.max = selectedGroupRemaining.toString();
-                    if (!inputUnit.value || parseInt(inputUnit.value, 10) < 1) {
-                        inputUnit.value = "1";
-                    }
-                    if (parseInt(inputUnit.value, 10) > selectedGroupRemaining) {
-                        inputUnit.value = selectedGroupRemaining.toString();
-                    }
+                    inputUnit.value = "1";
+                    inputUnit.max = "1";
                 }
-                syncAssignInputByDeviceGroup(selectedGroupRemaining);
+                syncAssignInputByDeviceGroup(selectedAssigned);
                 renderSelectedJoText();
                 if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(assignModalState.selectedAreaId)) {
                     areaSelect.value = normalizeAreaId(assignModalState.selectedAreaId);
                 }
             }
 
-            function syncAssignInputByDeviceGroup(remainingUnit) {
+            function syncAssignInputByDeviceGroup(assignedUnit) {
                 var inputUnit = document.getElementById("assignInputUnit");
                 var inputLabel = document.getElementById("assignInputUnitLabel");
                 var inputHint = document.getElementById("assignInputUnitHint");
                 var normalizedGroup = normalizeDeviceGroup(assignModalState.deviceGroupId);
                 var groupText = getDeviceGroupDisplayText(normalizedGroup);
-                var safeRemaining = Math.max(0, toInt(remainingUnit, 0));
+                var safeAssigned = Math.max(0, toInt(assignedUnit, 0));
 
                 if (inputLabel) {
                     inputLabel.textContent = "Assign " + groupText + " Unit";
                 }
 
                 if (inputUnit) {
-                    inputUnit.placeholder = "Input assign " + groupText + " unit";
-                    inputUnit.max = safeRemaining.toString();
+                    inputUnit.value = "1";
+                    inputUnit.placeholder = "1";
+                    inputUnit.max = "1";
                 }
 
                 if (inputHint) {
-                    inputHint.textContent = "Sisa " + groupText + " : " + safeRemaining.toString();
+                    inputHint.textContent = "Sudah Assign " + groupText + " : " + safeAssigned.toString();
                 }
             }
 
@@ -6448,36 +6598,28 @@
                     return true;
                 }
 
-                var qtyInput = document.getElementById("assignInputUnit");
                 var order = getSelectedOrder();
-                if (!qtyInput || !order) {
+                if (!order) {
+                    if (showFeedback) {
+                        setFeedback("Job Order wajib dipilih untuk status Available.", true, false);
+                    }
                     return false;
                 }
 
                 var selectedGroup = normalizeDeviceGroup(assignModalState.deviceGroupId);
                 var groupText = getDeviceGroupDisplayText(selectedGroup);
                 var remainingUnit = getRemainingUnitByDeviceGroup(order, selectedGroup);
-                var qtyValue = parseInt(qtyInput.value, 10);
+                var selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
+                if (!selectedAreaId) {
+                    if (showFeedback) {
+                        setFeedback("Area wajib dipilih.", true, false);
+                    }
+                    return false;
+                }
 
                 if (remainingUnit <= 0) {
-                    qtyInput.value = "0";
                     if (showFeedback) {
-                        setFeedback("Sisa " + groupText + " sudah habis.", true, false);
-                    }
-                    return false;
-                }
-
-                if (!qtyValue || qtyValue < 1) {
-                    if (showFeedback) {
-                        setFeedback("Input unit assign minimal 1.", true, false);
-                    }
-                    return false;
-                }
-
-                if (qtyValue > remainingUnit) {
-                    qtyInput.value = remainingUnit.toString();
-                    if (showFeedback) {
-                        setFeedback("Assign " + groupText + " melebihi sisa " + groupText, true, false);
+                        setFeedback("Job Order ini sudah ter-assign (" + groupText + ").", true, false);
                     }
                     return false;
                 }
@@ -6508,19 +6650,22 @@
                     var rows = [];
                     for (var i = 0; i < rowsData.length; i++) {
                         var item = rowsData[i];
-                        var remainingGps = toInt(item.RemainingUnitGps, 0);
-                        var remainingAcs = toInt(item.RemainingUnitAcs, 0);
+                        var assignedGps = toInt(item.TotalAssignGps, 0);
+                        var assignedAcs = toInt(item.TotalAssignAcs, 0);
+                        var lastAssign = item.LastAssignDate || "-";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
                             : "";
                         rows.push("<tr>" +
                             "<td>" + escapeHtml(item.JobID) + "</td>" +
                             "<td>" + escapeHtml(getCustomerDisplayText(item)) + "</td>" +
-                            "<td>" + escapeHtml(item.BranchName) + "</td>" +
+                            "<td>" + escapeHtml(item.BranchName || "-") + "</td>" +
+                            "<td class=\"assign-jo-address-col\">" + escapeHtml(item.Address || "-") + "</td>" +
+                            "<td>" + escapeHtml(item.MarketingName || "-") + "</td>" +
                             deviceTypeCell +
-                            "<td>" + escapeHtml(remainingGps.toString()) + "</td>" +
-                            "<td>" + escapeHtml(remainingAcs.toString()) + "</td>" +
-                            "<td>" + escapeHtml(item.LastAssignDate) + "</td>" +
+                            "<td>" + escapeHtml(assignedGps.toString()) + "</td>" +
+                            "<td>" + escapeHtml(assignedAcs.toString()) + "</td>" +
+                            "<td>" + escapeHtml(lastAssign) + "</td>" +
                             "<td><button type=\"button\" class=\"assign-jo-pick-btn\" data-pick-index=\"" + i + "\">Pilih</button></td>" +
                             "</tr>");
                     }
@@ -7245,6 +7390,15 @@
                 }
                 if (reportTableBody) {
                     reportTableBody.addEventListener("click", function (event) {
+                        var editBtn = closestByClass(event.target, "assign-report-edit-btn");
+                        if (editBtn) {
+                            var editIndex = parseInt(editBtn.getAttribute("data-row-index"), 10);
+                            if (!isNaN(editIndex)) {
+                                editAssignFromReportRow(editIndex);
+                            }
+                            return;
+                        }
+
                         var deleteBtn = closestByClass(event.target, "assign-report-delete-btn");
                         if (!deleteBtn) {
                             return;
@@ -7362,6 +7516,14 @@
                         }
                     });
                 }
+                var joBranchFilter = document.getElementById("assignJoBranchFilter");
+                if (joBranchFilter) {
+                    joBranchFilter.addEventListener("change", function () {
+                        assignModalState.joBranchFilter = joBranchFilter.value || "";
+                        assignModalState.joPage = 1;
+                        fetchJobOrderInformation();
+                    });
+                }
                 if (joTableBody) {
                     joTableBody.addEventListener("click", function (event) {
                         var button = closestByClass(event.target, "assign-jo-pick-btn");
@@ -7377,10 +7539,13 @@
                         var shouldApplyToReport = joLookupOwner === "report" || isCompletedReportModalOpen();
                         if (shouldApplyToReport) {
                             reportModalState.selectedOrder = selectedOrder;
+                            reportModalState.editingRowIndex = -1;
+                            applySelectedOrderAreaFromCustomer(selectedOrder, reportModalState);
                             renderReportAssignForm();
                             setReportFeedback("", false, false);
                         } else {
                             assignModalState.selectedOrder = selectedOrder;
+                            applySelectedOrderAreaFromCustomer(selectedOrder, assignModalState);
                             renderOrderInfo();
                         }
                         joLookupOwner = "main";
@@ -7516,17 +7681,12 @@
                         var selectedAreaId = "";
                         var fallbackDisplay = selectedStatus;
                         if (isAvailableStatus) {
-                            var qtyInput = document.getElementById("assignInputUnit");
                             if (!validateAssignUnitInput(true)) {
                                 return;
                             }
                             selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
-                            if (!selectedAreaId) {
-                                setFeedback("Area wajib dipilih.", true, false);
-                                return;
-                            }
-                            qty = qtyInput ? parseInt(qtyInput.value, 10) : 0;
-                            fallbackDisplay = qty.toString();
+                            qty = 1;
+                            fallbackDisplay = "1";
                         }
 
                         setAssignSubmitLoading(true);
@@ -7613,17 +7773,12 @@
                         var selectedAreaId = "";
                         var fallbackDisplay = selectedStatus;
                         if (isAvailableStatus) {
-                            var qtyInput = document.getElementById("assignInputUnit");
                             if (!validateAssignUnitInput(true)) {
                                 return;
                             }
                             selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
-                            if (!selectedAreaId) {
-                                setFeedback("Area wajib dipilih.", true, false);
-                                return;
-                            }
-                            qty = qtyInput ? parseInt(qtyInput.value, 10) : 0;
-                            fallbackDisplay = qty.toString();
+                            qty = 1;
+                            fallbackDisplay = "1";
                         }
 
                         setAssignSubmitLoading(true);

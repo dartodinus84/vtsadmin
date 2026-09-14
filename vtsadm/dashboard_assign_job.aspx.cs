@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -38,11 +39,15 @@ namespace vtsadm
             public int TotalUnitAcs { get; set; }
             public int TotalUnitGpsDone { get; set; }
             public int TotalUnitAcsDone { get; set; }
+            public string Address { get; set; }
+            public string MarketingName { get; set; }
+            public string DefaultAreaId { get; set; }
         }
 
         public class JobOrderInformationResponse
         {
             public List<JobOrderInformationItem> Rows { get; set; }
+            public List<string> BranchOptions { get; set; }
             public int TotalRecords { get; set; }
             public int PageIndex { get; set; }
             public int PageSize { get; set; }
@@ -211,6 +216,7 @@ namespace vtsadm
             public string DeviceTypeDesc { get; set; }
             public string CustID { get; set; }
             public string Customer { get; set; }
+            public string AreaID { get; set; }
             public string AreaName { get; set; }
             public string PoliceNo { get; set; }
             public string NoSN { get; set; }
@@ -355,6 +361,8 @@ namespace vtsadm
         private const string RegionalAllValue = "ALL";
         private const string AreaGroupEastValue = "ARG0000002";
         private const string AreaGroupWestValue = "ARG0000001";
+        private static readonly string[] KnownWestSupAreaIds = { "SUP0000001" };
+        private static readonly string[] KnownEastSupAreaIds = { "SUP0000010", "SUP0000011", "SUP0000013" };
         private const string DefaultTab = "teknisi";
 
         protected virtual string FixedActiveTab
@@ -363,7 +371,7 @@ namespace vtsadm
         }
 
         /// <summary>
-        /// When true (IT Support page), schedule/summary/closed lists use trx_job_assign_detail keyed by conf_mst_user.ITID.
+        /// When true (IT Support page), schedule/summary/closed lists use trx_job_assign_detail keyed by mst_itsupport.ITID via ItsSupportAssignData.
         /// </summary>
         protected virtual bool UseJobTrainingDataSource
         {
@@ -486,8 +494,9 @@ namespace vtsadm
                 {
                     EnsureTeknisiFiltersNotZeroingClosedJo();
                     InitializeFilter();
-                    BindAllSection();
                 }
+
+                BindAllSection();
             }
             catch
             {
@@ -547,8 +556,8 @@ namespace vtsadm
                     pageSize = 5;
                 }
 
-                // IT Support still assigns into trx_job_assign_detail using the same JO pool as Teknisi.
-                payload = BuildJobOrderInformationResponse(activeTab, searchKeyword, pageIndex, pageSize);
+                string branchFilter = Request.QueryString["branchFilter"] ?? string.Empty;
+                payload = ResolveJobOrderInformationForRequest(activeTab, searchKeyword, pageIndex, pageSize, branchFilter);
                 WriteRawJsonAndEnd(SerializeJobOrderPayload(payload));
             }
             catch (System.Threading.ThreadAbortException)
@@ -1012,6 +1021,7 @@ namespace vtsadm
             JobOrderInformationResponse response = new JobOrderInformationResponse
             {
                 Rows = new List<JobOrderInformationItem>(),
+                BranchOptions = new List<string>(),
                 TotalRecords = 0,
                 PageIndex = pageIndex < 1 ? 1 : pageIndex,
                 PageSize = pageSize < 1 ? 5 : Math.Min(pageSize, 100),
@@ -1286,7 +1296,9 @@ namespace vtsadm
 
             BindRegionalTabs();
             string selectedRegional = GetSelectedRegionalTab();
-            string selectedAreaGroup = NormalizeAreaGroupId(GetSelectedRegionalGroupTab());
+            string selectedAreaGroup = UseJobTrainingDataSource
+                ? ResolveItsScheduleAreaGroupFilter(GetSelectedRegionalGroupTab())
+                : NormalizeAreaGroupId(GetSelectedRegionalGroupTab());
             string supAreaForQuery = ResolveSupAreaParameter(selectedRegional);
             bool summaryBound = BindSummary(periode, supAreaForQuery, selectedAreaGroup);
             bool unitSummaryBound = BindUnitSummary(periode, supAreaForQuery, selectedAreaGroup);
@@ -1896,7 +1908,7 @@ namespace vtsadm
             }
         }
 
-        private static DataTable LoadJobTrainingHeaderTable(string searchKeyword)
+        protected static DataTable LoadJobTrainingHeaderTable(string searchKeyword)
         {
             HttpContext context = HttpContext.Current;
             if (context == null || context.Session == null || context.Session["ClsTypeDBConnStringSQL"] == null)
@@ -2132,7 +2144,7 @@ namespace vtsadm
         private const string TrainCategoryVisitId = "TRC0000002";
         private const string TrainCategoryMapCacheKey = "DashboardAssignJobTrainCategoryMap";
 
-        private static bool IsTrainingOrVisitCategory(string categoryName, string categoryId)
+        protected static bool IsTrainingOrVisitCategory(string categoryName, string categoryId)
         {
             return !string.IsNullOrWhiteSpace(ResolveTrainCategoryId(categoryName, categoryId));
         }
@@ -2143,7 +2155,7 @@ namespace vtsadm
             return IsTrainingOrVisitCategory(categoryName, categoryId);
         }
 
-        private static bool IsVisitCategory(string categoryName, string categoryId)
+        protected static bool IsVisitCategory(string categoryName, string categoryId)
         {
             string resolvedId = ResolveTrainCategoryId(categoryName, categoryId);
             if (string.IsNullOrWhiteSpace(resolvedId))
@@ -2387,7 +2399,7 @@ namespace vtsadm
 
             int totalDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
             string filterSupArea = ResolveSupAreaParameter(selectedRegional);
-            string filterAreaGroup = NormalizeAreaGroupId(selectedAreaGroup);
+            string filterAreaGroup = ResolveItsScheduleAreaGroupFilter(selectedAreaGroup);
             Dictionary<string, JobTrainingTrainerSchedule> trainers = BuildItsUserScheduleMap(totalDays, filterAreaGroup, periode);
             if (trainers.Count == 0 && string.IsNullOrWhiteSpace(ResolveItsAreaFilterToken(filterAreaGroup)))
             {
@@ -2771,7 +2783,7 @@ namespace vtsadm
                 || raw == "MT";
         }
 
-        private static DataTable LoadTrxJobAssignDetailRows(DateTime dateFrom, DateTime dateToExclusive)
+        protected static DataTable LoadTrxJobAssignDetailRows(DateTime dateFrom, DateTime dateToExclusive)
         {
             string fromText = dateFrom.ToString("yyyy-MM-dd");
             string toText = dateToExclusive.ToString("yyyy-MM-dd");
@@ -3070,6 +3082,15 @@ namespace vtsadm
                 return string.Empty;
             }
 
+            if (IsJobTrainingAssignRequestContext())
+            {
+                string fromMst = ItsSupportAssignData.LookupItId(safeUserId);
+                if (!string.IsNullOrWhiteSpace(fromMst))
+                {
+                    return fromMst;
+                }
+            }
+
             DataTable rows = ExecuteJobTrainingQuery(
                 "SELECT TOP 1 ITID FROM conf_mst_user WITH (NOLOCK) "
                 + "WHERE LTRIM(RTRIM(ISNULL(UserID, ''))) = '" + safeUserId + "'");
@@ -3107,15 +3128,17 @@ namespace vtsadm
 
             foreach (DataRow row in users.Rows)
             {
+                string itId = NormalizeItId(FirstNonEmptyStatic(GetRowValueInsensitive(row, "ITID")));
                 string userId = FirstNonEmptyStatic(
-                    GetValue(row, "UserID"),
-                    GetValue(row, "UsrID"));
+                    GetRowValueInsensitive(row, "UserID", "UsrID"));
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    userId = itId;
+                }
+
                 string fullName = FirstNonEmptyStatic(
-                    GetValue(row, "FullName"),
-                    GetValue(row, "UserName"),
-                    GetValue(row, "Name"),
+                    GetRowValueInsensitive(row, "FullName", "UserName", "Name"),
                     userId);
-                string itId = NormalizeItId(FirstNonEmptyStatic(GetValue(row, "ITID")));
                 if (string.IsNullOrWhiteSpace(userId))
                 {
                     continue;
@@ -3126,20 +3149,17 @@ namespace vtsadm
                     itId = NormalizeItId(LookupItIdByUserId(userId));
                 }
 
+                string trainerKey = IsValidItId(itId) ? itId : TrimToLength(userId, 20);
+
                 string supAreaId = FirstNonEmptyStatic(
-                    GetValue(row, "SupAreaID"),
-                    GetValue(row, "SupportAreaID")).Trim();
+                    GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID")).Trim();
                 if (supAreaId.Equals("[SELECT]", StringComparison.OrdinalIgnoreCase)
                     || supAreaId.Equals("-", StringComparison.OrdinalIgnoreCase))
                 {
                     supAreaId = string.Empty;
                 }
 
-                string areaGroupId = NormalizeAreaGroupId(filterAreaGroupId);
-                if (string.IsNullOrWhiteSpace(areaGroupId))
-                {
-                    areaGroupId = NormalizeAreaGroupId(GetValue(row, "AreaGroupID"));
-                }
+                string areaGroupId = NormalizeAreaGroupId(GetRowValueInsensitive(row, "AreaGroupID"));
                 if (string.IsNullOrWhiteSpace(areaGroupId) && !string.IsNullOrWhiteSpace(supAreaId))
                 {
                     string derivedGroup;
@@ -3149,11 +3169,11 @@ namespace vtsadm
                     }
                 }
 
-                if (!trainers.ContainsKey(userId))
+                if (!trainers.ContainsKey(trainerKey))
                 {
                     JobTrainingTrainerSchedule entry = new JobTrainingTrainerSchedule
                     {
-                        TrainerId = TrimToLength(userId, 20),
+                        TrainerId = trainerKey,
                         TrainerName = string.IsNullOrWhiteSpace(fullName) ? userId : fullName,
                         ItId = IsValidItId(itId) ? itId : string.Empty,
                         SupAreaID = supAreaId,
@@ -3161,13 +3181,21 @@ namespace vtsadm
                         DayJobCount = new int[Math.Max(totalDays, 1) + 1],
                         DayOpenCount = new int[Math.Max(totalDays, 1) + 1]
                     };
-                    trainers[userId] = entry;
+                    trainers[trainerKey] = entry;
+                    if (!string.IsNullOrWhiteSpace(userId)
+                        && !userId.Equals(trainerKey, StringComparison.OrdinalIgnoreCase)
+                        && !trainers.ContainsKey(userId))
+                    {
+                        trainers[userId] = entry;
+                    }
                     if (!string.IsNullOrWhiteSpace(entry.TrainerId)
                         && !trainers.ContainsKey(entry.TrainerId))
                     {
                         trainers[entry.TrainerId] = entry;
                     }
-                    if (IsValidItId(entry.ItId) && !trainers.ContainsKey(entry.ItId))
+                    if (IsValidItId(entry.ItId)
+                        && !entry.ItId.Equals(trainerKey, StringComparison.OrdinalIgnoreCase)
+                        && !trainers.ContainsKey(entry.ItId))
                     {
                         trainers[entry.ItId] = entry;
                     }
@@ -3448,6 +3476,24 @@ namespace vtsadm
             return string.Empty;
         }
 
+        private static string ResolveItsScheduleAreaGroupFilter(string selectedAreaGroup)
+        {
+            string normalized = NormalizeAreaGroupId(selectedAreaGroup);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return string.Empty;
+            }
+
+            object sessionValue = context.Session[GetRegionalGroupTabSessionKeyStatic()];
+            return NormalizeAreaGroupId(Convert.ToString(sessionValue).Trim());
+        }
+
         private static DataTable LoadItsUserIdsWithCustomersInAreaGroup(string areaGroupId)
         {
             DataTable result = new DataTable();
@@ -3632,21 +3678,19 @@ namespace vtsadm
                 return allUsers;
             }
 
-            HashSet<string> regionalUserIds =
-                BuildItsUserIdSetFromTable(LoadItsUserIdsWithCustomersInAreaGroup(requiredGroup));
-            foreach (string trxUserId in LoadItsUserIdsFromTrxInAreaGroup(requiredGroup, periode))
-            {
-                regionalUserIds.Add(trxUserId);
-            }
+            return FilterItsSupportAuthUsersByMstAreaGroup(allUsers, requiredGroup);
+        }
 
-            Dictionary<string, string> supAreaToGroup = LoadSupAreaAreaGroupMap();
+        private static DataTable FilterItsSupportAuthUsersByMstAreaGroup(DataTable allUsers, string requiredGroup)
+        {
+            string requiredCanon = NormalizeAreaGroupId(requiredGroup);
+            HashSet<string> allowedSupAreaIds = LoadSupAreaIdsForAreaGroup(requiredCanon);
             DataTable filtered = allUsers.Clone();
             EnsureItsAuthUserAreaColumns(filtered);
 
             foreach (DataRow row in allUsers.Rows)
             {
-                string userId = FirstNonEmptyStatic(GetValue(row, "UserID"), GetValue(row, "UsrID")).Trim();
-                if (ItsUserMatchesAreaGroup(row, userId, requiredGroup, regionalUserIds, supAreaToGroup))
+                if (ItSupportRowMatchesAreaGroupFilter(row, requiredCanon, allowedSupAreaIds))
                 {
                     filtered.ImportRow(row);
                 }
@@ -3705,8 +3749,851 @@ namespace vtsadm
             return result;
         }
 
+        private static string GetItSupportSupAreaSqlExpressionBasic()
+        {
+            return "LTRIM(RTRIM(ISNULL(it.SupAreaID, '')))";
+        }
+
+        private static string GetItSupportSupAreaSqlExpression()
+        {
+            return "LTRIM(RTRIM(COALESCE("
+                + "NULLIF(LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))), ''), "
+                + "NULLIF(LTRIM(RTRIM(ISNULL(it.SupportAreaID, ''))), ''))))";
+        }
+
+        private static string BuildItSupportUsersByAreaGroupSql(string areaGroupFilter = "", bool useBasicSupAreaExpr = false)
+        {
+            string supAreaExpr = useBasicSupAreaExpr
+                ? GetItSupportSupAreaSqlExpressionBasic()
+                : GetItSupportSupAreaSqlExpression();
+            string requiredGroup = NormalizeAreaGroupId(areaGroupFilter);
+            string selectCore = "SELECT "
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                + "'ITS' AS GroupID, "
+                + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                + supAreaExpr + " AS SupAreaID, "
+                + supAreaExpr + " AS SupportAreaID, "
+                + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID, "
+                + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName ";
+
+            if (string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                return selectCore
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "LEFT JOIN ref_support_area sa WITH (NOLOCK) ON sa.SupAreaID = it.SupAreaID "
+                    + "LEFT JOIN ref_area_group ag WITH (NOLOCK) ON ag.AreaGroupID = sa.AreaGroupID "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)";
+            }
+
+            string safeGroup = requiredGroup.Replace("'", "''");
+            string westEastToken = requiredGroup.Equals(AreaGroupWestValue, StringComparison.OrdinalIgnoreCase)
+                ? "WEST"
+                : (requiredGroup.Equals(AreaGroupEastValue, StringComparison.OrdinalIgnoreCase) ? "EAST" : string.Empty);
+            string namePredicate = string.IsNullOrWhiteSpace(westEastToken)
+                ? string.Empty
+                : "OR UPPER(LTRIM(RTRIM(ISNULL(ag.AreaGroupName, '')))) LIKE '%" + westEastToken + "%' ";
+
+            return selectCore
+                + "FROM mst_itsupport it WITH (NOLOCK) "
+                + "INNER JOIN ref_support_area sa WITH (NOLOCK) ON sa.SupAreaID = it.SupAreaID "
+                + "LEFT JOIN ref_area_group ag WITH (NOLOCK) ON ag.AreaGroupID = sa.AreaGroupID "
+                + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                + "AND (LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) = '" + safeGroup + "' " + namePredicate + ") "
+                + "ORDER BY ISNULL(it.Name, it.UserID)";
+        }
+
+        /// <summary>
+        /// User-verified shape: mst_itsupport.SupAreaID -> ref_support_area -> ref_area_group.
+        /// </summary>
+        private static DataTable QueryItSupportUsersFullJoin()
+        {
+            string[] queries =
+            {
+                "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + "LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))) AS SupAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))) AS SupportAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID, "
+                    + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "LEFT JOIN ref_support_area sa WITH (NOLOCK) ON sa.SupAreaID = it.SupAreaID "
+                    + "LEFT JOIN ref_area_group ag WITH (NOLOCK) ON ag.AreaGroupID = sa.AreaGroupID "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)",
+                "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + "LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))) AS SupAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))) AS SupportAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID, "
+                    + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "LEFT JOIN ref_support_area sa WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) = LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))) "
+                    + "LEFT JOIN ref_area_group ag WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(ag.AreaGroupID, ''))) = LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteJobTrainingQuery(sql);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    EnrichItSupportUsersFromSupAreaMap(table);
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        private static DataTable FilterItSupportUsersByJoinedAreaGroup(DataTable allUsers, string requiredGroup)
+        {
+            if (allUsers == null || allUsers.Rows.Count == 0)
+            {
+                return allUsers ?? new DataTable();
+            }
+
+            string requiredCanon = NormalizeAreaGroupId(requiredGroup);
+            if (string.IsNullOrWhiteSpace(requiredCanon))
+            {
+                return allUsers;
+            }
+
+            HashSet<string> allowedSupAreaIds = LoadSupAreaIdsForAreaGroup(requiredCanon);
+            DataTable filtered = allUsers.Clone();
+            EnsureItsAuthUserAreaColumns(filtered);
+            if (!filtered.Columns.Contains("AreaGroupName"))
+            {
+                filtered.Columns.Add("AreaGroupName", typeof(string));
+            }
+
+            foreach (DataRow row in allUsers.Rows)
+            {
+                string rowAreaGroupId = NormalizeAreaGroupId(GetRowValueInsensitive(row, "AreaGroupID"));
+                if (!string.IsNullOrWhiteSpace(rowAreaGroupId)
+                    && requiredCanon.Equals(rowAreaGroupId, StringComparison.OrdinalIgnoreCase))
+                {
+                    CopyItSupportUserRow(row, filtered);
+                    continue;
+                }
+
+                if (ItSupportRowMatchesAreaGroupFilter(row, requiredCanon, allowedSupAreaIds))
+                {
+                    CopyItSupportUserRow(row, filtered);
+                }
+            }
+
+            return filtered;
+        }
+
+        private static void CopyItSupportUserRow(DataRow source, DataTable target)
+        {
+            if (source == null || target == null)
+            {
+                return;
+            }
+
+            DataRow targetRow = target.NewRow();
+            foreach (DataColumn column in source.Table.Columns)
+            {
+                if (!target.Columns.Contains(column.ColumnName))
+                {
+                    continue;
+                }
+
+                targetRow[column.ColumnName] = source[column.ColumnName];
+            }
+
+            target.Rows.Add(targetRow);
+        }
+
+        private static void MergeKnownSupAreaIdsForAreaGroup(string requiredCanon, HashSet<string> ids)
+        {
+            if (ids == null || string.IsNullOrWhiteSpace(requiredCanon))
+            {
+                return;
+            }
+
+            string[] knownIds = null;
+            if (requiredCanon.Equals(AreaGroupWestValue, StringComparison.OrdinalIgnoreCase))
+            {
+                knownIds = KnownWestSupAreaIds;
+            }
+            else if (requiredCanon.Equals(AreaGroupEastValue, StringComparison.OrdinalIgnoreCase))
+            {
+                knownIds = KnownEastSupAreaIds;
+            }
+
+            if (knownIds == null)
+            {
+                return;
+            }
+
+            foreach (string supAreaId in knownIds)
+            {
+                if (!string.IsNullOrWhiteSpace(supAreaId))
+                {
+                    ids.Add(supAreaId.Trim());
+                }
+            }
+        }
+
+        private static DataTable QueryItSupportUsersBySupAreaIds(HashSet<string> supAreaIds)
+        {
+            if (supAreaIds == null || supAreaIds.Count == 0)
+            {
+                return new DataTable();
+            }
+
+            List<string> safeIds = new List<string>();
+            foreach (string supAreaId in supAreaIds)
+            {
+                string trimmed = (supAreaId ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(trimmed))
+                {
+                    safeIds.Add("'" + trimmed.Replace("'", "''") + "'");
+                }
+            }
+
+            if (safeIds.Count == 0)
+            {
+                return new DataTable();
+            }
+
+            string inList = string.Join(",", safeIds);
+            string supAreaExprBasic = GetItSupportSupAreaSqlExpressionBasic();
+            string[] queries =
+            {
+                "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + supAreaExprBasic + " AS SupAreaID, "
+                    + supAreaExprBasic + " AS SupportAreaID, "
+                    + "'' AS AreaGroupID, "
+                    + "'' AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "AND LTRIM(RTRIM(ISNULL(it.SupAreaID, ''))) IN (" + inList + ") "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)",
+                "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + supAreaExprBasic + " AS SupAreaID, "
+                    + supAreaExprBasic + " AS SupportAreaID, "
+                    + "'' AS AreaGroupID, "
+                    + "'' AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "AND it.SupAreaID IN (" + inList + ") "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteJobTrainingQuery(sql);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    EnrichItSupportUsersFromSupAreaMap(table);
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        private static DataTable QueryItSupportUsersByAreaGroup(string areaGroupFilter = "")
+        {
+            string requiredGroup = NormalizeAreaGroupId(areaGroupFilter);
+            string supAreaExpr = GetItSupportSupAreaSqlExpression();
+            string supAreaExprBasic = GetItSupportSupAreaSqlExpressionBasic();
+            List<string> queries = new List<string>
+            {
+                BuildItSupportUsersByAreaGroupSql(areaGroupFilter, true),
+                BuildItSupportUsersByAreaGroupSql(areaGroupFilter, false)
+            };
+
+            if (!string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                string safeGroup = requiredGroup.Replace("'", "''");
+                string westEastToken = requiredGroup.Equals(AreaGroupWestValue, StringComparison.OrdinalIgnoreCase)
+                    ? "WEST"
+                    : (requiredGroup.Equals(AreaGroupEastValue, StringComparison.OrdinalIgnoreCase) ? "EAST" : string.Empty);
+                string namePredicate = string.IsNullOrWhiteSpace(westEastToken)
+                    ? string.Empty
+                    : "OR UPPER(LTRIM(RTRIM(ISNULL(ag.AreaGroupName, '')))) LIKE '%" + westEastToken + "%' ";
+                queries.Add(
+                    "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + supAreaExpr + " AS SupAreaID, "
+                    + supAreaExpr + " AS SupportAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID, "
+                    + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "INNER JOIN ref_support_area sa WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) = " + supAreaExpr + " "
+                    + "LEFT JOIN ref_area_group ag WITH (NOLOCK) ON ag.AreaGroupID = sa.AreaGroupID "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "AND (LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) = '" + safeGroup + "' " + namePredicate + ") "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)");
+                queries.Add(BuildItSupportMasterUsersSql(areaGroupFilter));
+                queries.Add(
+                    "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + supAreaExprBasic + " AS SupAreaID, "
+                    + supAreaExprBasic + " AS SupportAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID, "
+                    + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "INNER JOIN ref_support_area sa WITH (NOLOCK) ON sa.SupAreaID = it.SupAreaID "
+                    + "LEFT JOIN ref_area_group ag WITH (NOLOCK) ON ag.AreaGroupID = sa.AreaGroupID "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "AND LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) = '" + safeGroup + "' "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)");
+            }
+            else
+            {
+                queries.Add(
+                    "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                    + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                    + "'ITS' AS GroupID, "
+                    + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                    + supAreaExprBasic + " AS SupAreaID, "
+                    + supAreaExprBasic + " AS SupportAreaID, "
+                    + "'' AS AreaGroupID, "
+                    + "'' AS AreaGroupName "
+                    + "FROM mst_itsupport it WITH (NOLOCK) "
+                    + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                    + "ORDER BY ISNULL(it.Name, it.UserID)");
+            }
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteJobTrainingQuery(sql);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    EnrichItSupportUsersFromSupAreaMap(table);
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        private static void EnrichItsAuthUsersFromMstItSupport(DataTable users)
+        {
+            if (users == null || users.Rows.Count == 0)
+            {
+                return;
+            }
+
+            DataTable mstUsers = QueryItSupportUsersByAreaGroup(string.Empty);
+            if (mstUsers == null || mstUsers.Rows.Count == 0)
+            {
+                return;
+            }
+
+            EnsureItsAuthUserAreaColumns(users);
+            if (!users.Columns.Contains("AreaGroupName"))
+            {
+                users.Columns.Add("AreaGroupName", typeof(string));
+            }
+
+            Dictionary<string, DataRow> byUserId = new Dictionary<string, DataRow>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, DataRow> byItId = new Dictionary<string, DataRow>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow mstRow in mstUsers.Rows)
+            {
+                string userId = GetRowValueInsensitive(mstRow, "UserID", "UsrID");
+                string itId = GetRowValueInsensitive(mstRow, "ITID");
+                if (!string.IsNullOrWhiteSpace(userId) && !byUserId.ContainsKey(userId))
+                {
+                    byUserId[userId] = mstRow;
+                }
+
+                if (!string.IsNullOrWhiteSpace(itId) && !byItId.ContainsKey(itId))
+                {
+                    byItId[itId] = mstRow;
+                }
+            }
+
+            foreach (DataRow row in users.Rows)
+            {
+                string userId = GetRowValueInsensitive(row, "UserID", "UsrID");
+                string itId = GetRowValueInsensitive(row, "ITID");
+                DataRow mstRow;
+                if ((!string.IsNullOrWhiteSpace(userId) && byUserId.TryGetValue(userId, out mstRow))
+                    || (!string.IsNullOrWhiteSpace(itId) && byItId.TryGetValue(itId, out mstRow)))
+                {
+                    string supAreaId = GetRowValueInsensitive(mstRow, "SupAreaID", "SupportAreaID");
+                    if (!string.IsNullOrWhiteSpace(supAreaId))
+                    {
+                        row["SupAreaID"] = supAreaId;
+                        row["SupportAreaID"] = supAreaId;
+                    }
+
+                    string areaGroupId = GetRowValueInsensitive(mstRow, "AreaGroupID");
+                    if (!string.IsNullOrWhiteSpace(areaGroupId))
+                    {
+                        row["AreaGroupID"] = areaGroupId;
+                    }
+
+                    string areaGroupName = GetRowValueInsensitive(mstRow, "AreaGroupName");
+                    if (!string.IsNullOrWhiteSpace(areaGroupName))
+                    {
+                        row["AreaGroupName"] = areaGroupName;
+                    }
+
+                    string mstItId = GetRowValueInsensitive(mstRow, "ITID");
+                    if (!string.IsNullOrWhiteSpace(mstItId))
+                    {
+                        row["ITID"] = mstItId;
+                    }
+
+                    string mstName = GetRowValueInsensitive(mstRow, "FullName", "Name");
+                    if (!string.IsNullOrWhiteSpace(mstName))
+                    {
+                        row["FullName"] = mstName;
+                    }
+                }
+            }
+        }
+
+        private static string BuildItSupportSupAreaExistsFilter(string requiredAreaGroupId)
+        {
+            string requiredGroup = NormalizeAreaGroupId(requiredAreaGroupId);
+            if (string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                return string.Empty;
+            }
+
+            string safeGroup = requiredGroup.Replace("'", "''");
+            string supAreaExpr = GetItSupportSupAreaSqlExpression();
+            return "AND EXISTS (SELECT 1 FROM ref_support_area saf WITH (NOLOCK) "
+                + "WHERE LTRIM(RTRIM(ISNULL(saf.SupAreaID, ''))) = " + supAreaExpr + " "
+                + "AND LTRIM(RTRIM(ISNULL(saf.AreaGroupID, ''))) = '" + safeGroup + "') ";
+        }
+
+        private static string BuildItSupportMasterUsersSql(string filterAreaGroupId = "")
+        {
+            string areaFilter = BuildItSupportSupAreaExistsFilter(filterAreaGroupId);
+            string supAreaExpr = GetItSupportSupAreaSqlExpression();
+            return "SELECT "
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                + "'ITS' AS GroupID, "
+                + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                + supAreaExpr + " AS SupAreaID, "
+                + supAreaExpr + " AS SupportAreaID, "
+                + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID, "
+                + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName "
+                + "FROM mst_itsupport it WITH (NOLOCK) "
+                + "LEFT JOIN ref_support_area sa WITH (NOLOCK) ON LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) = " + supAreaExpr + " "
+                + "LEFT JOIN ref_area_group ag WITH (NOLOCK) ON LTRIM(RTRIM(ISNULL(ag.AreaGroupID, ''))) = LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) "
+                + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                + areaFilter
+                + "ORDER BY ISNULL(it.Name, it.UserID)";
+        }
+
+        private static string BuildItSupportMasterUsersSqlMstOnly(string filterAreaGroupId = "")
+        {
+            string areaFilter = BuildItSupportSupAreaExistsFilter(filterAreaGroupId);
+            string supAreaExpr = GetItSupportSupAreaSqlExpression();
+            return "SELECT "
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) AS ITID, "
+                + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS UserID, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS FullName, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS Name, "
+                + "'ITS' AS GroupID, "
+                + "LTRIM(RTRIM(ISNULL(it.Status, ''))) AS Status, "
+                + supAreaExpr + " AS SupAreaID, "
+                + supAreaExpr + " AS SupportAreaID, "
+                + "'' AS AreaGroupID, "
+                + "'' AS AreaGroupName "
+                + "FROM mst_itsupport it WITH (NOLOCK) "
+                + "WHERE ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                + areaFilter
+                + "ORDER BY ISNULL(it.Name, it.UserID)";
+        }
+
+        private static HashSet<string> LoadSupAreaIdsForAreaGroup(string requiredAreaGroupId)
+        {
+            HashSet<string> ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string requiredGroup = NormalizeAreaGroupId(requiredAreaGroupId);
+            if (string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                return ids;
+            }
+
+            string safeGroup = requiredGroup.Replace("'", "''");
+            string[] queries =
+            {
+                "SELECT LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) AS SupAreaID "
+                    + "FROM ref_support_area sa WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) = '" + safeGroup + "' "
+                    + "AND LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) <> ''",
+                "SELECT LTRIM(RTRIM(ISNULL(SupAreaID, ''))) AS SupAreaID "
+                    + "FROM ref_support_area WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(AreaGroupID, ''))) = '" + safeGroup + "' "
+                    + "AND LTRIM(RTRIM(ISNULL(SupAreaID, ''))) <> ''"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable rows = ExecuteJobTrainingQuery(sql);
+                if (rows == null || rows.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                foreach (DataRow row in rows.Rows)
+                {
+                    string supAreaId = GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID").Trim();
+                    if (!string.IsNullOrWhiteSpace(supAreaId))
+                    {
+                        ids.Add(supAreaId);
+                    }
+                }
+
+                if (ids.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            if (ids.Count == 0)
+            {
+                DataTable spAreas = ExecuteJobTrainingQuery("sp_list_support_area ''");
+                if (spAreas != null && spAreas.Rows.Count > 0)
+                {
+                    foreach (DataRow row in spAreas.Rows)
+                    {
+                        string rowGroup = FirstNonEmptyStatic(
+                            GetRowValueInsensitive(row, "AreaGroupID", "GroupSupportAreaID", "GroupID"));
+                        if (!NormalizeAreaGroupId(rowGroup).Equals(requiredGroup, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        string supAreaId = GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID").Trim();
+                        if (!string.IsNullOrWhiteSpace(supAreaId))
+                        {
+                            ids.Add(supAreaId);
+                        }
+                    }
+                }
+            }
+
+            MergeKnownSupAreaIdsForAreaGroup(requiredGroup, ids);
+
+            if (ids.Count == 0)
+            {
+                Dictionary<string, string> supAreaToGroup = ItsSupportAssignData.LoadSupAreaToAreaGroupMap();
+                Dictionary<string, string> areaGroupNames = ItsSupportAssignData.LoadAreaGroupNameMap();
+                foreach (KeyValuePair<string, string> pair in supAreaToGroup)
+                {
+                    string mappedName;
+                    areaGroupNames.TryGetValue(pair.Value, out mappedName);
+                    if (ItsSupportAssignData.ResolveCanonicalAreaGroupId(pair.Value, mappedName)
+                        .Equals(requiredGroup, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ids.Add(pair.Key.Trim());
+                    }
+                }
+            }
+
+            return ids;
+        }
+
+        private static string GetRowValueInsensitive(DataRow row, params string[] columnNames)
+        {
+            if (row == null || row.Table == null || columnNames == null || columnNames.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            foreach (string columnName in columnNames)
+            {
+                if (string.IsNullOrWhiteSpace(columnName))
+                {
+                    continue;
+                }
+
+                foreach (DataColumn column in row.Table.Columns)
+                {
+                    if (!column.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    object value = row[column];
+                    return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static void EnrichItSupportUsersFromSupAreaMap(DataTable table)
+        {
+            if (table == null || table.Rows.Count == 0)
+            {
+                return;
+            }
+
+            EnsureItsAuthUserAreaColumns(table);
+            if (!table.Columns.Contains("AreaGroupName"))
+            {
+                table.Columns.Add("AreaGroupName", typeof(string));
+            }
+
+            Dictionary<string, string> supAreaToGroup = LoadSupAreaAreaGroupMap();
+            Dictionary<string, string> areaGroupNames = LoadAreaGroupNameMap();
+            foreach (DataRow row in table.Rows)
+            {
+                string areaGroupId = GetRowValueInsensitive(row, "AreaGroupID");
+                if (!string.IsNullOrWhiteSpace(areaGroupId))
+                {
+                    continue;
+                }
+
+                string supAreaId = FirstNonEmptyStatic(
+                    GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID")).Trim();
+                if (string.IsNullOrWhiteSpace(supAreaId)
+                    || supAreaId.Equals("[SELECT]", StringComparison.OrdinalIgnoreCase)
+                    || supAreaId.Equals("-", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string mappedGroup;
+                if (!supAreaToGroup.TryGetValue(supAreaId, out mappedGroup)
+                    || string.IsNullOrWhiteSpace(mappedGroup))
+                {
+                    continue;
+                }
+
+                row["AreaGroupID"] = mappedGroup.Trim();
+                string mappedName;
+                if (areaGroupNames.TryGetValue(mappedGroup.Trim(), out mappedName)
+                    && !string.IsNullOrWhiteSpace(mappedName))
+                {
+                    row["AreaGroupName"] = mappedName.Trim();
+                }
+            }
+        }
+
+        private static string ResolveItSupportRowAreaGroup(DataRow row)
+        {
+            if (row == null)
+            {
+                return string.Empty;
+            }
+
+            string areaGroupId = NormalizeAreaGroupId(GetRowValueInsensitive(row, "AreaGroupID"));
+            if (!string.IsNullOrWhiteSpace(areaGroupId))
+            {
+                return areaGroupId;
+            }
+
+            string areaGroupName = GetRowValueInsensitive(row, "AreaGroupName");
+            if (areaGroupName.IndexOf("WEST", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return AreaGroupWestValue;
+            }
+
+            if (areaGroupName.IndexOf("EAST", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return AreaGroupEastValue;
+            }
+
+            string supAreaId = FirstNonEmptyStatic(
+                GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID")).Trim();
+            if (string.IsNullOrWhiteSpace(supAreaId))
+            {
+                return string.Empty;
+            }
+
+            Dictionary<string, string> supAreaToGroup = LoadSupAreaAreaGroupMap();
+            string mappedGroup;
+            if (supAreaToGroup.TryGetValue(supAreaId, out mappedGroup))
+            {
+                return NormalizeAreaGroupId(mappedGroup);
+            }
+
+            return string.Empty;
+        }
+
+        private static bool ItSupportRowMatchesAreaGroupFilter(
+            DataRow row,
+            string requiredGroup,
+            HashSet<string> allowedSupAreaIds = null)
+        {
+            string requiredCanon = NormalizeAreaGroupId(requiredGroup);
+            if (string.IsNullOrWhiteSpace(requiredCanon))
+            {
+                return true;
+            }
+
+            if (row == null)
+            {
+                return false;
+            }
+
+            string rowGroup = ResolveItSupportRowAreaGroup(row);
+            if (requiredCanon.Equals(rowGroup, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (allowedSupAreaIds == null)
+            {
+                allowedSupAreaIds = LoadSupAreaIdsForAreaGroup(requiredCanon);
+            }
+
+            string supAreaId = FirstNonEmptyStatic(
+                GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID")).Trim();
+            if (supAreaId.Equals("[SELECT]", StringComparison.OrdinalIgnoreCase)
+                || supAreaId.Equals("-", StringComparison.OrdinalIgnoreCase))
+            {
+                supAreaId = string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(supAreaId)
+                && allowedSupAreaIds != null
+                && allowedSupAreaIds.Count > 0
+                && allowedSupAreaIds.Contains(supAreaId))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static DataTable QueryItSupportMasterUsersUnfiltered()
+        {
+            string[] queries =
+            {
+                BuildItSupportUsersByAreaGroupSql(string.Empty),
+                BuildItSupportMasterUsersSql(string.Empty),
+                BuildItSupportMasterUsersSqlMstOnly(string.Empty)
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteJobTrainingQuery(sql);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    EnrichItSupportUsersFromSupAreaMap(table);
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        private static DataTable FilterItSupportMasterUsersBySupArea(
+            DataTable allUsers,
+            string requiredGroup)
+        {
+            if (allUsers == null || allUsers.Rows.Count == 0)
+            {
+                return allUsers ?? new DataTable();
+            }
+
+            string requiredCanon = NormalizeAreaGroupId(requiredGroup);
+            if (string.IsNullOrWhiteSpace(requiredCanon))
+            {
+                return allUsers;
+            }
+
+            HashSet<string> allowedSupAreaIds = LoadSupAreaIdsForAreaGroup(requiredCanon);
+            DataTable filtered = allUsers.Clone();
+            EnsureItsAuthUserAreaColumns(filtered);
+            if (!filtered.Columns.Contains("AreaGroupName"))
+            {
+                filtered.Columns.Add("AreaGroupName", typeof(string));
+            }
+
+            foreach (DataRow row in allUsers.Rows)
+            {
+                if (ItSupportRowMatchesAreaGroupFilter(row, requiredCanon, allowedSupAreaIds))
+                {
+                    filtered.ImportRow(row);
+                }
+            }
+
+            return filtered;
+        }
+
+        private static DataTable LoadItsAuthUsersFromMaster(string filterAreaGroupId = "")
+        {
+            string requiredGroup = NormalizeAreaGroupId(filterAreaGroupId);
+            DataTable direct = QueryItSupportUsersByAreaGroup(requiredGroup);
+            if (direct != null && direct.Rows.Count > 0)
+            {
+                return direct;
+            }
+
+            DataTable allUsers = QueryItSupportUsersByAreaGroup(string.Empty);
+            if (allUsers == null || allUsers.Rows.Count == 0)
+            {
+                allUsers = QueryItSupportMasterUsersUnfiltered();
+            }
+
+            if (allUsers == null || allUsers.Rows.Count == 0)
+            {
+                return new DataTable();
+            }
+
+            return FilterItSupportMasterUsersBySupArea(allUsers, filterAreaGroupId);
+        }
+
         private static DataTable LoadItsAuthUsersAll()
         {
+            DataTable fromMaster = LoadItsAuthUsersFromMaster(string.Empty);
+            if (fromMaster != null && fromMaster.Rows.Count > 0)
+            {
+                return fromMaster;
+            }
+
             DataTable direct = ExecuteJobTrainingQuery(
                 "SELECT a.UserID, ISNULL(m.FullName, a.UserID) AS FullName, a.GroupID, a.Status, m.ITID "
                 + "FROM conf_auth_user a WITH (NOLOCK) "
@@ -3718,29 +4605,14 @@ namespace vtsadm
             if (direct != null && direct.Rows.Count > 0)
             {
                 EnsureItsAuthUserAreaColumns(direct);
-                foreach (DataRow row in direct.Rows)
-                {
-                    string userId = FirstNonEmptyStatic(GetValue(row, "UserID"), GetValue(row, "UsrID"));
-                    DataTable mst = ExecuteJobTrainingQuery(
-                        "SELECT TOP 1 "
-                        + "LTRIM(RTRIM(ISNULL(SupAreaID, ''))) AS SupAreaID, "
-                        + "LTRIM(RTRIM(ISNULL(SupportAreaID, ''))) AS SupportAreaID, "
-                        + "LTRIM(RTRIM(ISNULL(AreaGroupID, ''))) AS AreaGroupID "
-                        + "FROM conf_mst_user WITH (NOLOCK) "
-                        + "WHERE LTRIM(RTRIM(ISNULL(UserID, ''))) = '" + EscapeSqlLiteral(userId) + "'");
-                    if (mst != null && mst.Rows.Count > 0)
-                    {
-                        row["SupAreaID"] = GetValue(mst.Rows[0], "SupAreaID");
-                        row["SupportAreaID"] = GetValue(mst.Rows[0], "SupportAreaID");
-                        row["AreaGroupID"] = GetValue(mst.Rows[0], "AreaGroupID");
-                    }
-                }
+                EnrichItsAuthUsersFromMstItSupport(direct);
                 return direct;
             }
 
             DataTable customerItUsers = LoadItsAuthUsersFromCustomerItList();
             if (customerItUsers != null && customerItUsers.Rows.Count > 0)
             {
+                EnrichItsAuthUsersFromMstItSupport(customerItUsers);
                 return customerItUsers;
             }
 
@@ -3808,19 +4680,104 @@ namespace vtsadm
                 filtered.Rows.Add(imported);
             }
 
+            EnrichItsAuthUsersFromMstItSupport(filtered);
             return filtered;
+        }
+
+        private static DataTable TryLoadItSupportUsersForAreaGroup(string requiredGroup)
+        {
+            if (string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                return new DataTable();
+            }
+
+            DataTable joinedUsers = QueryItSupportUsersFullJoin();
+            if (joinedUsers != null && joinedUsers.Rows.Count > 0)
+            {
+                DataTable joinedFiltered = FilterItSupportUsersByJoinedAreaGroup(joinedUsers, requiredGroup);
+                if (joinedFiltered != null && joinedFiltered.Rows.Count > 0)
+                {
+                    return joinedFiltered;
+                }
+            }
+
+            HashSet<string> supAreaIds = LoadSupAreaIdsForAreaGroup(requiredGroup);
+            DataTable bySupArea = QueryItSupportUsersBySupAreaIds(supAreaIds);
+            if (bySupArea != null && bySupArea.Rows.Count > 0)
+            {
+                return bySupArea;
+            }
+
+            return new DataTable();
         }
 
         private static DataTable LoadItsAuthUsers(string filterAreaGroupId = "", string periode = "")
         {
-            DataTable allUsers = LoadItsAuthUsersAll();
             string requiredGroup = NormalizeAreaGroupId(filterAreaGroupId);
-            if (string.IsNullOrWhiteSpace(requiredGroup))
+
+            DataTable joinedUsers = QueryItSupportUsersFullJoin();
+            if (joinedUsers != null && joinedUsers.Rows.Count > 0)
             {
-                return allUsers;
+                if (string.IsNullOrWhiteSpace(requiredGroup))
+                {
+                    return joinedUsers;
+                }
+
+                DataTable areaUsers = TryLoadItSupportUsersForAreaGroup(requiredGroup);
+                if (areaUsers != null && areaUsers.Rows.Count > 0)
+                {
+                    return areaUsers;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                DataTable areaUsers = TryLoadItSupportUsersForAreaGroup(requiredGroup);
+                if (areaUsers != null && areaUsers.Rows.Count > 0)
+                {
+                    return areaUsers;
+                }
             }
 
-            return FilterItsAuthUsersByAreaGroup(allUsers, requiredGroup, periode);
+            DataTable fromMaster = QueryItSupportUsersByAreaGroup(requiredGroup);
+            if (fromMaster != null && fromMaster.Rows.Count > 0)
+            {
+                return fromMaster;
+            }
+
+            if (!string.IsNullOrWhiteSpace(requiredGroup))
+            {
+                DataTable allMst = joinedUsers;
+                if (allMst == null || allMst.Rows.Count == 0)
+                {
+                    allMst = QueryItSupportUsersByAreaGroup(string.Empty);
+                }
+
+                if (allMst != null && allMst.Rows.Count > 0)
+                {
+                    DataTable filtered = FilterItSupportUsersByJoinedAreaGroup(allMst, requiredGroup);
+                    if (filtered == null || filtered.Rows.Count == 0)
+                    {
+                        filtered = FilterItSupportMasterUsersBySupArea(allMst, requiredGroup);
+                    }
+
+                    if (filtered != null && filtered.Rows.Count > 0)
+                    {
+                        return filtered;
+                    }
+                }
+
+                DataTable authUsers = LoadItsAuthUsersAll();
+                EnrichItsAuthUsersFromMstItSupport(authUsers);
+                return FilterItsSupportAuthUsersByMstAreaGroup(authUsers, requiredGroup);
+            }
+
+            DataTable semua = joinedUsers;
+            if (semua == null || semua.Rows.Count == 0)
+            {
+                semua = LoadItsAuthUsersAll();
+            }
+
+            return semua ?? new DataTable();
         }
 
         private sealed class JobTrainingTrainerSchedule
@@ -3899,7 +4856,7 @@ namespace vtsadm
             return headerRows;
         }
 
-        private static void EnrichJobTrainingWithCustomerContext(DataTable jobs)
+        protected static void EnrichJobTrainingWithCustomerContext(DataTable jobs)
         {
             if (jobs == null || jobs.Rows.Count == 0)
             {
@@ -3914,6 +4871,11 @@ namespace vtsadm
             if (!jobs.Columns.Contains("AreaGroupID"))
             {
                 jobs.Columns.Add("AreaGroupID", typeof(string));
+            }
+
+            if (!jobs.Columns.Contains("MarketingName"))
+            {
+                jobs.Columns.Add("MarketingName", typeof(string));
             }
 
             Dictionary<string, CustomerScheduleContext> customers = LoadCustomerScheduleContextMap();
@@ -3939,6 +4901,12 @@ namespace vtsadm
                     {
                         row["SupAreaID"] = context.SupAreaID;
                     }
+
+                    if (string.IsNullOrWhiteSpace(GetValue(row, "MarketingName"))
+                        && !string.IsNullOrWhiteSpace(context.MarketingName))
+                    {
+                        row["MarketingName"] = context.MarketingName;
+                    }
                 }
 
                 string supAreaId = FirstNonEmptyStatic(
@@ -3956,25 +4924,55 @@ namespace vtsadm
             }
         }
 
-        private sealed class CustomerScheduleContext
+        protected sealed class CustomerScheduleContext
         {
             public string SupAreaID { get; set; }
+            public string Address { get; set; }
+            public string BranchAddress { get; set; }
+            public string MarketingName { get; set; }
         }
 
-        private static Dictionary<string, CustomerScheduleContext> LoadCustomerScheduleContextMap()
+        protected static Dictionary<string, CustomerScheduleContext> LoadCustomerScheduleContextMap()
         {
             Dictionary<string, CustomerScheduleContext> map =
                 new Dictionary<string, CustomerScheduleContext>(StringComparer.OrdinalIgnoreCase);
 
             DataTable customers = ExecuteJobTrainingQuery(
-                "SELECT CustID, "
-                + "LTRIM(RTRIM(ISNULL(SupAreaID, ''))) AS SupAreaID "
-                + "FROM mst_customer WITH (NOLOCK)");
+                "SELECT c.CustID, "
+                + "LTRIM(RTRIM(ISNULL(c.SupAreaID, ''))) AS SupAreaID, "
+                + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
+                + "LTRIM(RTRIM(ISNULL(c.BranchAddress, ''))) AS BranchAddress, "
+                + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                + "FROM mst_customer c WITH (NOLOCK) "
+                + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
+                + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, '')))");
+            if (customers == null || customers.Rows.Count == 0)
+            {
+                customers = ExecuteJobTrainingQuery(
+                    "SELECT c.CustID, "
+                    + "LTRIM(RTRIM(ISNULL(c.SupAreaID, ''))) AS SupAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
+                    + "LTRIM(RTRIM(ISNULL(c.BranchAddress, ''))) AS BranchAddress, "
+                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                    + "FROM mst_customer c WITH (NOLOCK) "
+                    + "LEFT JOIN mst_marketing m WITH (NOLOCK) ON m.MarketingID = c.MarketingID");
+            }
             if (customers == null || customers.Rows.Count == 0)
             {
                 customers = ExecuteJobTrainingQuery(
                     "SELECT CustID, "
-                    + "LTRIM(RTRIM(ISNULL(SupportAreaID, ''))) AS SupAreaID "
+                    + "LTRIM(RTRIM(ISNULL(SupAreaID, ''))) AS SupAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(Address, ''))) AS Address, "
+                    + "LTRIM(RTRIM(ISNULL(BranchAddress, ''))) AS BranchAddress "
+                    + "FROM mst_customer WITH (NOLOCK)");
+            }
+            if (customers == null || customers.Rows.Count == 0)
+            {
+                customers = ExecuteJobTrainingQuery(
+                    "SELECT CustID, "
+                    + "LTRIM(RTRIM(ISNULL(SupportAreaID, ''))) AS SupAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(Address, ''))) AS Address, "
+                    + "LTRIM(RTRIM(ISNULL(BranchAddress, ''))) AS BranchAddress "
                     + "FROM mst_customer WITH (NOLOCK)");
             }
 
@@ -4000,7 +4998,10 @@ namespace vtsadm
 
                 map[custId] = new CustomerScheduleContext
                 {
-                    SupAreaID = supAreaId
+                    SupAreaID = supAreaId,
+                    Address = FirstNonEmptyStatic(GetValue(row, "Address"), GetValue(row, "CustAddress")).Trim(),
+                    BranchAddress = GetValue(row, "BranchAddress").Trim(),
+                    MarketingName = GetValue(row, "MarketingName").Trim()
                 };
             }
 
@@ -4010,22 +5011,86 @@ namespace vtsadm
         private static Dictionary<string, string> LoadSupAreaAreaGroupMap()
         {
             Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            DataTable areas = ExecuteJobTrainingQuery("sp_list_support_area ''");
-            if (areas == null || areas.Rows.Count == 0)
+            string[] queries =
             {
-                return map;
-            }
+                "SELECT "
+                    + "LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) AS SupAreaID, "
+                    + "LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) AS AreaGroupID "
+                    + "FROM ref_support_area sa WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(sa.SupAreaID, ''))) <> '' "
+                    + "AND LTRIM(RTRIM(ISNULL(sa.AreaGroupID, ''))) <> ''",
+                "sp_list_support_area ''"
+            };
 
-            foreach (DataRow row in areas.Rows)
+            foreach (string sql in queries)
             {
-                string supAreaId = FirstNonEmptyStatic(GetValue(row, "SupAreaID"), GetValue(row, "SupportAreaID")).Trim();
-                string areaGroupId = FirstNonEmptyStatic(GetValue(row, "AreaGroupID"), GetValue(row, "GroupID")).Trim();
-                if (string.IsNullOrWhiteSpace(supAreaId) || string.IsNullOrWhiteSpace(areaGroupId) || map.ContainsKey(supAreaId))
+                DataTable areas = ExecuteJobTrainingQuery(sql);
+                if (areas == null || areas.Rows.Count == 0)
                 {
                     continue;
                 }
 
-                map[supAreaId] = areaGroupId;
+                foreach (DataRow row in areas.Rows)
+                {
+                    string supAreaId = FirstNonEmptyStatic(
+                        GetRowValueInsensitive(row, "SupAreaID", "SupportAreaID")).Trim();
+                    string areaGroupId = FirstNonEmptyStatic(
+                        GetRowValueInsensitive(row, "AreaGroupID", "GroupSupportAreaID", "GroupID")).Trim();
+                    if (string.IsNullOrWhiteSpace(supAreaId)
+                        || string.IsNullOrWhiteSpace(areaGroupId)
+                        || map.ContainsKey(supAreaId))
+                    {
+                        continue;
+                    }
+
+                    map[supAreaId] = areaGroupId;
+                }
+
+                if (map.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            if (map.Count == 0)
+            {
+                Dictionary<string, string> fallback = ItsSupportAssignData.LoadSupAreaToAreaGroupMap();
+                foreach (KeyValuePair<string, string> pair in fallback)
+                {
+                    if (!map.ContainsKey(pair.Key))
+                    {
+                        map[pair.Key] = pair.Value;
+                    }
+                }
+            }
+
+            return map;
+        }
+
+        private static Dictionary<string, string> LoadAreaGroupNameMap()
+        {
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            DataTable groups = ExecuteJobTrainingQuery(
+                "SELECT "
+                + "LTRIM(RTRIM(ISNULL(ag.AreaGroupID, ''))) AS AreaGroupID, "
+                + "LTRIM(RTRIM(ISNULL(ag.AreaGroupName, ''))) AS AreaGroupName "
+                + "FROM ref_area_group ag WITH (NOLOCK) "
+                + "WHERE LTRIM(RTRIM(ISNULL(ag.AreaGroupID, ''))) <> ''");
+            if (groups == null || groups.Rows.Count == 0)
+            {
+                return map;
+            }
+
+            foreach (DataRow row in groups.Rows)
+            {
+                string areaGroupId = GetRowValueInsensitive(row, "AreaGroupID");
+                string areaGroupName = GetRowValueInsensitive(row, "AreaGroupName");
+                if (string.IsNullOrWhiteSpace(areaGroupId) || map.ContainsKey(areaGroupId))
+                {
+                    continue;
+                }
+
+                map[areaGroupId] = areaGroupName;
             }
 
             return map;
@@ -4050,7 +5115,16 @@ namespace vtsadm
                 GetValue(row, "SupAreaID"),
                 GetValue(row, "AreaID"),
                 GetValue(row, "SupportAreaID")).Trim();
-            string rowAreaGroup = GetValue(row, "AreaGroupID").Trim();
+            string rowAreaGroup = NormalizeAreaGroupId(GetValue(row, "AreaGroupID"));
+            if (string.IsNullOrWhiteSpace(rowAreaGroup) && !string.IsNullOrWhiteSpace(rowSupArea))
+            {
+                Dictionary<string, string> supAreaToGroup = LoadSupAreaAreaGroupMap();
+                string derivedGroup;
+                if (supAreaToGroup.TryGetValue(rowSupArea, out derivedGroup))
+                {
+                    rowAreaGroup = NormalizeAreaGroupId(derivedGroup);
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(requiredGroup)
                 && !rowAreaGroup.Equals(requiredGroup, StringComparison.OrdinalIgnoreCase))
@@ -4206,14 +5280,14 @@ namespace vtsadm
             return value;
         }
 
-        private static void MergeJobTrainingTrainerColumns(DataTable headerRows, DataTable viewRows)
+        protected static void MergeJobTrainingTrainerColumns(DataTable headerRows, DataTable viewRows)
         {
             if (headerRows == null || viewRows == null || viewRows.Rows.Count == 0)
             {
                 return;
             }
 
-            string[] enrichColumns = { "Trainers", "Trainer", "ITStaff", "ITName" };
+            string[] enrichColumns = { "Trainers", "Trainer", "ITStaff", "ITName", "MarketingName", "Marketing" };
             foreach (string columnName in enrichColumns)
             {
                 if (!headerRows.Columns.Contains(columnName) && viewRows.Columns.Contains(columnName))
@@ -4268,7 +5342,80 @@ namespace vtsadm
             }
         }
 
-        private static DataTable ExecuteJobTrainingQuery(string sql)
+        private static bool IsStoredProcedureCall(string sql)
+        {
+            string trimmed = (sql ?? string.Empty).Trim();
+            if (trimmed.Length == 0)
+            {
+                return false;
+            }
+
+            string firstToken = trimmed.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0];
+            return firstToken.StartsWith("sp_", StringComparison.OrdinalIgnoreCase)
+                || firstToken.StartsWith("exec", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveJobTrainingSqlConnectionString(string rawConnectionString)
+        {
+            if (string.IsNullOrWhiteSpace(rawConnectionString))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                string[] parts = rawConnectionString.Split(';');
+                StringBuilder sanitized = new StringBuilder();
+                foreach (string item in parts)
+                {
+                    if (string.IsNullOrWhiteSpace(item))
+                    {
+                        continue;
+                    }
+
+                    if (item.TrimStart().StartsWith("Provider=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    sanitized.Append(item).Append(';');
+                }
+
+                return new SqlConnectionStringBuilder(sanitized.ToString()).ConnectionString;
+            }
+            catch
+            {
+                return rawConnectionString.Trim();
+            }
+        }
+
+        private static DataTable ExecuteAdHocSqlQuery(string sql, string connString)
+        {
+            DataTable table = new DataTable();
+            string sqlConn = ResolveJobTrainingSqlConnectionString(connString);
+            if (string.IsNullOrWhiteSpace(sqlConn))
+            {
+                return table;
+            }
+
+            using (SqlConnection conn = new SqlConnection(sqlConn))
+            {
+                conn.Open();
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandTimeout = 120;
+                    using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+                    {
+                        adapter.Fill(table);
+                    }
+                }
+            }
+
+            return table;
+        }
+
+        public static DataTable ExecuteJobTrainingQuery(string sql)
         {
             HttpContext context = HttpContext.Current;
             if (context == null || context.Session == null || context.Session["ClsTypeDBConnStringSQL"] == null)
@@ -4276,7 +5423,11 @@ namespace vtsadm
                 return new DataTable();
             }
 
-            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            return ExecuteJobTrainingQuery(sql, Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]));
+        }
+
+        public static DataTable ExecuteJobTrainingQuery(string sql, string connString)
+        {
             if (string.IsNullOrWhiteSpace(connString) || string.IsNullOrWhiteSpace(sql))
             {
                 return new DataTable();
@@ -4284,6 +5435,11 @@ namespace vtsadm
 
             try
             {
+                if (!IsStoredProcedureCall(sql))
+                {
+                    return ExecuteAdHocSqlQuery(sql, connString);
+                }
+
                 string openError = string.Empty;
                 Recordset rec = new Recordset();
                 rec.Open(sql, connString.Trim(), ref openError);
@@ -5989,18 +7145,27 @@ namespace vtsadm
                 return RegionalAllValue;
             }
 
+            if (normalized.StartsWith("ARG", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalized;
+            }
+
             string upper = normalized.ToUpperInvariant();
-            if (upper.Equals(AreaGroupEastValue, StringComparison.OrdinalIgnoreCase) || upper.Contains("EAST"))
+            if (upper.Equals(AreaGroupEastValue, StringComparison.OrdinalIgnoreCase)
+                || upper.Equals("EAST", StringComparison.OrdinalIgnoreCase)
+                || upper.Equals("EAST AREA", StringComparison.OrdinalIgnoreCase))
             {
                 return AreaGroupEastValue;
             }
 
-            if (upper.Equals(AreaGroupWestValue, StringComparison.OrdinalIgnoreCase) || upper.Contains("WEST"))
+            if (upper.Equals(AreaGroupWestValue, StringComparison.OrdinalIgnoreCase)
+                || upper.Equals("WEST", StringComparison.OrdinalIgnoreCase)
+                || upper.Equals("WEST AREA", StringComparison.OrdinalIgnoreCase))
             {
                 return AreaGroupWestValue;
             }
 
-            return RegionalAllValue;
+            return normalized;
         }
 
         private static string NormalizeAreaGroupId(string value)
@@ -6169,6 +7334,16 @@ namespace vtsadm
             return BuildJobOrderInformationResponse(activeTab, searchKeyword, pageIndex, pageSize);
         }
 
+        protected virtual JobOrderInformationResponse ResolveJobOrderInformationForRequest(
+            string activeTab,
+            string searchKeyword,
+            int pageIndex,
+            int pageSize,
+            string branchFilter)
+        {
+            return BuildJobOrderInformationResponse(activeTab, searchKeyword, pageIndex, pageSize);
+        }
+
         private static DataTable BindJobOrderInstallation()
         {
             return ExecuteJobOrderInformationStoredProcedure("sp_dashboard_assign_job_new_installation");
@@ -6205,7 +7380,7 @@ namespace vtsadm
             return dt ?? new DataTable();
         }
 
-        private static DataTable FilterJobOrderInformation(DataTable source, string keyword)
+        protected static DataTable FilterJobOrderInformation(DataTable source, string keyword)
         {
             if (source == null || source.Rows.Count == 0)
             {
@@ -6242,7 +7417,7 @@ namespace vtsadm
             return tab == "installation" || tab == "new_install" || tab == "new installation";
         }
 
-        private static string GetValue(DataRow row, string columnName)
+        protected static string GetValue(DataRow row, string columnName)
         {
             if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName) || row[columnName] == DBNull.Value)
             {
@@ -6252,153 +7427,7 @@ namespace vtsadm
             return Convert.ToString(row[columnName]).Trim();
         }
 
-        protected static JobOrderInformationResponse BuildJobTrainingOrderInformationResponse(string activeTab, string searchKeyword, int pageIndex, int pageSize)
-        {
-            JobOrderInformationResponse response = new JobOrderInformationResponse
-            {
-                Rows = new List<JobOrderInformationItem>(),
-                TotalRecords = 0,
-                PageIndex = pageIndex < 1 ? 1 : pageIndex,
-                PageSize = pageSize < 1 ? 5 : Math.Min(pageSize, 100),
-                TotalPages = 1,
-                ErrorMessage = string.Empty
-            };
-
-            try
-            {
-                bool isVisitTab = !IsInstallationTab(activeTab);
-                DataTable raw = LoadJobTrainingHeaderTable(string.Empty);
-                DataTable mapped = new DataTable();
-                mapped.Columns.Add("JobID");
-                mapped.Columns.Add("CustID");
-                mapped.Columns.Add("CustomerName");
-                mapped.Columns.Add("BranchName");
-                mapped.Columns.Add("DeviceTypeID");
-                mapped.Columns.Add("DeviceTypeDesc");
-                mapped.Columns.Add("TotalAssign", typeof(int));
-                mapped.Columns.Add("TotalAssignGps", typeof(int));
-                mapped.Columns.Add("TotalAssignAcs", typeof(int));
-                mapped.Columns.Add("LastAssignDate");
-                mapped.Columns.Add("RemainingUnit", typeof(int));
-                mapped.Columns.Add("TotalUnit", typeof(int));
-                mapped.Columns.Add("RemainingUnitGps", typeof(int));
-                mapped.Columns.Add("RemainingUnitAcs", typeof(int));
-                mapped.Columns.Add("TotalUnitGps", typeof(int));
-                mapped.Columns.Add("TotalUnitAcs", typeof(int));
-                mapped.Columns.Add("TotalUnitGpsDone", typeof(int));
-                mapped.Columns.Add("TotalUnitAcsDone", typeof(int));
-
-                if (raw != null)
-                {
-                    foreach (DataRow row in raw.Rows)
-                    {
-                        string categoryName = FirstNonEmptyStatic(
-                            GetValue(row, "TrainingCategoryName"),
-                            GetValue(row, "TrainCategoryName"),
-                            GetValue(row, "CategoryName"),
-                            GetValue(row, "Category"));
-                        string categoryId = FirstNonEmptyStatic(
-                            GetValue(row, "TrainCategoryID"),
-                            GetValue(row, "TrainingCategoryID"),
-                            GetValue(row, "CategoryID"));
-
-                        if (!IsTrainingOrVisitCategory(categoryName, categoryId))
-                        {
-                            continue;
-                        }
-
-                        bool isVisit = IsVisitCategory(categoryName, categoryId);
-                        if (isVisitTab != isVisit)
-                        {
-                            continue;
-                        }
-
-                        string rawStatus = FirstNonEmptyStatic(
-                            GetValue(row, "Status"),
-                            GetValue(row, "ValueStatus"),
-                            GetValue(row, "StatusCode"));
-                        string statusNorm = NormalizeJobTrainingStatusCode(rawStatus);
-                        string schDate = FirstNonEmptyStatic(
-                            GetValue(row, "sSchDate"),
-                            GetValue(row, "SchDate"),
-                            GetValue(row, "ScheduleDate"));
-
-                        int totalUnit = 1;
-                        int remaining = (statusNorm == "close") ? 0 : 1;
-                        int assigned = (statusNorm == "open") ? 0 : 1;
-
-                        DataRow target = mapped.NewRow();
-                        target["JobID"] = FirstNonEmptyStatic(GetValue(row, "TrainingID"), GetValue(row, "JobID"));
-                        target["CustID"] = GetValue(row, "CustID");
-                        target["CustomerName"] = FirstNonEmptyStatic(
-                            GetValue(row, "CustomerName"),
-                            GetValue(row, "CustName"),
-                            GetValue(row, "FullName"));
-                        target["BranchName"] = GetValue(row, "BranchName");
-                        target["DeviceTypeID"] = categoryId;
-                        target["DeviceTypeDesc"] = isVisit ? "Visit" : "Training";
-                        target["TotalAssign"] = assigned;
-                        target["TotalAssignGps"] = assigned;
-                        target["TotalAssignAcs"] = 0;
-                        target["LastAssignDate"] = schDate;
-                        target["RemainingUnit"] = remaining;
-                        target["TotalUnit"] = totalUnit;
-                        target["RemainingUnitGps"] = remaining;
-                        target["RemainingUnitAcs"] = 0;
-                        target["TotalUnitGps"] = totalUnit;
-                        target["TotalUnitAcs"] = 0;
-                        target["TotalUnitGpsDone"] = totalUnit - remaining;
-                        target["TotalUnitAcsDone"] = 0;
-                        mapped.Rows.Add(target);
-                    }
-                }
-
-                DataTable filtered = FilterJobOrderInformation(mapped, searchKeyword);
-                response.TotalRecords = filtered.Rows.Count;
-                response.TotalPages = Math.Max(1, (int)Math.Ceiling((double)response.TotalRecords / response.PageSize));
-                if (response.PageIndex > response.TotalPages)
-                {
-                    response.PageIndex = response.TotalPages;
-                }
-
-                int start = (response.PageIndex - 1) * response.PageSize;
-                int end = Math.Min(start + response.PageSize, filtered.Rows.Count);
-                for (int i = start; i < end; i++)
-                {
-                    DataRow row = filtered.Rows[i];
-                    string customerId = GetValue(row, "CustID");
-                    response.Rows.Add(new JobOrderInformationItem
-                    {
-                        JobID = GetValue(row, "JobID"),
-                        Customer = customerId,
-                        CustomerName = ResolveCustomerName(row, customerId),
-                        BranchName = GetValue(row, "BranchName"),
-                        DeviceTypeID = GetValue(row, "DeviceTypeID"),
-                        DeviceTypeDesc = GetValue(row, "DeviceTypeDesc"),
-                        TotalAssign = ParseIntFromColumns(row, "TotalAssign"),
-                        TotalAssignGps = ParseIntFromColumns(row, "TotalAssignGps"),
-                        TotalAssignAcs = ParseIntFromColumns(row, "TotalAssignAcs"),
-                        LastAssignDate = FormatDateForDisplay(GetValue(row, "LastAssignDate")),
-                        RemainingUnit = ParseIntFromColumns(row, "RemainingUnit"),
-                        TotalUnit = ParseIntFromColumns(row, "TotalUnit"),
-                        RemainingUnitGps = ParseIntFromColumns(row, "RemainingUnitGps"),
-                        RemainingUnitAcs = ParseIntFromColumns(row, "RemainingUnitAcs"),
-                        TotalUnitGps = ParseIntFromColumns(row, "TotalUnitGps"),
-                        TotalUnitAcs = ParseIntFromColumns(row, "TotalUnitAcs"),
-                        TotalUnitGpsDone = ParseIntFromColumns(row, "TotalUnitGpsDone"),
-                        TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                response.ErrorMessage = "Terjadi kesalahan saat memuat Job Order Training/Visit: " + (ex.Message ?? string.Empty);
-            }
-
-            return response;
-        }
-
-        private static string NormalizeJobTrainingStatusCode(string status)
+        protected static string NormalizeJobTrainingStatusCode(string status)
         {
             string normalized = (status ?? string.Empty).Replace("&nbsp;", " ").Trim().ToUpperInvariant();
             if (string.IsNullOrWhiteSpace(normalized)
@@ -6510,7 +7539,7 @@ namespace vtsadm
             return false;
         }
 
-        private static string FirstNonEmptyStatic(params string[] values)
+        protected static string FirstNonEmptyStatic(params string[] values)
         {
             if (values == null)
             {
@@ -6545,7 +7574,7 @@ namespace vtsadm
             return 0;
         }
 
-        private static int ParseIntFromColumns(DataRow row, params string[] columns)
+        protected static int ParseIntFromColumns(DataRow row, params string[] columns)
         {
             if (row == null || columns == null || columns.Length == 0)
             {
@@ -6563,7 +7592,7 @@ namespace vtsadm
             return 0;
         }
 
-        private static string FormatDateForDisplay(string source)
+        protected static string FormatDateForDisplay(string source)
         {
             DateTime parsedDate;
             if (DateTime.TryParse(source, out parsedDate))
@@ -6584,7 +7613,7 @@ namespace vtsadm
             return normalized;
         }
 
-        private static string NormalizeDeviceGroupId(string value)
+        protected static string NormalizeDeviceGroupId(string value)
         {
             string normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
             if (normalized == "ACS")
@@ -7447,6 +8476,7 @@ namespace vtsadm
                             GetValue(row, "CustomerName"),
                             GetValue(row, "CustID"),
                             "-"),
+                        AreaID = FirstNonEmpty(GetValue(row, "AreaID"), GetValue(row, "SupAreaID")),
                         AreaName = FirstNonEmpty(
                             GetValue(row, "AreaName"),
                             GetValue(row, "Area"),
@@ -7787,7 +8817,7 @@ namespace vtsadm
             return dt ?? new DataTable();
         }
 
-        private static string ResolveCustomerName(DataRow row, string customerId)
+        protected static string ResolveCustomerName(DataRow row, string customerId)
         {
             string[] candidates = new[]
             {
@@ -9535,133 +10565,6 @@ namespace vtsadm
             }
 
             return response;
-        }
-    }
-
-    public class dashboard_assign_job_itsupport : dashboard_assign_job
-    {
-        protected override string FixedActiveTab
-        {
-            get { return "itsupport"; }
-        }
-
-        protected override bool UseJobTrainingDataSource
-        {
-            get { return true; }
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static JobOrderInformationResponse LoadJobOrderInformation(string activeTab, string searchKeyword, int pageIndex, int pageSize)
-        {
-            // Assign to trx_job_assign_detail uses the same remaining JO pool as Teknisi.
-            return dashboard_assign_job.LoadJobOrderInformation(activeTab, searchKeyword, pageIndex, pageSize);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static AreaOptionResponse LoadAreaOptions(string supAreaId)
-        {
-            return dashboard_assign_job.LoadAreaOptions(supAreaId);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static SaveAssignResponse SaveAssignJob(string assignId, string jobId, string custId, string technicianId, string schDate, int qtyAssign, string deviceGroupId, string areaId, string targetStatus, string insDeviceTypeId)
-        {
-            return dashboard_assign_job.SaveAssignJob(assignId, jobId, custId, technicianId, schDate, qtyAssign, deviceGroupId, areaId, targetStatus, insDeviceTypeId);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static SaveAssignResponse UpdateTechnicianStatus(string technicianId, string schDate, string targetStatus)
-        {
-            return dashboard_assign_job.UpdateTechnicianStatus(technicianId, schDate, targetStatus);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static TechnicianStockResponse LoadTechnicianStock(string technicianId)
-        {
-            return dashboard_assign_job.LoadTechnicianStock(technicianId);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static TechnicianGpsDetailResponse LoadTechnicianGpsDetail(string technicianId, string deviceTypeId, string technicianName, string deviceTypeDesc)
-        {
-            return dashboard_assign_job.LoadTechnicianGpsDetail(technicianId, deviceTypeId, technicianName, deviceTypeDesc);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static ScheduleReportResponse LoadScheduleReport(string technicianId, string schDate, string technicianName)
-        {
-            return BuildItsScheduleDayReport(technicianId, schDate, technicianName);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public static TrainingLookupResponse LoadTrainingLookups()
-        {
-            return BuildTrainingLookupsResponse();
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public static SaveAssignResponse SaveJobTrainingAssign(
-            string custId,
-            string reqDate,
-            string billableId,
-            string schDate,
-            string remark,
-            string categoryId,
-            string itUserId,
-            string itUserName)
-        {
-            return ExecuteSaveJobTrainingAssign(custId, reqDate, billableId, schDate, remark, categoryId, itUserId, itUserName);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq)
-        {
-            return dashboard_assign_job.DeleteScheduleAssign(assignId, seq);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static RefreshAvailabilityResponse RefreshAvailability(string technicianId, string schDate)
-        {
-            return dashboard_assign_job.RefreshAvailability(technicianId, schDate);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static DayTotalJoModalResponse GetDayTotalJoList(string scheduleDate)
-        {
-            return dashboard_assign_job.GetDayTotalJoList(scheduleDate);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static ClosedJobModalResponse GetClosedJobList(string technicianId, string technicianName, string closeType, string periode)
-        {
-            return dashboard_assign_job.GetClosedJobList(technicianId, technicianName, closeType, periode);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static PerfTechnicianListResponse LoadPerfTechnicianList(string periode)
-        {
-            return dashboard_assign_job.LoadPerfTechnicianList(periode);
-        }
-
-        [WebMethod(EnableSession = true)]
-        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public new static PerfChartDataResponse LoadPerfChartData(string periode, string technicianId)
-        {
-            return dashboard_assign_job.LoadPerfChartData(periode, technicianId);
         }
     }
 }
