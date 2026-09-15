@@ -196,6 +196,11 @@ namespace vtsadm
             EnsureTls12();
             context.Response.ContentType = "text/plain; charset=utf-8";
 
+            if (TryHandleSimulateRequest(context))
+            {
+                return;
+            }
+
             if (TryHandleSetupRequest(context))
             {
                 return;
@@ -1554,6 +1559,84 @@ namespace vtsadm
             return client.DownloadString(url);
         }
 
+        private static bool TryHandleSimulateRequest(HttpContext context)
+        {
+            string simulate = (context.Request["simulate"] ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(simulate))
+            {
+                return false;
+            }
+
+            string setupKey = (context.Request["setup"] ?? string.Empty).Trim();
+            string expectedKey = FirstNonEmpty(GetAppSetting("ItsSupportTelegramSetupKey"), "itssetup");
+            if (!setupKey.Equals(expectedKey, StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.Write("Invalid setup key.");
+                return true;
+            }
+
+            string connString = ResolveConnString(context);
+            StringBuilder report = new StringBuilder();
+            report.AppendLine("IT Support Telegram simulate (local test, no Telegram send)");
+            report.AppendLine("DB connection: "
+                + (string.IsNullOrWhiteSpace(connString) ? "NOT CONFIGURED" : "OK"));
+            report.AppendLine();
+
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                context.Response.StatusCode = 200;
+                context.Response.Write(report.ToString().TrimEnd());
+                return true;
+            }
+
+            if (simulate.Equals("open", StringComparison.OrdinalIgnoreCase))
+            {
+                List<OpenAssignSummary> rows = LoadOpenAssignSummaries(connString);
+                report.AppendLine("/open bot summaries: " + rows.Count.ToString());
+                if (rows.Count == 0)
+                {
+                    report.AppendLine("Bot would reply: Tidak ada penugasan IT Support yang belum selesai.");
+                }
+                else
+                {
+                    int index = 1;
+                    foreach (OpenAssignSummary row in rows)
+                    {
+                        report.AppendLine(index.ToString() + ". "
+                            + row.JobId + " | "
+                            + FormatDateShort(row.SchDate) + " | "
+                            + row.CustomerName + " | "
+                            + row.TechnicianName);
+                        index++;
+                    }
+                }
+            }
+            else if (simulate.Equals("detail", StringComparison.OrdinalIgnoreCase))
+            {
+                string jobId = FirstNonEmpty(context.Request["job"], "TRO0006127").Trim();
+                AssignDetail detail = LoadAssignDetailByJobId(connString, jobId, 1);
+                report.AppendLine("/detail " + jobId + " bot load: "
+                    + (detail == null ? "NOT FOUND" : "OK"));
+                if (detail != null)
+                {
+                    report.AppendLine();
+                    report.AppendLine(BuildDetailMessage(detail));
+                }
+            }
+            else
+            {
+                report.AppendLine("Unknown simulate command.");
+                report.AppendLine("Usage:");
+                report.AppendLine("  ?setup=itssetup&simulate=open");
+                report.AppendLine("  ?setup=itssetup&simulate=detail&job=TRO0006127");
+            }
+
+            context.Response.StatusCode = 200;
+            context.Response.Write(report.ToString().TrimEnd());
+            return true;
+        }
+
         private static bool TryHandleSetupRequest(HttpContext context)
         {
             string setupKey = (context.Request["setup"] ?? string.Empty).Trim();
@@ -1594,11 +1677,33 @@ namespace vtsadm
                 int openCount = openRows != null ? openRows.Rows.Count : 0;
                 report.AppendLine("/open sample rows: " + openCount.ToString());
 
+                List<OpenAssignSummary> botOpenRows = LoadOpenAssignSummaries(connString);
+                report.AppendLine("/open bot summaries: " + botOpenRows.Count.ToString());
+
                 DataTable detailKey = ItsSupportAssignData.FindAssignDetailKeyByJobId("TRO0006127", 0, connString);
                 int detailCount = detailKey != null ? detailKey.Rows.Count : 0;
                 report.AppendLine("/detail lookup TRO0006127: " + detailCount.ToString());
+
+                AssignDetail detail = LoadAssignDetailByJobId(connString, "TRO0006127", 1);
+                report.AppendLine("/detail bot load TRO0006127: "
+                    + (detail == null ? "NOT FOUND" : "OK"));
             }
             report.AppendLine();
+            report.AppendLine("Local bot test (no Telegram):");
+            report.AppendLine("  " + BuildWebhookUrl(context) + "?setup=itssetup&simulate=open");
+            report.AppendLine("  " + BuildWebhookUrl(context) + "?setup=itssetup&simulate=detail&job=TRO0006127");
+            report.AppendLine();
+            report.AppendLine("NOTE: Telegram app sends commands to the registered webhook URL above, not localhost.");
+            report.AppendLine();
+
+            string skipRegister = (context.Request["register"] ?? string.Empty).Trim();
+            if (skipRegister == "0" || skipRegister.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                report.AppendLine("Skipped setWebhook (register=0).");
+                context.Response.StatusCode = 200;
+                context.Response.Write(report.ToString().TrimEnd());
+                return true;
+            }
 
             try
             {
