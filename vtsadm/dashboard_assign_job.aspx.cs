@@ -490,7 +490,7 @@ namespace vtsadm
                 EnsureUserProfileLoaded();
                 EnforceFixedActiveTab();
                 hfIsTechnician.Value = IsCurrentUserTechnician() ? "1" : "0";
-                if (HandleDetailExportRequest())
+                if (HandleDetailExportRequest() || HandleClosedJobExportRequest())
                 {
                     return;
                 }
@@ -882,6 +882,14 @@ namespace vtsadm
                     GetPayloadString(args, "technicianId"),
                     GetPayloadString(args, "technicianName"),
                     GetPayloadString(args, "closeType"),
+                    GetPayloadString(args, "periode"));
+            }
+
+            if (method.Equals("GetAssignJobList", StringComparison.OrdinalIgnoreCase))
+            {
+                return GetAssignJobList(
+                    GetPayloadString(args, "technicianId"),
+                    GetPayloadString(args, "technicianName"),
                     GetPayloadString(args, "periode"));
             }
 
@@ -5424,6 +5432,165 @@ namespace vtsadm
             return table;
         }
 
+        private static DataTable ExecuteParameterizedSqlQuery(string sql, string connString, params SqlParameter[] parameters)
+        {
+            DataTable table = new DataTable();
+            string sqlConn = ResolveJobTrainingSqlConnectionString(connString);
+            if (string.IsNullOrWhiteSpace(sqlConn) || string.IsNullOrWhiteSpace(sql))
+            {
+                return table;
+            }
+
+            using (SqlConnection conn = new SqlConnection(sqlConn))
+            {
+                conn.Open();
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandTimeout = 120;
+                    if (parameters != null && parameters.Length > 0)
+                    {
+                        cmd.Parameters.AddRange(parameters);
+                    }
+
+                    using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+                    {
+                        adapter.Fill(table);
+                    }
+                }
+            }
+
+            return table;
+        }
+
+        private static bool IsAllAssignTechnicianFilter(string technicianId)
+        {
+            string value = (technicianId ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(value)
+                || value.Equals("ALL", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("*", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static DataTable QueryAssignJobList(
+            string connString,
+            string periode,
+            string technicianId,
+            string supAreaId,
+            string areaGroupId)
+        {
+            string normalizedPeriode = NormalizeClosedJobPeriode(periode);
+            DateTime startDate;
+            if (!DateTime.TryParseExact(normalizedPeriode + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out startDate))
+            {
+                startDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            }
+
+            string technicianFilter = IsAllAssignTechnicianFilter(technicianId)
+                ? string.Empty
+                : TrimToLength((technicianId ?? string.Empty).Trim(), 20);
+            string supAreaFilter = (supAreaId ?? string.Empty).Trim();
+            if (supAreaFilter.Equals(RegionalAllValue, StringComparison.OrdinalIgnoreCase))
+            {
+                supAreaFilter = string.Empty;
+            }
+
+            string areaGroupFilter = NormalizeAreaGroupId(areaGroupId);
+
+            const string sql = @"
+SELECT
+    a.AssignID,
+    a.Seq,
+    a.JobID,
+    a.TvdID,
+    CASE
+        WHEN a.IsMaint = 0 THEN 'New Installation'
+        WHEN a.IsMaint = 1 THEN 'Maintenance'
+        ELSE 'Unknown'
+    END AS JobType,
+    a.MaintTypeID,
+    a.TechnicianID,
+    ISNULL(t.Name, a.TechnicianID) AS TechnicianName,
+    a.DeviceGroupID,
+    a.DeviceTypeID,
+    CONVERT(VARCHAR(10), a.SchDate, 23) AS SchDate,
+    CONVERT(VARCHAR(10), b.InstallDate, 23) AS InstallDate,
+    ISNULL(c.CustID, d.CustID) AS CustID,
+    e.FullName,
+    f.DeviceTypeDesc,
+    b.PoliceNo,
+    b.NoSN,
+    b.GSMNo,
+    b.DtmUpd AS MIS_Date,
+    a.Status,
+    g.AreaName,
+    COUNT(*) OVER (PARTITION BY a.JobID) AS TotalUnit
+FROM trx_job_assign_detail a WITH (NOLOCK)
+INNER JOIN mst_technician t WITH (NOLOCK)
+    ON t.TechnicianID = a.TechnicianID
+INNER JOIN ref_support_area sa WITH (NOLOCK)
+    ON sa.SupAreaID = t.SupAreaID
+OUTER APPLY
+(
+    SELECT TOP 1
+        inst.InstallDate,
+        inst.CustID,
+        inst.PoliceNo,
+        inst.NoSN,
+        inst.GSMNo,
+        inst.DtmUpd
+    FROM trx_installation_device inst WITH (NOLOCK)
+    WHERE inst.TvdID = a.TvdID
+    ORDER BY inst.InstallDate DESC
+) b
+LEFT JOIN trx_job_header c WITH (NOLOCK)
+    ON c.JobID = a.JobID
+LEFT JOIN trx_job_maint_header d WITH (NOLOCK)
+    ON d.JobID = a.JobID
+LEFT JOIN mst_customer e WITH (NOLOCK)
+    ON e.CustID = ISNULL(c.CustID, d.CustID)
+LEFT JOIN ref_device_type f WITH (NOLOCK)
+    ON f.DeviceTypeID = a.DeviceTypeID
+LEFT JOIN ref_area g WITH (NOLOCK)
+    ON g.AreaID = ISNULL(c.AreaID, d.AreaID)
+WHERE
+    a.SchDate >= @StartDate
+    AND a.SchDate < @EndDateNext
+    AND ISNULL(a.Status, '') NOT IN ('DE', 'DR')
+    AND t.Status IN ('MT', 'RG')
+    AND ISNULL(t.SupAreaID, '') <> ''
+    AND t.TechnicianID NOT IN
+    (
+        'TEC0000054','TEC0000028','TEC0000060','TEC0000059','TEC0000032',
+        'TEC0000038','TEC0000053','TEC0000037','TEC0000177','TEC0000218',
+        'TEC0000219','TEC0000001','TEC0000002','TEC0000048','TEC0000030',
+        'TEC0000031','TEC0000014','TEC0000166'
+    )
+    AND (@TechnicianID = '' OR a.TechnicianID = @TechnicianID)
+    AND (@SupAreaID = '' OR t.SupAreaID = @SupAreaID)
+    AND (@AreaGroupID = '' OR sa.AreaGroupID = @AreaGroupID)
+    AND EXISTS
+    (
+        SELECT 1
+        FROM conf_mst_user u WITH (NOLOCK)
+        WHERE u.TechnicianID = t.TechnicianID
+          AND u.Status <> 'DE'
+    )
+ORDER BY
+    t.Name ASC,
+    a.SchDate ASC,
+    a.JobID DESC,
+    a.Seq ASC;";
+
+            return ExecuteParameterizedSqlQuery(
+                sql,
+                connString,
+                new SqlParameter("@StartDate", SqlDbType.Date) { Value = startDate.Date },
+                new SqlParameter("@EndDateNext", SqlDbType.Date) { Value = startDate.AddMonths(1).Date },
+                new SqlParameter("@TechnicianID", SqlDbType.VarChar, 20) { Value = technicianFilter },
+                new SqlParameter("@SupAreaID", SqlDbType.VarChar, 10) { Value = supAreaFilter },
+                new SqlParameter("@AreaGroupID", SqlDbType.VarChar, 10) { Value = areaGroupFilter });
+        }
+
         public static DataTable ExecuteJobTrainingQuery(string sql)
         {
             HttpContext context = HttpContext.Current;
@@ -5981,6 +6148,7 @@ namespace vtsadm
                 litScheduleRows.Text = "<tr>"
                     + "<td class=\"col-no sticky-no cell-no\">-</td>"
                     + "<td class=\"col-name sticky-name cell-name\">-</td>"
+                    + (UseJobTrainingDataSource ? string.Empty : "<td class=\"col-total-assign cell-total\">0</td>")
                     + "<td class=\"col-total cell-total\">0</td>"
                     + "<td class=\"col-total-maint cell-total\">0</td>"
                     + (UseJobTrainingDataSource ? string.Empty : "<td class=\"col-stock cell-stock\">-</td>")
@@ -5999,6 +6167,12 @@ namespace vtsadm
                 {
                     Group = g,
                     TechnicianName = string.IsNullOrWhiteSpace(g.Key.Name) ? "-" : g.Key.Name,
+                    TotalJobAssign = SumAvailabilityClosedCount(
+                        g,
+                        "TotalJob",
+                        "TotalJO",
+                        "TotalAssign",
+                        "TotalJOAssign"),
                     TotalClosedJobNew = AggregateAvailabilityClosedCount(
                         g,
                         "TotalJobCloseNew",
@@ -6008,14 +6182,23 @@ namespace vtsadm
                         "CloseJONew",
                         "JOCloseNew",
                         "TotalJobClose"),
-                    TotalClosedJobMaint = AggregateAvailabilityClosedCount(
-                        g,
-                        "TotalJobCloseMaint",
-                        "TotalJOCloseMaint",
-                        "TotalClosedJOMaint",
-                        "TotalCloseMaint",
-                        "CloseJOMaint",
-                        "JOCloseMaint")
+                    TotalClosedJobMaint = UseJobTrainingDataSource
+                        ? AggregateAvailabilityClosedCount(
+                            g,
+                            "TotalJobCloseMaint",
+                            "TotalJOCloseMaint",
+                            "TotalClosedJOMaint",
+                            "TotalCloseMaint",
+                            "CloseJOMaint",
+                            "JOCloseMaint")
+                        : SumAvailabilityClosedCount(
+                            g,
+                            "TotalJobCloseMaint",
+                            "TotalJOCloseMaint",
+                            "TotalClosedJOMaint",
+                            "TotalCloseMaint",
+                            "CloseJOMaint",
+                            "JOCloseMaint")
                 })
                 .OrderByDescending(x => x.TotalClosedJobNew + x.TotalClosedJobMaint)
                 .ThenBy(x => x.TechnicianName)
@@ -6027,6 +6210,8 @@ namespace vtsadm
             StringBuilder rows = new StringBuilder();
             int[] capacityAvailable = new int[totalDays + 1];
             int[] capacityCloseUnit = new int[totalDays + 1];
+            int[] capacityAssignUnit = new int[totalDays + 1];
+            int monthAssignTotal = 0;
             int[] capacityJO1 = new int[totalDays + 1];
             int[] capacityJO2 = new int[totalDays + 1];
             int[] capacityJO3 = new int[totalDays + 1];
@@ -6050,8 +6235,18 @@ namespace vtsadm
                 string technicianNameAttr = HttpUtility.HtmlAttributeEncode(technicianName);
                 rows.Append("<td class=\"col-name sticky-name cell-name\">" + technicianNameHtml + "</td>");
 
+                int totalJobAssign = techEntry.TotalJobAssign;
+                monthAssignTotal += Math.Max(0, totalJobAssign);
                 int totalClosedJobNew = techEntry.TotalClosedJobNew;
                 int totalClosedJobMaint = techEntry.TotalClosedJobMaint;
+
+                if (!UseJobTrainingDataSource)
+                {
+                    rows.Append("<td class=\"col-total-assign cell-total\">");
+                    rows.Append("<button type=\"button\" class=\"assign-totaljob-link tech-assignjob-trigger\" data-tech-id=\"" + HttpUtility.HtmlAttributeEncode(techGroup.Key.TechnicianID) + "\" data-tech-name=\"" + technicianNameAttr + "\" data-total-job=\"" + totalJobAssign.ToString() + "\" data-periode=\"" + HttpUtility.HtmlAttributeEncode(periode) + "\" title=\"Lihat detail Total JO Assign\">");
+                    rows.Append(HttpUtility.HtmlEncode(totalJobAssign.ToString()));
+                    rows.Append("</button></td>");
+                }
 
                 rows.Append("<td class=\"col-total cell-total\">");
                 rows.Append("<button type=\"button\" class=\"assign-totaljob-link tech-totaljob-trigger\" data-tech-id=\"" + HttpUtility.HtmlAttributeEncode(techGroup.Key.TechnicianID) + "\" data-tech-name=\"" + technicianNameAttr + "\" data-total-job=\"" + totalClosedJobNew.ToString() + "\" data-closed-training=\"" + totalClosedJobNew.ToString() + "\" data-closed-visit=\"" + totalClosedJobMaint.ToString() + "\" data-close-type=\"new_install\" data-periode=\"" + HttpUtility.HtmlAttributeEncode(periode) + "\" title=\"" + (UseJobTrainingDataSource ? "Lihat detail Total Closed JO Training" : "Lihat detail Total Closed JO New") + "\">");
@@ -6102,6 +6297,7 @@ namespace vtsadm
                         totalJobCloseUnit = ParseFirstAvailableInt(dayRow, "TotalJobCloseUnit", "TotalJOCloseUnit", "TotalClosedUnit", "TotalCloseUnit");
                     }
                     capacityCloseUnit[day] += Math.Max(0, totalJobCloseUnit);
+                    capacityAssignUnit[day] += Math.Max(0, totalJob);
 
                     // Prioritas display:
                     // 1. Jika TotalJob > 0 maka tampilkan angka job.
@@ -6244,7 +6440,19 @@ namespace vtsadm
 
             litScheduleHeader.Text = BuildScheduleDayHeader(totalDays, periodDate, dayNameMap, weekendMap, capacityTotalJO);
             litScheduleRows.Text = rows.ToString();
-            litCapacityRows.Text = BuildCapacityRows(totalDays, capacityCloseUnit, capacityAvailable, capacityJO1, capacityJO2, capacityJO3, capacityOff, capacityCuti, capacityIzin);
+            litCapacityRows.Text = BuildCapacityRows(
+                totalDays,
+                capacityCloseUnit,
+                capacityAssignUnit,
+                monthAssignTotal,
+                capacityAvailable,
+                capacityJO1,
+                capacityJO2,
+                capacityJO3,
+                capacityOff,
+                capacityCuti,
+                capacityIzin,
+                periode);
         }
 
         private string BuildScheduleDayHeader(
@@ -6311,18 +6519,27 @@ namespace vtsadm
         private string BuildCapacityRows(
             int totalDays,
             int[] closeUnit,
+            int[] assignUnit,
+            int monthAssignTotal,
             int[] available,
             int[] jo1,
             int[] jo2,
             int[] jo3,
             int[] off,
             int[] cuti,
-            int[] izin)
+            int[] izin,
+            string periode)
         {
             StringBuilder cap = new StringBuilder();
             cap.Append("<tr>");
             cap.Append("<td class=\"col-no sticky-no cap-header-cell\"></td>");
             cap.Append("<td class=\"col-name sticky-name cap-header-cell\">Kapasitas per Hari</td>");
+            if (!UseJobTrainingDataSource)
+            {
+                cap.Append("<td class=\"col-total-assign cap-header-cell\" title=\"Lihat detail Total JO Assign semua teknisi bulan ini\">");
+                cap.Append(BuildAllAssignJobTrigger(monthAssignTotal.ToString(), monthAssignTotal, periode));
+                cap.Append("</td>");
+            }
             cap.Append("<td class=\"col-total cap-header-cell\"></td>");
             cap.Append("<td class=\"col-total-maint cap-header-cell\"></td>");
             if (!UseJobTrainingDataSource)
@@ -6335,6 +6552,27 @@ namespace vtsadm
                 cap.Append("<td class=\"cap-header-cell\" style=\"font-size:11px; font-weight:700;\">" + closeUnitValue.ToString() + "</td>");
             }
             cap.Append("</tr>");
+
+            if (!UseJobTrainingDataSource)
+            {
+                cap.Append("<tr>");
+                cap.Append("<td class=\"col-no sticky-no cap-row-label cap-assign\"></td>");
+                cap.Append("<td class=\"col-name sticky-name cap-row-label cap-assign\" title=\"Lihat detail Total JO Assign semua teknisi bulan ini\">");
+                cap.Append(BuildAllAssignJobTrigger("Total JO Assign", monthAssignTotal, periode));
+                cap.Append("</td>");
+                cap.Append("<td class=\"col-total-assign cap-scroll-gap cap-assign\" title=\"Lihat detail Total JO Assign semua teknisi bulan ini\">");
+                cap.Append(BuildAllAssignJobTrigger(monthAssignTotal.ToString(), monthAssignTotal, periode));
+                cap.Append("</td>");
+                cap.Append("<td class=\"col-total cap-scroll-gap cap-assign\"></td>");
+                cap.Append("<td class=\"col-total-maint cap-scroll-gap cap-assign\"></td>");
+                cap.Append("<td class=\"col-stock cap-scroll-gap cap-assign\"></td>");
+                for (int day = 1; day <= totalDays; day++)
+                {
+                    int val = assignUnit[day];
+                    cap.Append("<td class=\"cap-assign\" style=\"font-size:11px; font-weight:600;\">" + (val > 0 ? val.ToString() : "") + "</td>");
+                }
+                cap.Append("</tr>");
+            }
 
             AppendCapacityRow(cap, "Available", "cap-avail", totalDays, available);
             AppendCapacityRow(cap, "JO 1 Unit", "cap-jo1", totalDays, jo1);
@@ -6349,9 +6587,23 @@ namespace vtsadm
 
         private void AppendCapacityRow(StringBuilder builder, string label, string cssClass, int totalDays, int[] values)
         {
+            AppendCapacityRow(builder, label, cssClass, totalDays, values, null);
+        }
+
+        private void AppendCapacityRow(StringBuilder builder, string label, string cssClass, int totalDays, int[] values, int? assignColumnTotal)
+        {
             builder.Append("<tr>");
             builder.Append("<td class=\"col-no sticky-no cap-row-label " + cssClass + "\"></td>");
             builder.Append("<td class=\"col-name sticky-name cap-row-label " + cssClass + "\">" + label + "</td>");
+            if (!UseJobTrainingDataSource)
+            {
+                builder.Append("<td class=\"col-total-assign cap-scroll-gap " + cssClass + "\">");
+                if (assignColumnTotal.HasValue)
+                {
+                    builder.Append(assignColumnTotal.Value.ToString());
+                }
+                builder.Append("</td>");
+            }
             builder.Append("<td class=\"col-total cap-scroll-gap " + cssClass + "\"></td>");
             builder.Append("<td class=\"col-total-maint cap-scroll-gap " + cssClass + "\"></td>");
             if (!UseJobTrainingDataSource)
@@ -6364,6 +6616,19 @@ namespace vtsadm
                 builder.Append("<td class=\"" + cssClass + "\" style=\"font-size:11px; font-weight:600;\">" + (val > 0 ? val.ToString() : "") + "</td>");
             }
             builder.Append("</tr>");
+        }
+
+        private static string BuildAllAssignJobTrigger(string label, int totalJob, string periode)
+        {
+            return "<button type=\"button\" class=\"assign-totaljob-link tech-assignjob-trigger\""
+                + " data-tech-id=\"ALL\""
+                + " data-tech-name=\"Semua Teknisi\""
+                + " data-close-type=\"assign\""
+                + " data-total-job=\"" + Math.Max(0, totalJob).ToString() + "\""
+                + " data-periode=\"" + HttpUtility.HtmlAttributeEncode(periode ?? string.Empty) + "\""
+                + " title=\"Lihat detail Total JO Assign bulan ini\">"
+                + HttpUtility.HtmlEncode(label ?? string.Empty)
+                + "</button>";
         }
 
         private static string GetAvailabilityTechnicianId(DataRow row)
@@ -6407,6 +6672,22 @@ namespace vtsadm
 
             // Per-day closed counts: sum across the month.
             return values.Sum();
+        }
+
+        // Always sum daily values. Do not treat identical per-day 1s as a
+        // duplicated month total — that made Total Closed JO Maint (1+1+1...)
+        // show 1 while maint_close_list listed every unit row.
+        private int SumAvailabilityClosedCount(IEnumerable<DataRow> rows, params string[] columnCandidates)
+        {
+            if (rows == null)
+            {
+                return 0;
+            }
+
+            return rows
+                .Select(r => ParseFirstAvailableInt(r, columnCandidates))
+                .Where(v => v > 0)
+                .Sum();
         }
 
         private int ParseFirstAvailableInt(DataRow row, params string[] columnCandidates)
@@ -6720,6 +7001,213 @@ namespace vtsadm
                 HttpContext.Current.ApplicationInstance.CompleteRequest();
             }
             return true;
+        }
+
+        private bool HandleClosedJobExportRequest()
+        {
+            string action = (Request.QueryString["action"] ?? string.Empty).Trim();
+            if (!action.Equals("export_closed", StringComparison.OrdinalIgnoreCase)
+                && !action.Equals("export_assign", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            try
+            {
+                ExportClosedJobModalToExcel(
+                    Request.QueryString["technicianId"],
+                    Request.QueryString["technicianName"],
+                    Request.QueryString["closeType"],
+                    Request.QueryString["periode"]);
+            }
+            catch (Exception ex)
+            {
+                Response.Clear();
+                Response.Buffer = true;
+                Response.ContentType = "text/plain";
+                Response.Write("Export gagal: " + ex.Message);
+                Response.Flush();
+                HttpContext.Current.ApplicationInstance.CompleteRequest();
+            }
+
+            return true;
+        }
+
+        private void ExportClosedJobModalToExcel(string technicianId, string technicianName, string closeType, string periode)
+        {
+            string rawCloseType = (closeType ?? string.Empty).Trim().ToLowerInvariant();
+            bool isAssignList = rawCloseType == "assign" || rawCloseType == "jo_assign";
+            string normalizedPeriode = NormalizeClosedJobPeriode(periode);
+            string safeTechnicianId = TrimToLength((technicianId ?? string.Empty).Trim(), 20);
+            bool isAllTechnicians = IsAllAssignTechnicianFilter(safeTechnicianId);
+            string displayTechnicianName = isAllTechnicians
+                ? FirstNonEmpty((technicianName ?? string.Empty).Trim(), "Semua Teknisi")
+                : FirstNonEmpty((technicianName ?? string.Empty).Trim(), safeTechnicianId, "-");
+
+            if (UseJobTrainingDataSource && isAssignList)
+            {
+                throw new InvalidOperationException("Detail JO Assign hanya tersedia di halaman Teknisi.");
+            }
+
+            string connString = Convert.ToString(Session["ClsTypeDBConnStringSQL"]);
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                throw new InvalidOperationException("Koneksi database tidak tersedia.");
+            }
+
+            DataTable source;
+            string title;
+            string filePrefix;
+            if (isAssignList)
+            {
+                string resolvedSupAreaId;
+                string resolvedAreaGroupId;
+                ResolveRegionalFiltersFromSession(
+                    HttpContext.Current,
+                    string.Empty,
+                    string.Empty,
+                    out resolvedSupAreaId,
+                    out resolvedAreaGroupId);
+                source = QueryAssignJobList(
+                    connString.Trim(),
+                    normalizedPeriode,
+                    isAllTechnicians ? string.Empty : safeTechnicianId,
+                    resolvedSupAreaId,
+                    resolvedAreaGroupId);
+                title = "Daftar JO Assign - " + displayTechnicianName;
+                filePrefix = "total_jo_assign";
+            }
+            else if (UseJobTrainingDataSource)
+            {
+                string normalizedCloseType = NormalizeClosedJobType(closeType);
+                source = BuildJobTrainingClosedJobSource(
+                    safeTechnicianId,
+                    displayTechnicianName,
+                    "all",
+                    normalizedPeriode);
+                title = (normalizedCloseType == "maintenance"
+                    ? "Daftar Pekerjaan Diselesaikan Visit - "
+                    : "Daftar Pekerjaan Diselesaikan Training - ") + displayTechnicianName;
+                filePrefix = normalizedCloseType == "maintenance"
+                    ? "total_closed_jo_visit"
+                    : "total_closed_jo_training";
+            }
+            else
+            {
+                string normalizedCloseType = NormalizeClosedJobType(closeType);
+                if (string.IsNullOrWhiteSpace(safeTechnicianId) || isAllTechnicians)
+                {
+                    throw new InvalidOperationException("TechnicianID tidak valid.");
+                }
+
+                source = LoadClosedJobListSource(connString.Trim(), normalizedPeriode, safeTechnicianId, normalizedCloseType);
+                title = (normalizedCloseType == "maintenance"
+                    ? "Daftar Pekerjaan Diselesaikan Maintenance - "
+                    : "Daftar Pekerjaan Diselesaikan New Installation - ") + displayTechnicianName;
+                filePrefix = normalizedCloseType == "maintenance"
+                    ? "total_closed_jo_maint"
+                    : "total_closed_jo_new";
+            }
+
+            List<ClosedJobUnitItem> rows = MapClosedJobUnitRows(source, displayTechnicianName);
+            string fileName = filePrefix + "_" + normalizedPeriode + "_" + SanitizeExportFileName(isAllTechnicians ? "all" : safeTechnicianId) + ".xls";
+            string html = BuildClosedJobExportHtml(rows, title, normalizedPeriode);
+
+            Response.Clear();
+            Response.Buffer = true;
+            Response.ContentType = "application/vnd.ms-excel";
+            Response.AddHeader("Content-Disposition", "attachment;filename=" + fileName);
+            Response.ContentEncoding = Encoding.UTF8;
+            Response.Charset = "utf-8";
+            Response.Write(html);
+            Response.Flush();
+            HttpContext.Current.ApplicationInstance.CompleteRequest();
+        }
+
+        private static DataTable LoadClosedJobListSource(string connString, string periode, string technicianId, string closeType)
+        {
+            string storedProcedure = NormalizeClosedJobType(closeType) == "maintenance"
+                ? "sp_dashboard_assign_job_maint_close_list"
+                : "sp_dashboard_assign_job_new_close_list";
+            Recordset rec = new Recordset();
+            rec.Open(
+                storedProcedure + " '" + EscapeSqlLiteral(periode) + "','" + EscapeSqlLiteral(technicianId) + "'",
+                connString);
+            return rec.DataRecord() ?? new DataTable();
+        }
+
+        private static string SanitizeExportFileName(string value)
+        {
+            string source = string.IsNullOrWhiteSpace(value) ? "all" : value.Trim();
+            foreach (char invalidChar in Path.GetInvalidFileNameChars())
+            {
+                source = source.Replace(invalidChar, '_');
+            }
+
+            return source.Replace(' ', '_');
+        }
+
+        private static string BuildClosedJobExportHtml(List<ClosedJobUnitItem> rows, string title, string periode)
+        {
+            StringBuilder html = new StringBuilder();
+            html.Append("<html><head><meta charset='utf-8' /></head><body>");
+            html.Append("<h3>" + HttpUtility.HtmlEncode(title) + "</h3>");
+            html.Append("<div>Periode: " + HttpUtility.HtmlEncode(periode) + "</div>");
+            html.Append("<br/>");
+            html.Append("<table border='1' cellspacing='0' cellpadding='4'>");
+            html.Append("<thead><tr>");
+            html.Append("<th>No</th>");
+            html.Append("<th>Customer</th>");
+            html.Append("<th>Job Order</th>");
+            html.Append("<th>Job Type</th>");
+            html.Append("<th>DeviceGroup</th>");
+            html.Append("<th>Device Type</th>");
+            html.Append("<th>Area</th>");
+            html.Append("<th>Nomor Polisi</th>");
+            html.Append("<th>No SN</th>");
+            html.Append("<th>No GSM</th>");
+            html.Append("<th>Schedule Date</th>");
+            html.Append("<th>Tanggal Instalasi</th>");
+            html.Append("<th>Tanggal MIS</th>");
+            html.Append("<th>Dikerjakan Oleh</th>");
+            html.Append("<th>Status</th>");
+            html.Append("</tr></thead><tbody>");
+
+            if (rows != null)
+            {
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    ClosedJobUnitItem unit = rows[i];
+                    html.Append("<tr>");
+                    html.Append("<td>" + (i + 1).ToString() + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.FullName, unit.CustID, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.JobID, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.JobType, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.DeviceGroupID, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.DeviceTypeDesc, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.Area, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.PoliceNo, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.NoSN, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.GSMNo, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FormatDateForDisplay(unit.SchDate)) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FormatDateForDisplay(unit.InstallDate)) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FormatDateForDisplay(unit.MISDate)) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FirstNonEmpty(unit.TechnicianName, unit.TechnicianID, "-")) + "</td>");
+                    html.Append("<td>" + HttpUtility.HtmlEncode(FormatClosedJobStatusText(unit.Status)) + "</td>");
+                    html.Append("</tr>");
+                }
+            }
+
+            html.Append("</tbody></table>");
+            html.Append("</body></html>");
+            return html.ToString();
+        }
+
+        private static string FormatClosedJobStatusText(string statusCode)
+        {
+            return FirstNonEmpty(statusCode, "-").Equals("CL", StringComparison.OrdinalIgnoreCase)
+                ? "Selesai"
+                : "Belum Selesai";
         }
 
         private void ExportDetailModalToExcel(string status, string detailJobType, string detailMetric)
@@ -8972,6 +9460,79 @@ namespace vtsadm
 
         [WebMethod(EnableSession = true)]
         [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+        public static ClosedJobModalResponse GetAssignJobList(string technicianId, string technicianName, string periode)
+        {
+            if (IsJobTrainingAssignRequestContext())
+            {
+                return ShowClosedJobModal(
+                    technicianName,
+                    0,
+                    BuildClosedJobEmptyStateHtml("Detail JO Assign hanya tersedia di halaman Teknisi."),
+                    false,
+                    "Detail JO Assign hanya tersedia di halaman Teknisi.");
+            }
+
+            string safeTechnicianId = TrimToLength((technicianId ?? string.Empty).Trim(), 20);
+            bool isAllTechnicians = IsAllAssignTechnicianFilter(safeTechnicianId);
+            string displayTechnicianName = isAllTechnicians
+                ? FirstNonEmpty((technicianName ?? string.Empty).Trim(), "Semua Teknisi")
+                : (technicianName ?? string.Empty).Trim();
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return ShowClosedJobModal(
+                    displayTechnicianName,
+                    0,
+                    BuildClosedJobEmptyStateHtml("Session tidak ditemukan."),
+                    false,
+                    "Session tidak ditemukan.");
+            }
+
+            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                return ShowClosedJobModal(
+                    displayTechnicianName,
+                    0,
+                    BuildClosedJobEmptyStateHtml("Koneksi database tidak tersedia."),
+                    false,
+                    "Koneksi database tidak tersedia.");
+            }
+
+            try
+            {
+                string normalizedPeriode = NormalizeClosedJobPeriode(periode);
+                string resolvedSupAreaId;
+                string resolvedAreaGroupId;
+                ResolveRegionalFiltersFromSession(
+                    context,
+                    string.Empty,
+                    string.Empty,
+                    out resolvedSupAreaId,
+                    out resolvedAreaGroupId);
+
+                DataTable source = QueryAssignJobList(
+                    connString.Trim(),
+                    normalizedPeriode,
+                    isAllTechnicians ? string.Empty : safeTechnicianId,
+                    resolvedSupAreaId,
+                    resolvedAreaGroupId);
+                return BindClosedJobModal(displayTechnicianName, source, "Belum ada JO assign");
+            }
+            catch (Exception ex)
+            {
+                return ShowClosedJobModal(
+                    displayTechnicianName,
+                    0,
+                    BuildClosedJobEmptyStateHtml("Gagal memuat daftar JO assign."),
+                    false,
+                    "Gagal memuat daftar JO assign: " + ex.Message);
+            }
+        }
+
+        [WebMethod(EnableSession = true)]
+        [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
         public static ClosedJobModalResponse GetClosedJobList(string technicianId, string technicianName, string closeType, string periode)
         {
             string invalidIdMessage = IsJobTrainingAssignRequestContext()
@@ -9566,48 +10127,54 @@ namespace vtsadm
             return filtered;
         }
 
-        private static ClosedJobModalResponse BindClosedJobModal(string technicianName, DataTable source)
+        private static List<ClosedJobUnitItem> MapClosedJobUnitRows(DataTable source, string technicianName)
         {
-            List<ClosedJobUnitItem> rows = new List<ClosedJobUnitItem>();
-            if (source != null && source.Rows.Count > 0)
+            if (source == null || source.Rows.Count == 0)
             {
-                rows = source.AsEnumerable()
-                    .Select(row => new ClosedJobUnitItem
-                    {
-                        AssignID = FirstNonEmpty(GetValue(row, "AssignID"), GetValue(row, "AssignId")),
-                        Seq = ParseIntValue(GetValue(row, "Seq")),
-                        JobID = GetValue(row, "JobID"),
-                        TvdID = GetValue(row, "TvdID"),
-                        JobType = FirstNonEmpty(
-                            GetValue(row, "JobType"),
-                            GetValue(row, "Job_Type"),
-                            GetValue(row, "MaintTypeID"),
-                            "-"),
-                        MaintTypeID = GetValue(row, "MaintTypeID"),
-                        TechnicianID = GetValue(row, "TechnicianID"),
-                        DeviceGroupID = FirstNonEmpty(GetValue(row, "DeviceGroupID"), "-"),
-                        DeviceTypeID = GetValue(row, "DeviceTypeID"),
-                        DeviceTypeDesc = FirstNonEmpty(GetValue(row, "DeviceTypeDesc"), "-"),
-                        SchDate = GetValue(row, "SchDate"),
-                        InstallDate = GetValue(row, "InstallDate"),
-                        MISDate = FirstNonEmpty(GetValue(row, "MIS_Date"), GetValue(row, "MISDate")),
-                        CustID = GetValue(row, "CustID"),
-                        FullName = FirstNonEmpty(GetValue(row, "FullName"), GetValue(row, "CustomerName"), GetValue(row, "CustID"), "-"),
-                        Area = FirstNonEmpty(GetValue(row, "AreaName"), GetValue(row, "Area"), "-"),
-                        PoliceNo = FirstNonEmpty(GetValue(row, "PoliceNo"), "-"),
-                        NoSN = FirstNonEmpty(GetValue(row, "NoSN"), "-"),
-                        GSMNo = FirstNonEmpty(GetValue(row, "GSMNo"), "-"),
-                        Status = GetValue(row, "Status"),
-                        TechnicianName = FirstNonEmpty(
-                            GetValue(row, "TechnicianName"),
-                            GetValue(row, "Name"),
-                            technicianName,
-                            GetValue(row, "TechnicianID"),
-                            "-"),
-                        TotalUnit = ParseIntValue(GetValue(row, "TotalUnit"))
-                    })
-                    .ToList();
+                return new List<ClosedJobUnitItem>();
             }
+
+            return source.AsEnumerable()
+                .Select(row => new ClosedJobUnitItem
+                {
+                    AssignID = FirstNonEmpty(GetValue(row, "AssignID"), GetValue(row, "AssignId")),
+                    Seq = ParseIntValue(GetValue(row, "Seq")),
+                    JobID = GetValue(row, "JobID"),
+                    TvdID = GetValue(row, "TvdID"),
+                    JobType = FirstNonEmpty(
+                        GetValue(row, "JobType"),
+                        GetValue(row, "Job_Type"),
+                        GetValue(row, "MaintTypeID"),
+                        "-"),
+                    MaintTypeID = GetValue(row, "MaintTypeID"),
+                    TechnicianID = GetValue(row, "TechnicianID"),
+                    DeviceGroupID = FirstNonEmpty(GetValue(row, "DeviceGroupID"), "-"),
+                    DeviceTypeID = GetValue(row, "DeviceTypeID"),
+                    DeviceTypeDesc = FirstNonEmpty(GetValue(row, "DeviceTypeDesc"), "-"),
+                    SchDate = GetValue(row, "SchDate"),
+                    InstallDate = GetValue(row, "InstallDate"),
+                    MISDate = FirstNonEmpty(GetValue(row, "MIS_Date"), GetValue(row, "MISDate")),
+                    CustID = GetValue(row, "CustID"),
+                    FullName = FirstNonEmpty(GetValue(row, "FullName"), GetValue(row, "CustomerName"), GetValue(row, "CustID"), "-"),
+                    Area = FirstNonEmpty(GetValue(row, "AreaName"), GetValue(row, "Area"), "-"),
+                    PoliceNo = FirstNonEmpty(GetValue(row, "PoliceNo"), "-"),
+                    NoSN = FirstNonEmpty(GetValue(row, "NoSN"), "-"),
+                    GSMNo = FirstNonEmpty(GetValue(row, "GSMNo"), "-"),
+                    Status = GetValue(row, "Status"),
+                    TechnicianName = FirstNonEmpty(
+                        GetValue(row, "TechnicianName"),
+                        GetValue(row, "Name"),
+                        technicianName,
+                        GetValue(row, "TechnicianID"),
+                        "-"),
+                    TotalUnit = ParseIntValue(GetValue(row, "TotalUnit"))
+                })
+                .ToList();
+        }
+
+        private static ClosedJobModalResponse BindClosedJobModal(string technicianName, DataTable source, string emptyMessage = null)
+        {
+            List<ClosedJobUnitItem> rows = MapClosedJobUnitRows(source, technicianName);
 
             int totalClosedJo = rows
                 .Select(r => r.JobID ?? string.Empty)
@@ -9629,7 +10196,7 @@ namespace vtsadm
                 });
             string html = hasData
                 ? BuildClosedJobCardsHtml(rows)
-                : BuildClosedJobEmptyStateHtml("Belum ada pekerjaan selesai");
+                : BuildClosedJobEmptyStateHtml(string.IsNullOrWhiteSpace(emptyMessage) ? "Belum ada pekerjaan selesai" : emptyMessage);
 
             return ShowClosedJobModal(technicianName, totalClosedJo, html, hasData, hasData ? "OK" : "Belum ada pekerjaan selesai", totalClosedUnit);
         }
@@ -9677,7 +10244,9 @@ namespace vtsadm
             foreach (ClosedJobUnitItem unit in units)
             {
                 string statusCode = FirstNonEmpty(unit.Status, "-");
-                string statusText = statusCode.Equals("CL", StringComparison.OrdinalIgnoreCase) ? "Selesai" : statusCode;
+                string statusText = statusCode.Equals("CL", StringComparison.OrdinalIgnoreCase)
+                    ? "Selesai"
+                    : "Belum Selesai";
                 string statusBadgeClass = statusCode.Equals("CL", StringComparison.OrdinalIgnoreCase)
                     ? "assign-report-status done"
                     : "assign-report-status pending";
