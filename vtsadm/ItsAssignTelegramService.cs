@@ -298,7 +298,7 @@ namespace vtsadm
                     config.ApiToken,
                     chatId,
                     "<b>IT Support Assign Bot</b>\r\n"
-                    + "/open — daftar penugasan belum selesai\r\n"
+                    + "/open — penugasan IT Support yang sudah di-assign &amp; belum selesai\r\n"
                     + "/detail &lt;JobID&gt; [Seq] — detail penugasan\r\n"
                     + "/chatid — tampilkan Chat ID chat ini");
                 return;
@@ -465,12 +465,12 @@ namespace vtsadm
             List<OpenAssignSummary> rows = LoadOpenAssignSummaries(connString);
             if (rows.Count == 0)
             {
-                SendHtmlMessage(apiToken, chatId, "Tidak ada penugasan IT Support yang belum selesai.");
+                SendHtmlMessage(apiToken, chatId, "Tidak ada penugasan IT Support yang sudah di-assign dan belum selesai.");
                 return;
             }
 
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("<b>📋 Penugasan IT Support belum selesai</b>");
+            sb.AppendLine("<b>📋 Penugasan IT Support (belum selesai)</b>");
             sb.AppendLine("<i>Klik tombol di bawah untuk detail</i>");
             sb.AppendLine();
 
@@ -508,9 +508,9 @@ namespace vtsadm
             {
                 string[] queries =
                 {
+                    ItsSupportAssignData.BuildOpenItSupportAssignListSql(OpenListMaxRows),
                     ItsSupportAssignData.BuildOpenItSupportAssignBareSql(OpenListMaxRows),
-                    ItsSupportAssignData.BuildOpenItSupportAssignListFallbackSql(OpenListMaxRows),
-                    ItsSupportAssignData.BuildOpenItSupportAssignListSql(OpenListMaxRows)
+                    ItsSupportAssignData.BuildOpenItSupportAssignListFallbackSql(OpenListMaxRows)
                 };
 
                 foreach (string sql in queries)
@@ -539,6 +539,11 @@ namespace vtsadm
                 string jobId = GetRowString(row, "JobID");
                 string technicianId = GetRowString(row, "TechnicianID");
                 if (string.IsNullOrWhiteSpace(jobId))
+                {
+                    continue;
+                }
+
+                if (!ItsSupportAssignData.IsAssignedItSupportTechnician(technicianId, itSupportNames))
                 {
                     continue;
                 }
@@ -1596,7 +1601,7 @@ namespace vtsadm
                 report.AppendLine("/open bot summaries: " + rows.Count.ToString());
                 if (rows.Count == 0)
                 {
-                    report.AppendLine("Bot would reply: Tidak ada penugasan IT Support yang belum selesai.");
+                    report.AppendLine("Bot would reply: Tidak ada penugasan IT Support yang sudah di-assign dan belum selesai.");
                 }
                 else
                 {

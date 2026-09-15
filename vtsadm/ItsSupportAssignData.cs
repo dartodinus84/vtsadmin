@@ -818,20 +818,82 @@ namespace vtsadm
         public static bool IsOpenItSupportAssignStatus(string status)
         {
             string normalized = (status ?? string.Empty).Trim().ToUpperInvariant();
-            if (normalized == "DE")
+            return normalized == "RG";
+        }
+
+        public static bool IsValidItSupportTechnicianId(string technicianId)
+        {
+            string normalized = (technicianId ?? string.Empty).Trim().ToUpperInvariant();
+            if (normalized.Length < 3 || !normalized.StartsWith("IT", StringComparison.Ordinal))
             {
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(normalized))
+            for (int i = 2; i < normalized.Length; i++)
+            {
+                if (!char.IsDigit(normalized[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static bool IsAssignedItSupportTechnician(
+            string technicianId,
+            Dictionary<string, string> itSupportNames)
+        {
+            string raw = (technicianId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(raw)
+                || raw.Equals("UNASSIGNED", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (IsValidItSupportTechnicianId(raw))
             {
                 return true;
             }
 
-            return normalized != "CL"
-                && normalized != "CLOSE"
-                && normalized != "CLOSED"
-                && normalized != "SELESAI";
+            if (itSupportNames != null && itSupportNames.ContainsKey(raw))
+            {
+                return true;
+            }
+
+            string resolvedItId = LookupItId(raw);
+            return IsValidItSupportTechnicianId(resolvedItId);
+        }
+
+        private static string BuildAssignedItSupportTechnicianSqlFilter(string detailAlias)
+        {
+            string alias = string.IsNullOrWhiteSpace(detailAlias) ? "d" : detailAlias.Trim();
+            return "AND LTRIM(RTRIM(ISNULL(" + alias + ".TechnicianID, ''))) <> '' "
+                + "AND UPPER(LTRIM(RTRIM(ISNULL(" + alias + ".TechnicianID, '')))) <> 'UNASSIGNED' "
+                + "AND EXISTS ("
+                + "SELECT 1 FROM mst_itsupport it WITH (NOLOCK) "
+                + "WHERE ("
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) = LTRIM(RTRIM(ISNULL(" + alias + ".TechnicianID, ''))) "
+                + "OR LTRIM(RTRIM(ISNULL(it.UserID, ''))) = LTRIM(RTRIM(ISNULL(" + alias + ".TechnicianID, '')))"
+                + ") AND ISNULL(it.Status, '') NOT IN ('DE', 'BL')"
+                + ") ";
+        }
+
+        private static string BuildItSupportTrainingOrderSqlFilter(string detailAlias)
+        {
+            string alias = string.IsNullOrWhiteSpace(detailAlias) ? "d" : detailAlias.Trim();
+            return "AND EXISTS ("
+                + "SELECT 1 FROM trx_training_order t WITH (NOLOCK) "
+                + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = LTRIM(RTRIM(ISNULL(" + alias + ".JobID, ''))) "
+                + "AND ISNULL(t.Status, '') NOT IN ('DE')"
+                + ") ";
+        }
+
+        private static string BuildOpenItSupportAssignStatusSqlFilter(string detailAlias)
+        {
+            string alias = string.IsNullOrWhiteSpace(detailAlias) ? "d" : detailAlias.Trim();
+            return "WHERE UPPER(LTRIM(RTRIM(ISNULL(" + alias + ".Status, '')))) = 'RG' "
+                + "AND LTRIM(RTRIM(ISNULL(" + alias + ".JobID, ''))) <> '' ";
         }
 
         public static string BuildOpenItSupportAssignListSql(int maxRows)
@@ -858,9 +920,9 @@ namespace vtsadm
                 + "AND ISNULL(t.Status, '') NOT IN ('DE') "
                 + "LEFT JOIN mst_customer c WITH (NOLOCK) "
                 + "ON c.CustID = COALESCE(NULLIF(LTRIM(RTRIM(h.CustID)), ''), NULLIF(LTRIM(RTRIM(t.CustID)), '')) "
-                + "WHERE ISNULL(d.Status, '') NOT IN ('DE') "
-                + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) NOT IN ('CL', 'CLOSE', 'CLOSED', 'SELESAI') "
-                + "AND LTRIM(RTRIM(ISNULL(d.JobID, ''))) <> '' "
+                + BuildOpenItSupportAssignStatusSqlFilter("d")
+                + BuildAssignedItSupportTechnicianSqlFilter("d")
+                + BuildItSupportTrainingOrderSqlFilter("d")
                 + "ORDER BY d.SchDate DESC, d.JobID ASC";
         }
 
@@ -874,12 +936,15 @@ namespace vtsadm
                 + "d.SchDate, "
                 + "LTRIM(RTRIM(ISNULL(d.TechnicianID, ''))) AS TechnicianID, "
                 + "LTRIM(RTRIM(ISNULL(d.Status, ''))) AS Status, "
-                + "'' AS TechnicianName, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS TechnicianName, "
                 + "'' AS CustomerName "
                 + "FROM trx_job_assign_detail d WITH (NOLOCK) "
-                + "WHERE ISNULL(d.Status, '') NOT IN ('DE') "
-                + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) NOT IN ('CL', 'CLOSE', 'CLOSED', 'SELESAI') "
-                + "AND LTRIM(RTRIM(ISNULL(d.JobID, ''))) <> '' "
+                + "INNER JOIN mst_itsupport it WITH (NOLOCK) ON ("
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) = LTRIM(RTRIM(ISNULL(d.TechnicianID, ''))) "
+                + "OR LTRIM(RTRIM(ISNULL(it.UserID, ''))) = LTRIM(RTRIM(ISNULL(d.TechnicianID, '')))"
+                + ") AND ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                + BuildOpenItSupportAssignStatusSqlFilter("d")
+                + BuildItSupportTrainingOrderSqlFilter("d")
                 + "ORDER BY d.SchDate DESC, d.JobID ASC";
         }
 
@@ -896,14 +961,9 @@ namespace vtsadm
                 + "'' AS TechnicianName, "
                 + "'' AS CustomerName "
                 + "FROM trx_job_assign_detail d WITH (NOLOCK) "
-                + "WHERE ISNULL(d.Status, '') NOT IN ('DE') "
-                + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) NOT IN ('CL', 'CLOSE', 'CLOSED', 'SELESAI') "
-                + "AND LTRIM(RTRIM(ISNULL(d.JobID, ''))) <> '' "
-                + "AND EXISTS ("
-                + "SELECT 1 FROM trx_training_order t WITH (NOLOCK) "
-                + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = LTRIM(RTRIM(ISNULL(d.JobID, ''))) "
-                + "AND ISNULL(t.Status, '') NOT IN ('DE')"
-                + ") "
+                + BuildOpenItSupportAssignStatusSqlFilter("d")
+                + BuildAssignedItSupportTechnicianSqlFilter("d")
+                + BuildItSupportTrainingOrderSqlFilter("d")
                 + "ORDER BY d.SchDate DESC, d.JobID ASC";
         }
 
@@ -916,9 +976,9 @@ namespace vtsadm
         {
             string[] queries =
             {
+                BuildOpenItSupportAssignListSql(maxRows),
                 BuildOpenItSupportAssignBareSql(maxRows),
-                BuildOpenItSupportAssignListFallbackSql(maxRows),
-                BuildOpenItSupportAssignListSql(maxRows)
+                BuildOpenItSupportAssignListFallbackSql(maxRows)
             };
 
             foreach (string sql in queries)
