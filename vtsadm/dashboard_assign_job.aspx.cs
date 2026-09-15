@@ -42,6 +42,11 @@ namespace vtsadm
             public string Address { get; set; }
             public string MarketingName { get; set; }
             public string DefaultAreaId { get; set; }
+            public int CustomerGpsCount { get; set; }
+            public int CustomerAcsCount { get; set; }
+            public bool IsTransfer { get; set; }
+            public string AssignedTechnicianId { get; set; }
+            public string AssignedTechnicianName { get; set; }
         }
 
         public class JobOrderInformationResponse
@@ -1923,12 +1928,15 @@ namespace vtsadm
             }
 
             string safeKeyword = (searchKeyword ?? string.Empty).Replace("'", "''");
+            string procedureName = IsJobTrainingAssignRequestContext()
+                ? "sp_list_header_job_training_itsupport"
+                : "sp_list_header_job_training";
             string openError = string.Empty;
             Recordset rec = new Recordset();
-            rec.Open("sp_list_header_job_training '" + safeKeyword + "'", connString.Trim(), ref openError);
+            rec.Open(procedureName + " '" + safeKeyword + "'", connString.Trim(), ref openError);
             if (!string.IsNullOrWhiteSpace(openError))
             {
-                throw new InvalidOperationException("sp_list_header_job_training: " + openError);
+                throw new InvalidOperationException(procedureName + ": " + openError);
             }
 
             return rec.DataRecord() ?? new DataTable();

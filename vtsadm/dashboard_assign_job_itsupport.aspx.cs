@@ -17,6 +17,8 @@ namespace vtsadm
       public int AssignGps { get; set; }
       public int AssignAcs { get; set; }
       public string LastAssignDate { get; set; }
+      public string TechnicianId { get; set; }
+      public string TechnicianName { get; set; }
     }
 
     protected override string FixedActiveTab
@@ -248,10 +250,12 @@ namespace vtsadm
     {
       Dictionary<string, JobTrxAssignStats> map =
           new Dictionary<string, JobTrxAssignStats>(StringComparer.OrdinalIgnoreCase);
+      Dictionary<string, string> itSupportNames = ItsSupportAssignData.LoadItSupportNameMap();
       DataTable details = ExecuteJobTrainingQuery(
           "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status, DeviceGroupID, QtyGPS, QtyACS "
           + "FROM trx_job_assign_detail WITH (NOLOCK) "
-          + "WHERE ISNULL(Status, '') NOT IN ('DE')");
+          + "WHERE ISNULL(Status, '') NOT IN ('DE') "
+          + "ORDER BY DtmUpd DESC, SchDate DESC");
       if (details == null || details.Rows.Count == 0)
       {
         return map;
@@ -272,7 +276,19 @@ namespace vtsadm
 
         JobTrxAssignStats stats = map.ContainsKey(jobId)
             ? map[jobId]
-            : new JobTrxAssignStats { LastAssignDate = string.Empty };
+            : new JobTrxAssignStats
+            {
+              LastAssignDate = string.Empty,
+              TechnicianId = string.Empty,
+              TechnicianName = string.Empty
+            };
+
+        if (string.IsNullOrWhiteSpace(stats.TechnicianId))
+        {
+          string technicianId = FirstNonEmptyStatic(GetValue(row, "TechnicianID")).Trim();
+          stats.TechnicianId = technicianId;
+          stats.TechnicianName = ItsSupportAssignData.ResolveItSupportName(technicianId, itSupportNames);
+        }
 
         string deviceGroup = NormalizeDeviceGroupId(
             FirstNonEmptyStatic(GetValue(row, "DeviceGroupID"), GetValue(row, "DeviceGroup")));
@@ -396,6 +412,76 @@ namespace vtsadm
       return filtered;
     }
 
+    private static bool IsExactJobIdSearch(DataTable source, string keyword)
+    {
+      string search = (keyword ?? string.Empty).Trim();
+      if (source == null || source.Rows.Count == 0 || string.IsNullOrWhiteSpace(search))
+      {
+        return false;
+      }
+
+      foreach (DataRow row in source.Rows)
+      {
+        if (GetValue(row, "JobID").Equals(search, StringComparison.OrdinalIgnoreCase))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    private static DataTable FilterJobOrderInformationHideAssignedForIts(DataTable source, string keyword)
+    {
+      if (source == null || source.Rows.Count == 0)
+      {
+        return new DataTable();
+      }
+
+      string search = (keyword ?? string.Empty).Trim();
+      bool allowAssignedTransfer = IsExactJobIdSearch(source, search);
+      DataTable filtered = source.Clone();
+      foreach (DataRow row in source.Rows)
+      {
+        int remaining = ParseIntFromColumns(row, "RemainingUnit");
+        int assignedTotal = ParseIntFromColumns(row, "TotalAssign");
+        string jobId = GetValue(row, "JobID");
+        bool isExactMatch = !string.IsNullOrWhiteSpace(search)
+            && jobId.Equals(search, StringComparison.OrdinalIgnoreCase);
+
+        if (remaining > 0 || (allowAssignedTransfer && isExactMatch && assignedTotal > 0))
+        {
+          filtered.ImportRow(row);
+        }
+      }
+
+      return filtered;
+    }
+
+    private static bool ParseBoolFromDataRow(DataRow row, string columnName)
+    {
+      if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName))
+      {
+        return false;
+      }
+
+      object value = row[columnName];
+      if (value == null || value == DBNull.Value)
+      {
+        return false;
+      }
+
+      if (value is bool)
+      {
+        return (bool)value;
+      }
+
+      string text = Convert.ToString(value).Trim();
+      return text.Equals("1", StringComparison.OrdinalIgnoreCase)
+          || text.Equals("true", StringComparison.OrdinalIgnoreCase)
+          || text.Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
+
     protected static JobOrderInformationResponse BuildJobTrainingOrderInformationResponse(
         string activeTab,
         string searchKeyword,
@@ -435,6 +521,8 @@ namespace vtsadm
         Dictionary<string, string> marketingByCustId = ItsSupportAssignData.LoadCustomerMarketingMap();
         Dictionary<string, string> marketingByTrainingId = ItsSupportAssignData.LoadTrainingMarketingMap();
         Dictionary<string, JobTrxAssignStats> trxStats = BuildJobTrainingGlobalAssignStatsMap();
+        Dictionary<string, ItsSupportAssignData.CustomerDeviceCounts> customerDeviceCounts =
+            ItsSupportAssignData.LoadCustomerGpsAcsCountMap();
 
         DataTable mapped = new DataTable();
         mapped.Columns.Add("JobID");
@@ -458,6 +546,11 @@ namespace vtsadm
         mapped.Columns.Add("TotalUnitAcs", typeof(int));
         mapped.Columns.Add("TotalUnitGpsDone", typeof(int));
         mapped.Columns.Add("TotalUnitAcsDone", typeof(int));
+        mapped.Columns.Add("CustomerGpsCount", typeof(int));
+        mapped.Columns.Add("CustomerAcsCount", typeof(int));
+        mapped.Columns.Add("IsTransfer", typeof(bool));
+        mapped.Columns.Add("AssignedTechnicianId");
+        mapped.Columns.Add("AssignedTechnicianName");
 
         if (raw != null)
         {
@@ -527,6 +620,20 @@ namespace vtsadm
                 ItsSupportAssignData.ResolveMarketingName(jobId, marketingByTrainingId),
                 ItsSupportAssignData.ResolveMarketingName(custId, marketingByCustId));
             string defaultAreaId = customerContext != null ? customerContext.SupAreaID : string.Empty;
+            ItsSupportAssignData.CustomerDeviceCounts deviceCounts = null;
+            if (!string.IsNullOrWhiteSpace(custId) && customerDeviceCounts.ContainsKey(custId))
+            {
+              deviceCounts = customerDeviceCounts[custId];
+            }
+            int customerGpsCount = deviceCounts != null ? deviceCounts.TotalGps : 0;
+            int customerAcsCount = deviceCounts != null ? deviceCounts.TotalAcs : 0;
+            string assignedTechnicianId = trxStat != null
+                ? FirstNonEmptyStatic(trxStat.TechnicianId)
+                : string.Empty;
+            string assignedTechnicianName = trxStat != null
+                ? FirstNonEmptyStatic(trxStat.TechnicianName, trxStat.TechnicianId)
+                : string.Empty;
+            bool isTransfer = assignedTotal > 0;
 
             DataRow target = mapped.NewRow();
             target["JobID"] = jobId;
@@ -556,6 +663,11 @@ namespace vtsadm
             target["TotalUnitAcs"] = 0;
             target["TotalUnitGpsDone"] = assignGps;
             target["TotalUnitAcsDone"] = assignAcs;
+            target["CustomerGpsCount"] = customerGpsCount;
+            target["CustomerAcsCount"] = customerAcsCount;
+            target["IsTransfer"] = isTransfer;
+            target["AssignedTechnicianId"] = assignedTechnicianId;
+            target["AssignedTechnicianName"] = assignedTechnicianName;
             mapped.Rows.Add(target);
           }
         }
@@ -563,6 +675,7 @@ namespace vtsadm
         response.BranchOptions = BuildJobOrderBranchOptions(mapped);
         DataTable branchFiltered = FilterJobOrderInformationByBranch(mapped, branchFilter);
         DataTable filtered = FilterJobOrderInformationForIts(branchFiltered, searchKeyword);
+        filtered = FilterJobOrderInformationHideAssignedForIts(filtered, searchKeyword);
         response.TotalRecords = filtered.Rows.Count;
         response.TotalPages = Math.Max(1, (int)Math.Ceiling((double)response.TotalRecords / response.PageSize));
         if (response.PageIndex > response.TotalPages)
@@ -598,7 +711,12 @@ namespace vtsadm
             TotalUnitGps = ParseIntFromColumns(row, "TotalUnitGps"),
             TotalUnitAcs = ParseIntFromColumns(row, "TotalUnitAcs"),
             TotalUnitGpsDone = ParseIntFromColumns(row, "TotalUnitGpsDone"),
-            TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone")
+            TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone"),
+            CustomerGpsCount = ParseIntFromColumns(row, "CustomerGpsCount"),
+            CustomerAcsCount = ParseIntFromColumns(row, "CustomerAcsCount"),
+            IsTransfer = ParseBoolFromDataRow(row, "IsTransfer"),
+            AssignedTechnicianId = GetValue(row, "AssignedTechnicianId"),
+            AssignedTechnicianName = GetValue(row, "AssignedTechnicianName")
           });
         }
       }

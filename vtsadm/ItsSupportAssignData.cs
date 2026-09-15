@@ -541,6 +541,107 @@ namespace vtsadm
             return map;
         }
 
+        public sealed class CustomerDeviceCounts
+        {
+            public int TotalGps { get; set; }
+            public int TotalAcs { get; set; }
+        }
+
+        public static Dictionary<string, string> LoadItSupportNameMap()
+        {
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            DataTable table = ExecuteQuery(
+                "SELECT LTRIM(RTRIM(ISNULL(ITID, ''))) AS ITID, "
+                + "LTRIM(RTRIM(ISNULL(UserID, ''))) AS UserID, "
+                + "LTRIM(RTRIM(ISNULL(Name, ''))) AS Name "
+                + "FROM mst_itsupport WITH (NOLOCK) "
+                + "WHERE ISNULL(Status, '') NOT IN ('DE', 'BL')");
+            if (table == null || table.Rows.Count == 0)
+            {
+                return map;
+            }
+
+            foreach (DataRow row in table.Rows)
+            {
+                string name = FirstNonEmpty(GetRowString(row, "Name"), GetRowString(row, "ITID"));
+                string itId = GetRowString(row, "ITID");
+                string userId = GetRowString(row, "UserID");
+                if (!string.IsNullOrWhiteSpace(itId))
+                {
+                    map[itId] = name;
+                }
+
+                if (!string.IsNullOrWhiteSpace(userId))
+                {
+                    map[userId] = name;
+                }
+            }
+
+            return map;
+        }
+
+        public static string ResolveItSupportName(string technicianId, Dictionary<string, string> nameMap)
+        {
+            string key = (technicianId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key) || nameMap == null || nameMap.Count == 0)
+            {
+                return key;
+            }
+
+            string name;
+            if (nameMap.TryGetValue(key, out name) && !string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+
+            return key;
+        }
+
+        public static Dictionary<string, CustomerDeviceCounts> LoadCustomerGpsAcsCountMap()
+        {
+            Dictionary<string, CustomerDeviceCounts> map =
+                new Dictionary<string, CustomerDeviceCounts>(StringComparer.OrdinalIgnoreCase);
+            DataTable table = ExecuteQuery("sp_get_customer_gps_acs_counts ''");
+            if (table == null || table.Rows.Count == 0)
+            {
+                return map;
+            }
+
+            foreach (DataRow row in table.Rows)
+            {
+                string custId = GetRowString(row, "CustID");
+                if (string.IsNullOrWhiteSpace(custId))
+                {
+                    continue;
+                }
+
+                map[custId] = new CustomerDeviceCounts
+                {
+                    TotalGps = ParseIntColumn(row, "TotalGps"),
+                    TotalAcs = ParseIntColumn(row, "TotalAcs")
+                };
+            }
+
+            return map;
+        }
+
+        private static int ParseIntColumn(DataRow row, string columnName)
+        {
+            if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName))
+            {
+                return 0;
+            }
+
+            object value = row[columnName];
+            if (value == null || value == DBNull.Value)
+            {
+                return 0;
+            }
+
+            int parsed;
+            return int.TryParse(Convert.ToString(value), out parsed) ? parsed : 0;
+        }
+
         public static string ResolveMarketingName(string custId, Dictionary<string, string> marketingByCustId)
         {
             if (string.IsNullOrWhiteSpace(custId) || marketingByCustId == null || marketingByCustId.Count == 0)
