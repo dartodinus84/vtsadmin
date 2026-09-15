@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
+using System.Data.SqlClient;
+using System.Text;
 using System.Web;
 using vtsadm.App_Code;
 
@@ -597,7 +600,7 @@ namespace vtsadm
             return key;
         }
 
-        public static Dictionary<string, CustomerDeviceCounts> LoadCustomerGpsAcsCountMap()
+        public static Dictionary<string, CustomerDeviceCounts> LoadCustomerGpsCountMap()
         {
             Dictionary<string, CustomerDeviceCounts> map =
                 new Dictionary<string, CustomerDeviceCounts>(StringComparer.OrdinalIgnoreCase);
@@ -617,8 +620,8 @@ namespace vtsadm
 
                 map[custId] = new CustomerDeviceCounts
                 {
-                    TotalGps = ParseIntColumn(row, "TotalGps"),
-                    TotalAcs = ParseIntColumn(row, "TotalAcs")
+                    TotalGps = ParseIntColumnAny(row, "TotUnit", "TotalGps", "TotalGPS"),
+                    TotalAcs = 0
                 };
             }
 
@@ -627,19 +630,37 @@ namespace vtsadm
 
         private static int ParseIntColumn(DataRow row, string columnName)
         {
-            if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName))
+            return ParseIntColumnAny(row, columnName);
+        }
+
+        private static int ParseIntColumnAny(DataRow row, params string[] columnNames)
+        {
+            if (row == null || row.Table == null || columnNames == null || columnNames.Length == 0)
             {
                 return 0;
             }
 
-            object value = row[columnName];
-            if (value == null || value == DBNull.Value)
+            foreach (string columnName in columnNames)
             {
-                return 0;
+                if (string.IsNullOrWhiteSpace(columnName) || !row.Table.Columns.Contains(columnName))
+                {
+                    continue;
+                }
+
+                object value = row[columnName];
+                if (value == null || value == DBNull.Value)
+                {
+                    continue;
+                }
+
+                int parsed;
+                if (int.TryParse(Convert.ToString(value), out parsed))
+                {
+                    return parsed;
+                }
             }
 
-            int parsed;
-            return int.TryParse(Convert.ToString(value), out parsed) ? parsed : 0;
+            return 0;
         }
 
         public static string ResolveMarketingName(string custId, Dictionary<string, string> marketingByCustId)
@@ -791,7 +812,500 @@ namespace vtsadm
 
         private static DataTable ExecuteQuery(string sql)
         {
-            return dashboard_assign_job.ExecuteJobTrainingQuery(sql);
+            return QueryDataTable(sql);
+        }
+
+        public static bool IsOpenItSupportAssignStatus(string status)
+        {
+            string normalized = (status ?? string.Empty).Trim().ToUpperInvariant();
+            if (normalized == "DE")
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return true;
+            }
+
+            return normalized != "CL"
+                && normalized != "CLOSE"
+                && normalized != "CLOSED"
+                && normalized != "SELESAI";
+        }
+
+        public static string BuildOpenItSupportAssignListSql(int maxRows)
+        {
+            int safeMaxRows = maxRows < 1 ? 15 : Math.Min(maxRows, 100);
+            return "SELECT TOP " + safeMaxRows.ToString()
+                + " LTRIM(RTRIM(ISNULL(d.AssignID, ''))) AS AssignID, "
+                + "ISNULL(d.Seq, 0) AS Seq, "
+                + "LTRIM(RTRIM(ISNULL(d.JobID, ''))) AS JobID, "
+                + "d.SchDate, "
+                + "LTRIM(RTRIM(ISNULL(d.TechnicianID, ''))) AS TechnicianID, "
+                + "LTRIM(RTRIM(ISNULL(d.Status, ''))) AS Status, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ''))) AS TechnicianName, "
+                + "LTRIM(RTRIM(ISNULL(c.FullName, ''))) AS CustomerName "
+                + "FROM trx_job_assign_detail d WITH (NOLOCK) "
+                + "LEFT JOIN mst_itsupport it WITH (NOLOCK) ON ("
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) = LTRIM(RTRIM(ISNULL(d.TechnicianID, ''))) "
+                + "OR LTRIM(RTRIM(ISNULL(it.UserID, ''))) = LTRIM(RTRIM(ISNULL(d.TechnicianID, '')))"
+                + ") AND ISNULL(it.Status, '') NOT IN ('DE', 'BL') "
+                + "LEFT JOIN trx_job_assign_header h WITH (NOLOCK) "
+                + "ON h.AssignID = d.AssignID AND ISNULL(h.Status, '') NOT IN ('DE') "
+                + "LEFT JOIN trx_training_order t WITH (NOLOCK) "
+                + "ON LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = LTRIM(RTRIM(ISNULL(d.JobID, ''))) "
+                + "AND ISNULL(t.Status, '') NOT IN ('DE') "
+                + "LEFT JOIN mst_customer c WITH (NOLOCK) "
+                + "ON c.CustID = COALESCE(NULLIF(LTRIM(RTRIM(h.CustID)), ''), NULLIF(LTRIM(RTRIM(t.CustID)), '')) "
+                + "WHERE ISNULL(d.Status, '') NOT IN ('DE') "
+                + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) NOT IN ('CL', 'CLOSE', 'CLOSED', 'SELESAI') "
+                + "AND LTRIM(RTRIM(ISNULL(d.JobID, ''))) <> '' "
+                + "ORDER BY d.SchDate DESC, d.JobID ASC";
+        }
+
+        public static string BuildOpenItSupportAssignBareSql(int maxRows)
+        {
+            int safeMaxRows = maxRows < 1 ? 15 : Math.Min(maxRows, 100);
+            return "SELECT TOP " + safeMaxRows.ToString()
+                + " LTRIM(RTRIM(ISNULL(d.AssignID, ''))) AS AssignID, "
+                + "ISNULL(d.Seq, 0) AS Seq, "
+                + "LTRIM(RTRIM(ISNULL(d.JobID, ''))) AS JobID, "
+                + "d.SchDate, "
+                + "LTRIM(RTRIM(ISNULL(d.TechnicianID, ''))) AS TechnicianID, "
+                + "LTRIM(RTRIM(ISNULL(d.Status, ''))) AS Status, "
+                + "'' AS TechnicianName, "
+                + "'' AS CustomerName "
+                + "FROM trx_job_assign_detail d WITH (NOLOCK) "
+                + "WHERE ISNULL(d.Status, '') NOT IN ('DE') "
+                + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) NOT IN ('CL', 'CLOSE', 'CLOSED', 'SELESAI') "
+                + "AND LTRIM(RTRIM(ISNULL(d.JobID, ''))) <> '' "
+                + "ORDER BY d.SchDate DESC, d.JobID ASC";
+        }
+
+        public static string BuildOpenItSupportAssignListFallbackSql(int maxRows)
+        {
+            int safeMaxRows = maxRows < 1 ? 15 : Math.Min(maxRows, 100);
+            return "SELECT TOP " + safeMaxRows.ToString()
+                + " LTRIM(RTRIM(ISNULL(d.AssignID, ''))) AS AssignID, "
+                + "ISNULL(d.Seq, 0) AS Seq, "
+                + "LTRIM(RTRIM(ISNULL(d.JobID, ''))) AS JobID, "
+                + "d.SchDate, "
+                + "LTRIM(RTRIM(ISNULL(d.TechnicianID, ''))) AS TechnicianID, "
+                + "LTRIM(RTRIM(ISNULL(d.Status, ''))) AS Status, "
+                + "'' AS TechnicianName, "
+                + "'' AS CustomerName "
+                + "FROM trx_job_assign_detail d WITH (NOLOCK) "
+                + "WHERE ISNULL(d.Status, '') NOT IN ('DE') "
+                + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) NOT IN ('CL', 'CLOSE', 'CLOSED', 'SELESAI') "
+                + "AND LTRIM(RTRIM(ISNULL(d.JobID, ''))) <> '' "
+                + "AND EXISTS ("
+                + "SELECT 1 FROM trx_training_order t WITH (NOLOCK) "
+                + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = LTRIM(RTRIM(ISNULL(d.JobID, ''))) "
+                + "AND ISNULL(t.Status, '') NOT IN ('DE')"
+                + ") "
+                + "ORDER BY d.SchDate DESC, d.JobID ASC";
+        }
+
+        public static DataTable LoadOpenItSupportAssignRows(int maxRows)
+        {
+            return LoadOpenItSupportAssignRows(maxRows, null);
+        }
+
+        public static DataTable LoadOpenItSupportAssignRows(int maxRows, string connString)
+        {
+            string[] queries =
+            {
+                BuildOpenItSupportAssignBareSql(maxRows),
+                BuildOpenItSupportAssignListFallbackSql(maxRows),
+                BuildOpenItSupportAssignListSql(maxRows)
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = QueryDataTable(sql, connString);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        private static bool IsOleDbConnectionString(string connString)
+        {
+            return !string.IsNullOrWhiteSpace(connString)
+                && connString.IndexOf("provider=", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static DataTable TrySqlClientQuery(string sql, string connString)
+        {
+            string sqlConn = ResolveSqlClientConnectionString(connString);
+            if (string.IsNullOrWhiteSpace(sqlConn))
+            {
+                return null;
+            }
+
+            try
+            {
+                DataTable table = new DataTable();
+                using (SqlConnection conn = new SqlConnection(sqlConn))
+                {
+                    conn.Open();
+                    using (SqlCommand cmd = new SqlCommand(sql, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        cmd.CommandTimeout = 120;
+                        using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+                        {
+                            adapter.Fill(table);
+                        }
+                    }
+                }
+
+                return table;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static DataTable TryRecordsetQuery(string sql, string connString)
+        {
+            string recordsetConn = ResolveRecordsetConnectionString(connString);
+            if (string.IsNullOrWhiteSpace(recordsetConn) || !IsOleDbConnectionString(recordsetConn))
+            {
+                return null;
+            }
+
+            try
+            {
+                Recordset rec = new Recordset();
+                string openError = string.Empty;
+                rec.Open(sql, recordsetConn.Trim(), ref openError);
+                if (!string.IsNullOrWhiteSpace(openError))
+                {
+                    return null;
+                }
+
+                return rec.DataRecord() ?? new DataTable();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static DataTable QueryDataTable(string sql)
+        {
+            return QueryDataTable(sql, null);
+        }
+
+        public static DataTable QueryDataTable(string sql, string connString)
+        {
+            if (string.IsNullOrWhiteSpace(sql))
+            {
+                return new DataTable();
+            }
+
+            string trimmed = sql.Trim();
+            string recordsetConn = ResolveRecordsetConnectionString(connString);
+            bool useRecordsetFirst = IsOleDbConnectionString(recordsetConn);
+
+            DataTable recordsetTable = null;
+            DataTable sqlTable = null;
+            if (useRecordsetFirst)
+            {
+                recordsetTable = TryRecordsetQuery(trimmed, connString);
+                if (recordsetTable != null && recordsetTable.Rows.Count > 0)
+                {
+                    return recordsetTable;
+                }
+
+                sqlTable = TrySqlClientQuery(trimmed, connString);
+                if (sqlTable != null && sqlTable.Rows.Count > 0)
+                {
+                    return sqlTable;
+                }
+            }
+            else
+            {
+                sqlTable = TrySqlClientQuery(trimmed, connString);
+                if (sqlTable != null && sqlTable.Rows.Count > 0)
+                {
+                    return sqlTable;
+                }
+
+                recordsetTable = TryRecordsetQuery(trimmed, connString);
+                if (recordsetTable != null && recordsetTable.Rows.Count > 0)
+                {
+                    return recordsetTable;
+                }
+            }
+
+            if (recordsetTable != null)
+            {
+                return recordsetTable;
+            }
+
+            if (sqlTable != null)
+            {
+                return sqlTable;
+            }
+
+            return new DataTable();
+        }
+
+        public static string ResolveSqlClientConnectionString()
+        {
+            return ResolveSqlClientConnectionString(null);
+        }
+
+        public static string ResolveSqlClientConnectionString(string rawConnectionString)
+        {
+            try
+            {
+                ConnectionStringSettings sqlSettings = ConfigurationManager.ConnectionStrings["VTSADMIN"];
+                if (sqlSettings != null && !string.IsNullOrWhiteSpace(sqlSettings.ConnectionString))
+                {
+                    return sqlSettings.ConnectionString.Trim();
+                }
+            }
+            catch
+            {
+            }
+
+            string trimmed = (rawConnectionString ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                HttpContext context = HttpContext.Current;
+                if (context != null && context.Session != null)
+                {
+                    trimmed = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                ConnectionStringSettings oleDbSettings = ConfigurationManager.ConnectionStrings["VTSAdminDB"];
+                if (oleDbSettings != null && !string.IsNullOrWhiteSpace(oleDbSettings.ConnectionString))
+                {
+                    trimmed = oleDbSettings.ConnectionString.Trim();
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return string.Empty;
+            }
+
+            trimmed = trimmed.Trim();
+            if (trimmed.IndexOf("provider=", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                try
+                {
+                    string[] parts = trimmed.Split(';');
+                    StringBuilder builder = new StringBuilder();
+                    foreach (string part in parts)
+                    {
+                        string item = (part ?? string.Empty).Trim();
+                        if (item.Length == 0
+                            || item.StartsWith("Provider=", StringComparison.OrdinalIgnoreCase)
+                            || item.StartsWith("Persist Security Info", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (builder.Length > 0)
+                        {
+                            builder.Append(';');
+                        }
+
+                        builder.Append(item);
+                    }
+
+                    return builder.ToString();
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+
+            try
+            {
+                return new SqlConnectionStringBuilder(trimmed).ConnectionString;
+            }
+            catch
+            {
+                return trimmed;
+            }
+        }
+
+        public static string ResolveRecordsetConnectionString()
+        {
+            return ResolveRecordsetConnectionString(null);
+        }
+
+        public static string ResolveRecordsetConnectionString(string rawConnectionString)
+        {
+            string trimmed = (rawConnectionString ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                HttpContext context = HttpContext.Current;
+                if (context != null && context.Session != null)
+                {
+                    trimmed = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                return trimmed.Trim();
+            }
+
+            ConnectionStringSettings oleDbSettings = ConfigurationManager.ConnectionStrings["VTSAdminDB"];
+            if (oleDbSettings != null && !string.IsNullOrWhiteSpace(oleDbSettings.ConnectionString))
+            {
+                return oleDbSettings.ConnectionString.Trim();
+            }
+
+            return ResolveSqlClientConnectionString();
+        }
+
+        public static DataTable LoadAssignDetailRow(string assignId, int seq)
+        {
+            return LoadAssignDetailRow(assignId, seq, null);
+        }
+
+        public static DataTable LoadAssignDetailRow(string assignId, int seq, string connString)
+        {
+            if (string.IsNullOrWhiteSpace(assignId))
+            {
+                return new DataTable();
+            }
+
+            string safeAssignId = EscapeSqlLiteral(assignId.Trim());
+            int safeSeq = Math.Max(1, seq);
+            string[] queries =
+            {
+                "SELECT TOP 1 "
+                    + "LTRIM(RTRIM(ISNULL(AssignID, ''))) AS AssignID, "
+                    + "ISNULL(Seq, 0) AS Seq, "
+                    + "LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID, "
+                    + "LTRIM(RTRIM(ISNULL(TechnicianID, ''))) AS TechnicianID, "
+                    + "SchDate, "
+                    + "LTRIM(RTRIM(ISNULL(Remark, ''))) AS Remark, "
+                    + "LTRIM(RTRIM(ISNULL(Status, ''))) AS Status, "
+                    + "DtmUpd "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE AssignID = '" + safeAssignId + "' "
+                    + "AND Seq = " + safeSeq.ToString(),
+                "SELECT TOP 1 "
+                    + "LTRIM(RTRIM(ISNULL(AssignID, ''))) AS AssignID, "
+                    + "ISNULL(Seq, 0) AS Seq, "
+                    + "LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID, "
+                    + "LTRIM(RTRIM(ISNULL(TechnicianID, ''))) AS TechnicianID, "
+                    + "SchDate, "
+                    + "LTRIM(RTRIM(ISNULL(Remark, ''))) AS Remark, "
+                    + "LTRIM(RTRIM(ISNULL(Status, ''))) AS Status, "
+                    + "DtmUpd "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE AssignID = '" + safeAssignId + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "ORDER BY Seq DESC"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = QueryDataTable(sql, connString);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        public static DataTable FindAssignDetailKeyByJobId(string jobId)
+        {
+            return FindAssignDetailKeyByJobId(jobId, null);
+        }
+
+        public static DataTable FindAssignDetailKeyByJobId(string jobId, string connString)
+        {
+            return FindAssignDetailKeyByJobId(jobId, 0, connString);
+        }
+
+        public static DataTable FindAssignDetailKeyByJobId(string jobId, int seq, string connString)
+        {
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                return new DataTable();
+            }
+
+            string safeJobId = EscapeSqlLiteral(jobId.Trim());
+            string seqFilter = seq > 0 ? "AND ISNULL(Seq, 0) = " + seq.ToString() + " " : string.Empty;
+            string activeFilter = "AND ISNULL(Status, '') NOT IN ('DE') ";
+            string[] queries =
+            {
+                "SELECT TOP 1 "
+                + "LTRIM(RTRIM(ISNULL(AssignID, ''))) AS AssignID, "
+                + "ISNULL(Seq, 0) AS Seq, "
+                + "LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID "
+                + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                + "WHERE JobID = '" + safeJobId + "' "
+                + activeFilter
+                + seqFilter
+                + "ORDER BY SchDate DESC, Seq DESC",
+                "SELECT TOP 1 "
+                + "LTRIM(RTRIM(ISNULL(AssignID, ''))) AS AssignID, "
+                + "ISNULL(Seq, 0) AS Seq, "
+                + "LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID "
+                + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                + "WHERE LTRIM(RTRIM(ISNULL(JobID, ''))) = '" + safeJobId + "' "
+                + activeFilter
+                + seqFilter
+                + "ORDER BY SchDate DESC, Seq DESC"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = QueryDataTable(sql, connString);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    return table;
+                }
+            }
+
+            return new DataTable();
+        }
+
+        public static DataTable FindAssignDetailKeyByAssignId(string assignId)
+        {
+            return FindAssignDetailKeyByAssignId(assignId, null);
+        }
+
+        public static DataTable FindAssignDetailKeyByAssignId(string assignId, string connString)
+        {
+            if (string.IsNullOrWhiteSpace(assignId))
+            {
+                return new DataTable();
+            }
+
+            string safeAssignId = EscapeSqlLiteral(assignId.Trim());
+            return QueryDataTable(
+                "SELECT TOP 1 "
+                + "LTRIM(RTRIM(ISNULL(AssignID, ''))) AS AssignID, "
+                + "ISNULL(Seq, 0) AS Seq "
+                + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                + "WHERE AssignID = '" + safeAssignId + "' "
+                + "AND ISNULL(Status, '') NOT IN ('DE') "
+                + "ORDER BY Seq DESC",
+                connString);
         }
 
         private static string EscapeSqlLiteral(string value)
@@ -801,13 +1315,27 @@ namespace vtsadm
 
         private static string GetRowString(DataRow row, string columnName)
         {
-            if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName))
+            if (row == null || row.Table == null || string.IsNullOrWhiteSpace(columnName))
             {
                 return string.Empty;
             }
 
-            object value = row[columnName];
-            return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+            if (row.Table.Columns.Contains(columnName))
+            {
+                object value = row[columnName];
+                return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+            }
+
+            foreach (DataColumn column in row.Table.Columns)
+            {
+                if (column.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    object value = row[column];
+                    return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+                }
+            }
+
+            return string.Empty;
         }
 
         private static string FirstNonEmpty(params string[] values)
@@ -826,6 +1354,141 @@ namespace vtsadm
             }
 
             return string.Empty;
+        }
+
+        public static string ResolveItSupportAssignDate(
+            string connString,
+            string assignId,
+            int seq,
+            string jobId = null)
+        {
+            if (!string.IsNullOrWhiteSpace(assignId))
+            {
+                DataTable table = LoadAssignDetailRow(assignId, Math.Max(1, seq));
+                if (table != null && table.Rows.Count > 0)
+                {
+                    string formatted = FormatAssignDateForDisplay(GetRowString(table.Rows[0], "DtmUpd"));
+                    if (!string.IsNullOrWhiteSpace(formatted))
+                    {
+                        return formatted;
+                    }
+                }
+            }
+
+            string trimmedJobId = (jobId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmedJobId))
+            {
+                return string.Empty;
+            }
+
+            DataTable keyTable = FindAssignDetailKeyByJobId(trimmedJobId, connString);
+            if (keyTable == null || keyTable.Rows.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            string resolvedAssignId = GetRowString(keyTable.Rows[0], "AssignID");
+            int resolvedSeq = 1;
+            int parsedSeq;
+            if (int.TryParse(GetRowString(keyTable.Rows[0], "Seq"), out parsedSeq) && parsedSeq > 0)
+            {
+                resolvedSeq = parsedSeq;
+            }
+
+            if (string.IsNullOrWhiteSpace(resolvedAssignId)
+                || resolvedAssignId.Equals((assignId ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+
+            return ResolveItSupportAssignDate(connString, resolvedAssignId, resolvedSeq, null);
+        }
+
+        public static string ResolveJobTrainingAssignDate(string connString, string jobId)
+        {
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                return string.Empty;
+            }
+
+            string effectiveConn = ResolveRecordsetConnectionString(connString);
+            if (string.IsNullOrWhiteSpace(effectiveConn))
+            {
+                effectiveConn = ResolveSqlClientConnectionString(connString);
+            }
+
+            string trimmedJobId = jobId.Trim();
+            string safeJobId = EscapeSqlLiteral(trimmedJobId);
+
+            if (!string.IsNullOrWhiteSpace(effectiveConn))
+            {
+                try
+                {
+                    Recordset rec = new Recordset();
+                    string openError = string.Empty;
+                    rec.Open(
+                        "sp_list_header_job_training_itsupport '" + safeJobId + "'",
+                        effectiveConn.Trim(),
+                        ref openError);
+                    if (string.IsNullOrWhiteSpace(openError))
+                    {
+                        DataTable headerRows = rec.DataRecord() ?? new DataTable();
+                        foreach (DataRow row in headerRows.Rows)
+                        {
+                            string trainingId = FirstNonEmpty(
+                                GetRowString(row, "TrainingID"),
+                                GetRowString(row, "JobID")).Trim();
+                            if (!trainingId.Equals(trimmedJobId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            string assignDate = FirstNonEmpty(
+                                GetRowString(row, "sReqDate"),
+                                GetRowString(row, "ReqDate"));
+                            if (!string.IsNullOrWhiteSpace(assignDate))
+                            {
+                                return FormatAssignDateForDisplay(assignDate);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            DataTable direct = ExecuteQuery(
+                "SELECT TOP 1 "
+                + "CONVERT(varchar(10), ReqDate, 120) AS ReqDateIso, "
+                + "CONVERT(varchar(11), ReqDate, 106) AS ReqDateText "
+                + "FROM trx_training_order WITH (NOLOCK) "
+                + "WHERE TrainingID = '" + safeJobId + "' "
+                + "AND ISNULL(Status, '') NOT IN ('DE')");
+            if (direct != null && direct.Rows.Count > 0)
+            {
+                DataRow row = direct.Rows[0];
+                string assignDate = FirstNonEmpty(
+                    GetRowString(row, "ReqDateIso"),
+                    GetRowString(row, "ReqDateText"));
+                if (!string.IsNullOrWhiteSpace(assignDate))
+                {
+                    return FormatAssignDateForDisplay(assignDate);
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string FormatAssignDateForDisplay(string source)
+        {
+            DateTime parsedDate;
+            if (DateTime.TryParse(source, out parsedDate))
+            {
+                return parsedDate.ToString("dd MMM yyyy");
+            }
+
+            return (source ?? string.Empty).Trim();
         }
     }
 }

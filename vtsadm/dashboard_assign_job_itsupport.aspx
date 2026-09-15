@@ -553,6 +553,7 @@
 
         .col-no { width: 36px; min-width: 36px; }
         .col-name { width: 200px; min-width: 200px; }
+        .col-total-assign { width: 72px; min-width: 72px; }
         .col-total { width: 72px; min-width: 72px; }
         .col-total-maint { width: 72px; min-width: 72px; }
         .col-stock { width: 110px; min-width: 110px; }
@@ -584,6 +585,7 @@
             box-shadow: 2px 0 0 #d7d4cf;
         }
 
+        .assign-table thead th.col-total-assign,
         .assign-table thead th.col-total,
         .assign-table thead th.col-total-maint {
             font-size: 10px;
@@ -1355,7 +1357,8 @@
             font-weight: 600;
         }
 
-        .assign-field input {
+        .assign-field input,
+        .assign-field textarea {
             width: 100%;
             border: 1px solid #d1cfc9;
             border-radius: 10px;
@@ -1364,6 +1367,40 @@
             min-height: 38px;
             background: #fff;
             color: #1a1a18;
+            box-sizing: border-box;
+        }
+
+        .assign-field textarea.assign-dashboard-note-textarea {
+            min-height: 88px;
+            line-height: 1.45;
+            resize: vertical;
+        }
+
+        .assign-field textarea.assign-dashboard-note-textarea:focus {
+            outline: none;
+            border-color: #0a5c48;
+            box-shadow: 0 0 0 2px rgba(10, 92, 72, 0.15);
+        }
+
+        .assign-report-delete-card {
+            border: 1px solid #fecaca;
+            border-radius: 12px;
+            background: #fffbfb;
+            padding: 14px;
+            margin-top: 12px;
+        }
+
+        .assign-report-delete-summary {
+            margin: 0 0 10px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #991b1b;
+            line-height: 1.45;
+        }
+
+        .assign-report-delete-submit-btn {
+            border-color: #b91c1c;
+            background: #b91c1c;
         }
 
         .assign-field select {
@@ -1616,15 +1653,32 @@
             backdrop-filter: blur(6px);
         }
 
+        .assign-jo-info-backdrop.open {
+            justify-content: flex-start;
+            align-items: flex-start;
+            padding: 10px;
+        }
+
         .assign-jo-info-modal {
-            width: 100%;
-            max-width: 860px;
-            max-height: 90vh;
+            width: min(calc(100vw - 20px), 1760px);
+            max-width: none;
+            max-height: calc(100vh - 20px);
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
             background: #fff;
             border-radius: 14px;
             border: 1px solid #d9dde4;
             box-shadow: 0 20px 48px rgba(0, 0, 0, .25);
+        }
+
+        .assign-jo-info-modal .assign-job-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .assign-report-backdrop {
@@ -1838,10 +1892,68 @@
             max-width: 280px;
         }
 
-        .assign-jo-address-col {
-            max-width: 220px;
+        .assign-jo-text-col {
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .assign-jo-text-plain {
+            display: inline-block;
+            max-width: 100%;
+            white-space: nowrap;
+        }
+
+        .assign-jo-expandable {
+            display: inline-flex;
+            align-items: flex-start;
+            gap: 8px;
+            max-width: 100%;
+            vertical-align: top;
+        }
+
+        .assign-jo-expandable .assign-jo-text-content {
+            display: inline-block;
+            max-width: 380px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: top;
+        }
+
+        .assign-jo-expandable.is-expanded .assign-jo-text-content {
+            max-width: 560px;
             white-space: normal;
             word-break: break-word;
+            overflow: visible;
+            text-overflow: clip;
+        }
+
+        .assign-jo-text-toggle {
+            flex-shrink: 0;
+            border: none;
+            background: transparent;
+            color: #0a5c48;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1.35;
+            text-decoration: underline;
+            white-space: nowrap;
+        }
+
+        .assign-jo-text-toggle:hover {
+            color: #064e3b;
+        }
+
+        .assign-jo-text-toggle[hidden] {
+            display: none !important;
+        }
+
+        .assign-jo-expandable:not(.has-overflow) .assign-jo-text-content {
+            max-width: none;
+            overflow: visible;
+            text-overflow: clip;
         }
 
         .assign-its-hide-unit {
@@ -1877,6 +1989,7 @@
             cursor: not-allowed;
         }
 
+        .assign-report-training-btn,
         .assign-report-detail-btn {
             border: 1px solid #93c5fd;
             border-radius: 8px;
@@ -1942,6 +2055,36 @@
 
         .assign-report-assign-card .assign-section-label:first-child {
             margin-top: 0;
+        }
+
+        .assign-report-assign-intro {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .assign-report-assign-hint {
+            margin: 0;
+            font-size: 12px;
+            color: #64748b;
+            line-height: 1.45;
+        }
+
+        .assign-report-add-btn {
+            align-self: flex-start;
+            border: 1px dashed #0a5c48;
+            border-radius: 10px;
+            background: #fff;
+            color: #0a5c48;
+            font-size: 12px;
+            font-weight: 700;
+            min-height: 38px;
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+
+        .assign-report-add-btn:hover {
+            background: #f0fdf9;
         }
 
         .assign-report-inline-actions {
@@ -2849,14 +2992,16 @@
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             overflow: auto;
-            max-height: 48vh;
+            flex: 1 1 auto;
+            min-height: 320px;
+            max-height: calc(100vh - 250px);
             background: #fff;
         }
 
         .assign-jo-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 720px;
+            min-width: 1540px;
         }
 
         .assign-jo-table th {
@@ -2876,6 +3021,7 @@
             padding: 9px 10px;
             border-bottom: 1px solid #eef2f7;
             vertical-align: middle;
+            white-space: nowrap;
         }
 
         .assign-jo-table tbody tr:hover {
@@ -3272,6 +3418,11 @@
             .col-name {
                 width: 126px;
                 min-width: 126px;
+            }
+
+            .col-total-assign {
+                width: 66px;
+                min-width: 66px;
             }
 
             .col-total {
@@ -3759,6 +3910,7 @@
                                 <tr>
                                     <th class="col-no sticky-no">No</th>
                                     <th class="col-name sticky-name">Nama</th>
+                                    <th class="col-total-assign">Total JO<br />Assign</th>
                                     <th class="col-total">Total Closed JO Training</th>
                                     <th class="col-total-maint">Total Closed JO Visit</th>
                                     <asp:Literal ID="litScheduleHeader" runat="server"></asp:Literal>
@@ -3836,7 +3988,7 @@
                 </div>
                 <div class="modal-body detail-jo-body">
                     <div class="detail-jo-search-wrap">
-                        <input type="text" id="detailJoSearchInput" class="detail-jo-search-input" placeholder="Cari JobID, Customer, JobType, Job Date, Area, Status, OverSLA, Total GPS/ACS..." />
+                        <input type="text" id="detailJoSearchInput" class="detail-jo-search-input" placeholder="Cari JobID, Customer, JobType, Job Date, Area, Status, OverSLA, Total Unit..." />
                     </div>
                     <div class="table-responsive detail-jo-table-wrap">
                         <table class="table table-bordered table-striped detail-jo-table">
@@ -3923,7 +4075,7 @@
 
                 <div id="assignJobSectionWrap">
                     <p class="assign-section-label">Assign Job</p>
-                    <div class="assign-jo-type" id="assignJobTypeWrap">
+                    <div class="assign-jo-type assign-its-hide-unit" id="assignJobTypeWrap" aria-hidden="true" hidden>
                         <button type="button" class="assign-jo-type-btn active" data-jo-type="installation">JO Training</button>
                         <button type="button" class="assign-jo-type-btn" data-jo-type="maintenance">JO Visit</button>
                     </div>
@@ -3947,12 +4099,8 @@
                             <span class="assign-info-value" id="assignInfoCustomer">-</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Total GPS Customer</span>
+                            <span class="assign-info-label">Total Unit Customer</span>
                             <span class="assign-info-value" id="assignInfoRemainingGps">0</span>
-                        </div>
-                        <div class="assign-info-item">
-                            <span class="assign-info-label">Total ACS Customer</span>
-                            <span class="assign-info-value" id="assignInfoRemainingAcs">0</span>
                         </div>
                     </div>
 
@@ -3961,13 +4109,19 @@
                         <input type="number" id="assignInputUnit" min="1" value="1" placeholder="1" />
                         <small class="assign-field-hint" id="assignInputUnitHint">Sudah Assign IT Support : 0</small>
                     </div>
-                    <div class="assign-field">
+                    <div class="assign-field assign-its-hide-unit" id="assignAreaFieldWrap">
                         <label for="assignAreaSelect" class="assign-field-label">Area</label>
                         <select id="assignAreaSelect">
                             <option value="">Pilih Area</option>
                         </select>
                         <small class="assign-field-hint assign-area-hint" id="assignAreaHint">Pilih area penugasan.</small>
                     </div>
+                </div>
+
+                <div class="assign-field" id="assignTransferNoteWrap" hidden>
+                    <label for="assignTransferNoteInput" class="assign-field-label">Catatan Pindah IT Support</label>
+                    <textarea id="assignTransferNoteInput" class="assign-dashboard-note-textarea" rows="3" placeholder="Tulis alasan pindah IT Support..."></textarea>
+                    <small class="assign-field-hint">Wajib diisi saat memindahkan JO ke IT Support lain.</small>
                 </div>
 
                 <p class="assign-section-label">Ubah Status</p>
@@ -4069,7 +4223,7 @@
             </div>
             <div class="assign-job-body">
                 <div class="assign-jo-search-wrap">
-                    <input type="text" id="assignJoSearchInput" placeholder="Cari Job ID / Customer / Branch..." />
+                    <input type="text" id="assignJoSearchInput" placeholder="Cari Job ID / Customer / Branch / Remark..." />
                     <button type="button" id="assignJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
                 <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi. Ketik <strong>Job ID tepat</strong> untuk pindahkan ke IT Support lain.</p>
@@ -4087,11 +4241,15 @@
                                 <th>Customer</th>
                                 <th>Branch Name</th>
                                 <th>Alamat</th>
+                                <th>PIC Customer</th>
+                                <th>Customer Number</th>
                                 <th>Marketing</th>
+                                <th>Remark</th>
                                 <th class="assign-jo-device-type-col">Category</th>
-                                <th>Total GPS Customer</th>
-                                <th>Total ACS Customer</th>
-                                <th title="Tanggal assign terakhir di trx_job_assign_detail">Last Assign</th>
+                                <th>Total Unit Customer</th>
+                                <th title="Tanggal assign terakhir customer yang sudah close">Last Assign</th>
+                                <th>Tanggal Create JO</th>
+                                <th>SLA Days</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -4147,16 +4305,10 @@
                                 <th>Status</th>
                                 <th>FullName</th>
                                 <th>JobID</th>
-                                <th>JobType</th>
-                                <th>DeviceGroupID</th>
-                                <th>DeviceTypeDesc</th>
-                                <th>Area</th>
-                                <th>PoliceNo</th>
-                                <th>NoSN</th>
-                                <th>GSMNo</th>
                                 <th>SchDate</th>
-                                <th>InstallDate</th>
-                                <th>MIS_Date</th>
+                                <th>Tanggal Assign</th>
+                                <th>Alamat</th>
+                                <th>PIC Customer</th>
                                 <th>Dikerjakan Oleh</th>
                             </tr>
                         </thead>
@@ -4164,9 +4316,29 @@
                     </table>
                 </div>
 
+                <div class="assign-report-delete-card" id="assignReportDeleteCard" hidden>
+                    <p class="assign-section-label">Hapus Assign</p>
+                    <p class="assign-report-delete-summary" id="assignReportDeleteSummary">-</p>
+                    <div class="assign-field">
+                        <label for="assignReportDeleteNoteInput" class="assign-field-label">Catatan Hapus Assign</label>
+                        <textarea id="assignReportDeleteNoteInput" class="assign-dashboard-note-textarea" rows="3" placeholder="Tulis alasan penghapusan..."></textarea>
+                        <small class="assign-field-hint">Wajib diisi sebelum menghapus assign.</small>
+                    </div>
+                    <div class="assign-report-inline-actions">
+                        <button type="button" class="assign-action-btn cancel" id="assignReportDeleteCancelBtn">Batal</button>
+                        <button type="button" class="assign-report-submit-btn assign-report-delete-submit-btn" id="assignReportDeleteConfirmBtn">Hapus</button>
+                    </div>
+                </div>
+
                 <div class="assign-report-assign-card" id="assignReportAssignCard">
+                    <div class="assign-report-assign-intro" id="assignReportAssignIntro">
+                        <p class="assign-section-label">Assign Job</p>
+                        <p class="assign-report-assign-hint">Klik tombol di bawah untuk menambah job order baru pada tanggal ini.</p>
+                        <button type="button" class="assign-report-add-btn" id="assignReportAddBtn">+ Tambah Assign</button>
+                    </div>
+                    <div class="assign-report-assign-form" id="assignReportAssignForm" hidden>
                     <p class="assign-section-label">Assign Job</p>
-                    <div class="assign-jo-type" id="assignReportJobTypeWrap">
+                    <div class="assign-jo-type assign-its-hide-unit" id="assignReportJobTypeWrap" aria-hidden="true" hidden>
                         <button type="button" class="assign-jo-type-btn active" data-jo-type="installation">JO Training</button>
                         <button type="button" class="assign-jo-type-btn" data-jo-type="maintenance">JO Visit</button>
                     </div>
@@ -4190,12 +4362,8 @@
                             <span class="assign-info-value" id="assignReportInfoCustomer">-</span>
                         </div>
                         <div class="assign-info-item">
-                            <span class="assign-info-label">Total GPS Customer</span>
+                            <span class="assign-info-label">Total Unit Customer</span>
                             <span class="assign-info-value" id="assignReportRemainingGps">0</span>
-                        </div>
-                        <div class="assign-info-item">
-                            <span class="assign-info-label">Total ACS Customer</span>
-                            <span class="assign-info-value" id="assignReportRemainingAcs">0</span>
                         </div>
                     </div>
 
@@ -4204,12 +4372,17 @@
                         <input type="number" id="assignReportInputUnit" min="1" value="1" placeholder="Input assign GPS unit" />
                         <small class="assign-field-hint" id="assignReportInputUnitHint">Sudah Assign IT Support : 0</small>
                     </div>
-                    <div class="assign-field">
+                    <div class="assign-field assign-its-hide-unit" id="assignReportAreaFieldWrap">
                         <label for="assignReportAreaSelect" class="assign-field-label">Area</label>
                         <select id="assignReportAreaSelect">
                             <option value="">Pilih Area</option>
                         </select>
                         <small class="assign-field-hint assign-area-hint" id="assignReportAreaHint">Pilih area penugasan.</small>
+                    </div>
+                    <div class="assign-field" id="assignReportTransferNoteWrap" hidden>
+                        <label for="assignReportTransferNoteInput" class="assign-field-label">Catatan Pindah IT Support</label>
+                        <textarea id="assignReportTransferNoteInput" class="assign-dashboard-note-textarea" rows="3" placeholder="Tulis alasan pindah IT Support..."></textarea>
+                        <small class="assign-field-hint">Wajib diisi saat memindahkan JO ke IT Support lain.</small>
                     </div>
 
                     <p class="assign-section-label">Ubah Status</p>
@@ -4221,7 +4394,9 @@
                     </div>
 
                     <div class="assign-report-inline-actions">
+                        <button type="button" class="assign-action-btn cancel" id="assignReportCancelAddBtn">Batal</button>
                         <button type="button" class="assign-report-submit-btn" id="assignReportAssignBtn">Assign</button>
+                    </div>
                     </div>
                 </div>
 
@@ -4424,7 +4599,9 @@
                 isSaving: false,
                 isLoading: false,
                 submitAction: "assign",
-                requestToken: 0
+                requestToken: 0,
+                showAssignForm: false,
+                pendingDeleteRowIndex: -1
             };
             var areaLookupState = {
                 rows: [],
@@ -4560,6 +4737,296 @@
 
             function getReportRemarkBackdrop() {
                 return document.getElementById("assignReportRemarkBackdrop");
+            }
+
+            function getDashboardNoteValue(inputId) {
+                var input = document.getElementById(inputId);
+                return input ? (input.value || "").toString().trim() : "";
+            }
+
+            function clearDashboardNote(inputId) {
+                var input = document.getElementById(inputId);
+                if (input) {
+                    input.value = "";
+                }
+            }
+
+            function normalizeTechId(value) {
+                return (value || "").toString().trim().toUpperCase();
+            }
+
+            function getOrderRemainingUnit(order) {
+                if (!order) {
+                    return 0;
+                }
+                var legacy = toInt(order.RemainingUnit, -1);
+                if (legacy >= 0) {
+                    return legacy;
+                }
+                return toInt(order.RemainingUnitGps, 0) + toInt(order.RemainingUnitAcs, 0);
+            }
+
+            function getOrderAssignedTechnicianId(order) {
+                if (!order) {
+                    return "";
+                }
+                return (order.AssignedTechnicianId || order.AssignedTechnicianID || "").toString().trim();
+            }
+
+            function getTargetAssignTechnicianId(context) {
+                if (context === "report") {
+                    return (reportModalState.technicianId || "").trim();
+                }
+                var cell = assignModalState.activeCell;
+                return cell ? (cell.getAttribute("data-tech-id") || "").trim() : "";
+            }
+
+            function isJobOrderTransfer(order, targetTechnicianId) {
+                if (!order) {
+                    return false;
+                }
+
+                var targetId = normalizeTechId(targetTechnicianId);
+                var assignedId = normalizeTechId(getOrderAssignedTechnicianId(order));
+
+                if (assignedId && targetId && assignedId !== targetId) {
+                    return true;
+                }
+
+                if (order.IsTransfer === true || order.IsTransfer === "true" || order.IsTransfer === 1) {
+                    if (assignedId && targetId) {
+                        return assignedId !== targetId;
+                    }
+                    return toInt(order.TotalAssign, 0) > 0;
+                }
+
+                return toInt(order.TotalAssign, 0) > 0
+                    && getOrderRemainingUnit(order) <= 0
+                    && assignedId
+                    && targetId
+                    && assignedId !== targetId;
+            }
+
+            function isJobOrderTransferCandidate(order) {
+                if (!order) {
+                    return false;
+                }
+                if (order.IsTransfer === true || order.IsTransfer === "true" || order.IsTransfer === 1) {
+                    return true;
+                }
+                if (normalizeTechId(getOrderAssignedTechnicianId(order))) {
+                    return true;
+                }
+                return toInt(order.TotalAssign, 0) > 0 && getOrderRemainingUnit(order) <= 0;
+            }
+
+            function requiresTransferNoteForOrder(order, targetTechnicianId) {
+                if (!order) {
+                    return false;
+                }
+                if (order._requiresTransferNote === true) {
+                    return true;
+                }
+                return isJobOrderTransfer(order, targetTechnicianId);
+            }
+
+            function enrichSelectedOrderAssignContext(order, context, callback) {
+                if (!order || !order.JobID) {
+                    if (typeof callback === "function") {
+                        callback(order);
+                    }
+                    return;
+                }
+
+                var techId = getTargetAssignTechnicianId(context);
+                callAssignPageMethod(
+                    "GetJobOrderAssignContext",
+                    {
+                        jobId: order.JobID || "",
+                        technicianId: techId
+                    },
+                    function (result) {
+                        var enriched = order;
+                        if (result && (result.Result || "").toUpperCase() === "SUCCESS") {
+                            enriched._requiresTransferNote = !!result.RequiresTransferNote;
+                            enriched.IsAlreadyAssigned = !!result.IsAlreadyAssigned;
+                            if (result.AssignedTechnicianId) {
+                                enriched.AssignedTechnicianId = result.AssignedTechnicianId;
+                            }
+                            if (result.AssignedTechnicianName) {
+                                enriched.AssignedTechnicianName = result.AssignedTechnicianName;
+                            }
+                            if (enriched._requiresTransferNote || enriched.IsAlreadyAssigned) {
+                                enriched.IsTransfer = true;
+                            }
+                        }
+                        if (typeof callback === "function") {
+                            callback(enriched);
+                        }
+                    },
+                    function () {
+                        if (typeof callback === "function") {
+                            callback(order);
+                        }
+                    });
+            }
+
+            function applySelectedJobOrder(order, context) {
+                enrichSelectedOrderAssignContext(order, context, function (enriched) {
+                    var pickedJoType = "new_install";
+                    if (enriched && (enriched.DeviceTypeDesc || "").toString().toLowerCase().indexOf("visit") >= 0) {
+                        pickedJoType = "maintenance";
+                    }
+                    if (context === "report") {
+                        reportModalState.showAssignForm = true;
+                        reportModalState.joType = pickedJoType;
+                        reportModalState.selectedOrder = enriched;
+                        reportModalState.editingRowIndex = -1;
+                        applySelectedOrderAreaFromCustomer(enriched, reportModalState);
+                        renderReportAssignForm();
+                        if (requiresTransferNoteForOrder(enriched, reportModalState.technicianId)) {
+                            setReportFeedback(getJobOrderTransferLabel(enriched, reportModalState.technicianId) || "Isi catatan pindah IT Support sebelum assign.", false, false);
+                        } else {
+                            setReportFeedback("", false, false);
+                        }
+                    } else {
+                        assignModalState.joType = pickedJoType;
+                        assignModalState.selectedOrder = enriched;
+                        applySelectedOrderAreaFromCustomer(enriched, assignModalState);
+                        renderOrderInfo();
+                        if (requiresTransferNoteForOrder(enriched, getTargetAssignTechnicianId("main"))) {
+                            setFeedback(getJobOrderTransferLabel(enriched, getTargetAssignTechnicianId("main")) || "Isi catatan pindah IT Support sebelum assign.", false, false);
+                        } else {
+                            setFeedback("", false, false);
+                        }
+                    }
+                });
+            }
+
+            function syncTransferNoteField(wrapId, inputId, order, targetTechnicianId) {
+                var wrap = document.getElementById(wrapId);
+                var show = requiresTransferNoteForOrder(order, targetTechnicianId);
+                if (wrap) {
+                    wrap.hidden = !show;
+                    wrap.style.display = show ? "" : "none";
+                }
+                if (!show) {
+                    clearDashboardNote(inputId);
+                }
+            }
+
+            function renderReportDeletePanel() {
+                var card = document.getElementById("assignReportDeleteCard");
+                var assignCard = document.getElementById("assignReportAssignCard");
+                var rowIndex = reportModalState.pendingDeleteRowIndex;
+                var show = rowIndex >= 0;
+                var rows = reportModalState.rows || [];
+                var row = show ? (rows[rowIndex] || {}) : null;
+                var summary = document.getElementById("assignReportDeleteSummary");
+
+                if (card) {
+                    card.hidden = !show;
+                    card.style.display = show ? "" : "none";
+                }
+                if (assignCard) {
+                    if (show) {
+                        assignCard.style.display = "none";
+                    } else if (!getIsTechnicianUser() && !isPastScheduleDate(reportModalState.schDate || "")) {
+                        assignCard.style.display = "";
+                    }
+                }
+                if (summary && row) {
+                    summary.textContent = (row.JobID || "-") + " - " + getScheduleRowCustomerName(row);
+                }
+                if (!show) {
+                    clearDashboardNote("assignReportDeleteNoteInput");
+                }
+            }
+
+            function openReportDeletePanel(rowIndex) {
+                reportModalState.pendingDeleteRowIndex = rowIndex;
+                reportModalState.showAssignForm = false;
+                resetReportAssignFormFields();
+                reportModalState.pendingDeleteRowIndex = rowIndex;
+                renderReportAssignForm();
+                renderReportDeletePanel();
+                var deleteInput = document.getElementById("assignReportDeleteNoteInput");
+                if (deleteInput) {
+                    window.setTimeout(function () {
+                        deleteInput.focus();
+                    }, 0);
+                }
+                setReportFeedback("Isi catatan lalu klik Hapus untuk menghapus assign.", false, false);
+            }
+
+            function cancelReportDeletePanel() {
+                reportModalState.pendingDeleteRowIndex = -1;
+                clearDashboardNote("assignReportDeleteNoteInput");
+                renderReportDeletePanel();
+                renderReportAssignForm();
+                setReportFeedback("", false, false);
+            }
+
+            function confirmReportDelete() {
+                var rowIndex = reportModalState.pendingDeleteRowIndex;
+                var rows = reportModalState.rows || [];
+                if (rowIndex < 0 || rowIndex >= rows.length) {
+                    cancelReportDeletePanel();
+                    return;
+                }
+
+                var row = rows[rowIndex] || {};
+                var actionRemark = getDashboardNoteValue("assignReportDeleteNoteInput");
+                if (!actionRemark) {
+                    setReportFeedback("Catatan hapus assign wajib diisi.", true, false);
+                    var deleteInput = document.getElementById("assignReportDeleteNoteInput");
+                    if (deleteInput) {
+                        deleteInput.focus();
+                    }
+                    return;
+                }
+
+                if (!row.AssignID) {
+                    setReportFeedback("AssignID tidak ditemukan untuk data yang dipilih.", true, false);
+                    return;
+                }
+                if (typeof row.Seq === "undefined" || row.Seq === null || toInt(row.Seq, -1) < 0) {
+                    setReportFeedback("Seq tidak ditemukan untuk data yang dipilih.", true, false);
+                    return;
+                }
+
+                setReportFeedback("Menghapus assign job...", false, false);
+                callAssignPageMethod(
+                    "DeleteScheduleAssign",
+                    {
+                        assignId: row.AssignID || "",
+                        seq: toInt(row.Seq, -1),
+                        actionRemark: actionRemark
+                    },
+                    function (result) {
+                        var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
+                        if (!success) {
+                            setReportFeedback((result && result.Message) || "Gagal menghapus assign job.", true, false);
+                            return;
+                        }
+
+                        reportModalState.pendingDeleteRowIndex = -1;
+                        clearDashboardNote("assignReportDeleteNoteInput");
+                        setReportFeedback((result && result.Message) || "Assign job berhasil dihapus.", false, true);
+                        loadCompletedReportModalData(false);
+                        renderReportDeletePanel();
+                        refreshScheduleDayState(
+                            reportModalState.schDate,
+                            [reportModalState.technicianId],
+                            reportModalState.activeCell,
+                            function () { });
+                        if (typeof fetchJobOrderInformation === "function") {
+                            fetchJobOrderInformation();
+                        }
+                    },
+                    function (errorMessage) {
+                        setReportFeedback("Gagal menghapus assign job. " + (errorMessage || ""), true, false);
+                    });
             }
 
             function isCompletedReportModalOpen() {
@@ -4882,6 +5349,34 @@
                 return false;
             }
 
+            function formatScheduleAssignDate(dateText) {
+                var text = (dateText || "").toString().trim();
+                if (!text) {
+                    return "-";
+                }
+                if (parseIsoDate(text)) {
+                    return formatDisplayDate(text);
+                }
+                return text;
+            }
+
+            function getScheduleRowCustomerName(row) {
+                row = row || {};
+                var name = (row.CustomerName || row.FullName || "").toString().trim();
+                if (!name) {
+                    var customer = (row.Customer || "").toString().trim();
+                    var custId = (row.CustID || "").toString().trim();
+                    if (customer && customer !== custId) {
+                        if (customer.indexOf(" - ") >= 0) {
+                            name = customer.split(" - ").slice(1).join(" - ").trim();
+                        } else if (!custId || customer.toUpperCase() !== custId.toUpperCase()) {
+                            name = customer;
+                        }
+                    }
+                }
+                return name || "-";
+            }
+
             function renderScheduleReportTableRows() {
                 var reportTableBody = document.getElementById("assignReportTableBody");
                 if (!reportTableBody) {
@@ -4889,7 +5384,7 @@
                 }
 
                 if (reportModalState.isLoading) {
-                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"15\">"
+                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"10\">"
                         + "<div class=\"assign-closed-loading\" style=\"min-height:140px;\">"
                         + "<span class=\"assign-closed-loading-spinner\" aria-hidden=\"true\"></span>"
                         + "<span>Memuat data Training/Visit...</span>"
@@ -4899,7 +5394,7 @@
 
                 var rows = reportModalState.rows || [];
                 if (!rows.length) {
-                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"15\">Belum ada data schedule pada tanggal ini.</td></tr>";
+                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"10\">Belum ada data schedule pada tanggal ini.</td></tr>";
                     return;
                 }
 
@@ -4911,14 +5406,8 @@
                     var badgeClass = isCompleted ? "assign-report-status done" : "assign-report-status pending";
                     var canDelete = row.CanDelete && !getIsTechnicianUser();
                     var canEdit = canDelete;
-                    var detailButton = "<button type=\"button\" class=\"assign-report-detail-btn\" data-row-index=\"" + i + "\">Detail</button>";
+                    var detailButton = "<button type=\"button\" class=\"assign-report-training-btn\" data-row-index=\"" + i + "\">Info</button>";
                     var installButton = "";
-                    if (!isCompleted && isScheduleRowNewInstall(row)) {
-                        var installUrl = buildInstallationJobNewUrl(row.JobID);
-                        if (installUrl) {
-                            installButton = "<a class=\"assign-report-install-btn\" href=\"" + escapeHtml(installUrl) + "\" title=\"Input Training\">Training</a>";
-                        }
-                    }
                     var editButton = canEdit
                         ? "<button type=\"button\" class=\"assign-report-edit-btn\" data-row-index=\"" + i + "\">Edit</button>"
                         : "";
@@ -4926,21 +5415,16 @@
                         ? "<button type=\"button\" class=\"assign-report-delete-btn\" data-row-index=\"" + i + "\">Delete</button>"
                         : "";
                     var actionButton = "<div class=\"assign-report-action-wrap\">" + detailButton + installButton + editButton + deleteButton + "</div>";
+                    var customerName = getScheduleRowCustomerName(row);
                     html.push("<tr>"
                         + "<td class=\"col-action\">" + actionButton + "</td>"
                         + "<td><span class=\"" + badgeClass + "\">" + escapeHtml(statusText) + "</span></td>"
-                        + "<td class=\"col-customer\">" + escapeHtml(row.Customer || "-") + "</td>"
+                        + "<td class=\"col-customer\">" + escapeHtml(customerName) + "</td>"
                         + "<td>" + escapeHtml(row.JobID || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.JobType || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.DeviceGroupID || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.DeviceTypeDesc || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.AreaName || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.PoliceNo || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.NoSN || "-") + "</td>"
-                        + "<td>" + escapeHtml(row.GSMNo || "-") + "</td>"
                         + "<td>" + escapeHtml(formatDisplayDate(row.SchDate || reportModalState.schDate)) + "</td>"
-                        + "<td>" + escapeHtml(formatDisplayDate(row.InstallDate || "")) + "</td>"
-                        + "<td>" + escapeHtml(formatDisplayDate(row.MISDate || row.MIS_Date || "")) + "</td>"
+                        + "<td>" + escapeHtml(formatScheduleAssignDate(row.AssignDate)) + "</td>"
+                        + "<td class=\"assign-jo-address-col\">" + escapeHtml(row.Address || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.PicName || "-") + "</td>"
                         + "<td>" + escapeHtml(row.TechnicianName || reportModalState.technicianName || "-") + "</td>"
                         + "</tr>");
                 }
@@ -4948,6 +5432,10 @@
             }
 
             function openReportRemarkModal(row) {
+                openTrainingInfoModal(row);
+            }
+
+            function openTrainingInfoModal(row) {
                 var backdrop = getReportRemarkBackdrop();
                 if (!backdrop) {
                     return;
@@ -4956,19 +5444,31 @@
                 var title = document.getElementById("assignReportRemarkTitle");
                 var subtitle = document.getElementById("assignReportRemarkSubtitle");
                 var content = document.getElementById("assignReportRemarkContent");
+                var jobId = ((row && row.JobID) || "-").toString();
+                var customer = getScheduleRowCustomerName(row);
+                var schDate = formatDisplayDate((row && row.SchDate) || "");
+                var assignDate = formatScheduleAssignDate((row && row.AssignDate) || "");
+                var address = ((row && row.Address) || "-").toString();
+                var picName = ((row && row.PicName) || "-").toString();
                 var remarkText = ((row && row.Remark) || "").toString().trim();
                 if (!remarkText) {
                     remarkText = "Tidak ada remark.";
                 }
 
                 if (title) {
-                    title.textContent = "Detail Remark";
+                    title.textContent = "Detail Training";
                 }
                 if (subtitle) {
-                    subtitle.textContent = "JobID: " + ((row && row.JobID) ? row.JobID : "-");
+                    subtitle.textContent = "Training ID: " + jobId;
                 }
                 if (content) {
-                    content.textContent = remarkText;
+                    content.innerHTML = ""
+                        + "<div><strong>Customer:</strong> " + escapeHtml(customer) + "</div>"
+                        + "<div><strong>Tanggal Jadwal:</strong> " + escapeHtml(schDate || "-") + "</div>"
+                        + "<div><strong>Tanggal Assign:</strong> " + escapeHtml(assignDate || "-") + "</div>"
+                        + "<div><strong>Alamat:</strong> " + escapeHtml(address) + "</div>"
+                        + "<div><strong>PIC Customer:</strong> " + escapeHtml(picName) + "</div>"
+                        + "<div style=\"margin-top:8px;\"><strong>Catatan:</strong><br>" + escapeHtml(remarkText) + "</div>";
                 }
                 backdrop.classList.add("open");
             }
@@ -5081,14 +5581,66 @@
                 }
             }
 
+            function resetReportAssignFormFields() {
+                reportModalState.selectedOrder = null;
+                reportModalState.editingRowIndex = -1;
+                reportModalState.joType = "new_install";
+                reportModalState.deviceGroupId = "GPS";
+                reportModalState.targetStatus = "AV";
+                reportModalState.selectedAreaId = "";
+                clearDashboardNote("assignReportTransferNoteInput");
+                if (areaLookupState.rows.length) {
+                    reportModalState.selectedAreaId = normalizeAreaId(areaLookupState.rows[0].AreaID);
+                }
+            }
+
+            function openReportAssignCreator() {
+                reportModalState.pendingDeleteRowIndex = -1;
+                resetReportAssignFormFields();
+                reportModalState.showAssignForm = true;
+                renderReportDeletePanel();
+                renderReportAssignForm();
+                setReportFeedback("", false, false);
+            }
+
+            function cancelReportAssignForm() {
+                reportModalState.showAssignForm = false;
+                resetReportAssignFormFields();
+                renderReportAssignForm();
+                setReportFeedback("", false, false);
+            }
+
             function renderReportAssignForm() {
                 var assignCard = document.getElementById("assignReportAssignCard");
+                var intro = document.getElementById("assignReportAssignIntro");
+                var formWrap = document.getElementById("assignReportAssignForm");
                 var isTechnicianUser = getIsTechnicianUser();
                 var isPastDate = isPastScheduleDate(reportModalState.schDate || "");
                 if (assignCard) {
                     assignCard.style.display = (isTechnicianUser || isPastDate) ? "none" : "";
                 }
                 if (isTechnicianUser || isPastDate) {
+                    return;
+                }
+
+                if (reportModalState.pendingDeleteRowIndex >= 0) {
+                    if (assignCard) {
+                        assignCard.style.display = "none";
+                    }
+                    renderReportDeletePanel();
+                    return;
+                }
+
+                var showForm = reportModalState.showAssignForm || reportModalState.editingRowIndex >= 0;
+                if (intro) {
+                    intro.hidden = showForm;
+                    intro.style.display = showForm ? "none" : "";
+                }
+                if (formWrap) {
+                    formWrap.hidden = !showForm;
+                    formWrap.style.display = showForm ? "" : "none";
+                }
+                if (!showForm) {
                     return;
                 }
 
@@ -5108,7 +5660,7 @@
                 setActiveReportAssignButtons();
 
                 if (pickedJo) {
-                    var transferLabel = selected ? getJobOrderTransferLabel(selected) : "";
+                    var transferLabel = selected ? getJobOrderTransferLabel(selected, reportModalState.technicianId) : "";
                     pickedJo.textContent = selected
                         ? (selected.JobID + " - " + getCustomerDisplayText(selected) + " (" + (selected.BranchName || "-") + ")" + (transferLabel ? " [" + transferLabel + "]" : ""))
                         : "Belum ada Job Order dipilih";
@@ -5175,6 +5727,7 @@
                 if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(reportModalState.selectedAreaId)) {
                     areaSelect.value = normalizeAreaId(reportModalState.selectedAreaId);
                 }
+                syncTransferNoteField("assignReportTransferNoteWrap", "assignReportTransferNoteInput", selected, reportModalState.technicianId);
             }
 
             function validateReportAssignInput(showFeedback) {
@@ -5196,14 +5749,7 @@
                     : toInt(selected.RemainingUnitGps, 0);
                 var qty = 1;
                 var groupText = reportModalState.deviceGroupId === "ACS" ? "ACS" : "GPS";
-                var selectedAreaId = normalizeAreaId(reportModalState.selectedAreaId);
-                if (!selectedAreaId) {
-                    if (showFeedback) {
-                        setReportFeedback("Area wajib dipilih.", true, false);
-                    }
-                    return false;
-                }
-                if (reportModalState.editingRowIndex < 0 && remaining <= 0 && !isJobOrderTransfer(selected)) {
+                if (reportModalState.editingRowIndex < 0 && remaining <= 0 && !isJobOrderTransfer(selected, reportModalState.technicianId)) {
                     if (showFeedback) {
                         var assignedCount = toInt(selected.TotalAssign, 0);
                         if (assignedCount > 0) {
@@ -5214,8 +5760,21 @@
                     }
                     return false;
                 }
-                if (isJobOrderTransfer(selected) && showFeedback) {
-                    setReportFeedback(getJobOrderTransferLabel(selected), false, false);
+                if (requiresTransferNoteForOrder(selected, reportModalState.technicianId)) {
+                    var transferNote = getDashboardNoteValue("assignReportTransferNoteInput");
+                    if (!transferNote) {
+                        if (showFeedback) {
+                            setReportFeedback("Catatan pindah IT Support wajib diisi.", true, false);
+                            var transferInput = document.getElementById("assignReportTransferNoteInput");
+                            if (transferInput) {
+                                transferInput.focus();
+                            }
+                        }
+                        return false;
+                    }
+                    if (showFeedback) {
+                        setReportFeedback(getJobOrderTransferLabel(selected, reportModalState.technicianId), false, false);
+                    }
                 }
                 return true;
             }
@@ -5233,6 +5792,7 @@
                 }
                 renderReportSummary();
                 renderScheduleReportTableRows();
+                renderReportDeletePanel();
                 renderReportAssignForm();
             }
 
@@ -5314,6 +5874,8 @@
                 reportModalState.submitAction = "assign";
                 reportModalState.totalUnitSelesai = 0;
                 reportModalState.totalUnitBelumSelesai = 0;
+                reportModalState.showAssignForm = false;
+                reportModalState.pendingDeleteRowIndex = -1;
 
                 var subtitle = document.getElementById("assignReportSubtitle");
                 if (subtitle) {
@@ -5327,6 +5889,7 @@
 
                 renderReportSummary();
                 renderScheduleReportTableRows();
+                renderReportDeletePanel();
                 renderReportAssignForm();
                 setReportFeedback("Memuat data laporan...", false, false);
 
@@ -5403,20 +5966,32 @@
                         return;
                     }
                     qty = 1;
-                    selectedAreaId = normalizeAreaId(reportModalState.selectedAreaId);
+                    selectedAreaId = selectedOrder ? normalizeAreaId(selectedOrder.DefaultAreaId || "") : "";
                 }
 
                 var editingRowIndex = reportModalState.editingRowIndex;
                 var editingRow = editingRowIndex >= 0 ? ((reportModalState.rows || [])[editingRowIndex] || null) : null;
 
+                function proceedReportAssignSave(assignRemark) {
                 function finishAssignSave(result) {
                     setReportFeedback((result && result.Message) || "Assignment berhasil disimpan.", false, true);
-                    reportModalState.selectedOrder = null;
+                    reportModalState.showAssignForm = false;
                     reportModalState.editingRowIndex = -1;
+                    var sourceTechId = getOrderAssignedTechnicianId(selectedOrder);
+                    var techIds = [reportModalState.technicianId];
+                    if (sourceTechId && isJobOrderTransfer(selectedOrder, reportModalState.technicianId)) {
+                        techIds.push(sourceTechId);
+                    }
+                    reportModalState.selectedOrder = null;
+                    clearDashboardNote("assignReportTransferNoteInput");
                     loadCompletedReportModalData(false);
-                    refreshAvailabilityAfterSave(reportModalState.technicianId, reportModalState.schDate, "AV", function () {
-                        setReportAssignSaving(false);
-                    }, reportModalState.activeCell);
+                    refreshScheduleDayState(
+                        reportModalState.schDate,
+                        techIds,
+                        reportModalState.activeCell,
+                        function () {
+                            setReportAssignSaving(false);
+                        });
                 }
 
                 function runSaveAssign() {
@@ -5432,13 +6007,20 @@
                             deviceGroupId: selectedDeviceGroup,
                             areaId: selectedAreaId,
                             targetStatus: selectedStatus,
-                            insDeviceTypeId: getInsDeviceTypeId(reportModalState.joType, selectedOrder)
+                            insDeviceTypeId: getInsDeviceTypeId(reportModalState.joType, selectedOrder),
+                            assignRemark: assignRemark
                         },
                         function (result) {
                             var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
                             if (!success) {
                                 setReportAssignSaving(false);
-                                setReportFeedback((result && result.Message) || "Gagal menyimpan assignment.", true, false);
+                                var failedMessage = (result && result.Message) || "Gagal menyimpan assignment.";
+                                if ((failedMessage || "").toLowerCase().indexOf("catatan pindah") >= 0 && selectedOrder) {
+                                    selectedOrder._requiresTransferNote = true;
+                                    reportModalState.selectedOrder = selectedOrder;
+                                    renderReportAssignForm();
+                                }
+                                setReportFeedback(failedMessage, true, false);
                                 return;
                             }
                             finishAssignSave(result);
@@ -5475,6 +6057,30 @@
                 setReportAssignSaving(true);
                 setReportFeedback("Menyimpan assignment...", false, false);
                 runSaveAssign();
+                }
+
+                if (!isAvailableStatus || !selectedOrder) {
+                    proceedReportAssignSave("");
+                    return;
+                }
+
+                enrichSelectedOrderAssignContext(selectedOrder, "report", function (enriched) {
+                    reportModalState.selectedOrder = enriched;
+                    renderReportAssignForm();
+                    var assignRemark = "";
+                    if (requiresTransferNoteForOrder(enriched, reportModalState.technicianId)) {
+                        assignRemark = getDashboardNoteValue("assignReportTransferNoteInput");
+                        if (!assignRemark) {
+                            setReportFeedback("Catatan pindah IT Support wajib diisi.", true, false);
+                            var transferInput = document.getElementById("assignReportTransferNoteInput");
+                            if (transferInput) {
+                                transferInput.focus();
+                            }
+                            return;
+                        }
+                    }
+                    proceedReportAssignSave(assignRemark);
+                });
             }
 
             function editAssignFromReportRow(rowIndex) {
@@ -5493,12 +6099,14 @@
                     return;
                 }
 
+                reportModalState.pendingDeleteRowIndex = -1;
+                reportModalState.showAssignForm = true;
                 reportModalState.editingRowIndex = rowIndex;
                 reportModalState.targetStatus = "AV";
                 reportModalState.selectedOrder = {
                     JobID: row.JobID || "",
                     Customer: row.CustID || "",
-                    CustomerName: row.Customer || "",
+                    CustomerName: getScheduleRowCustomerName(row),
                     BranchName: "",
                     RemainingUnitGps: 1,
                     RemainingUnitAcs: 0,
@@ -5509,6 +6117,7 @@
                 reportModalState.selectedAreaId = normalizeAreaId(row.AreaID || "");
                 var jobTypeText = ((row.JobType || "") + "").toLowerCase();
                 reportModalState.joType = jobTypeText.indexOf("visit") >= 0 ? "maintenance" : "new_install";
+                renderReportDeletePanel();
                 renderReportAssignForm();
                 setReportFeedback("Mode edit: ubah Area lalu klik Simpan Perubahan.", false, false);
             }
@@ -5529,10 +6138,6 @@
                     return;
                 }
 
-                if (!window.confirm("Yakin ingin menghapus assign job ini?")) {
-                    return;
-                }
-
                 if (!row.AssignID) {
                     setReportFeedback("AssignID tidak ditemukan untuk data yang dipilih.", true, false);
                     return;
@@ -5542,30 +6147,7 @@
                     return;
                 }
 
-                setReportFeedback("Menghapus assign job...", false, false);
-                callAssignPageMethod(
-                    "DeleteScheduleAssign",
-                    {
-                        assignId: row.AssignID || "",
-                        seq: toInt(row.Seq, -1)
-                    },
-                    function (result) {
-                        var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
-                        if (!success) {
-                            setReportFeedback((result && result.Message) || "Gagal menghapus assign job.", true, false);
-                            return;
-                        }
-
-                        setReportFeedback((result && result.Message) || "Assign job berhasil dihapus.", false, true);
-                        loadCompletedReportModalData(false);
-                        refreshAvailabilityAfterSave(reportModalState.technicianId, reportModalState.schDate, "AV", function () { }, reportModalState.activeCell);
-                        if (typeof fetchJobOrderInformation === "function") {
-                            fetchJobOrderInformation();
-                        }
-                    },
-                    function (errorMessage) {
-                        setReportFeedback("Gagal menghapus assign job. " + (errorMessage || ""), true, false);
-                    });
+                openReportDeletePanel(rowIndex);
             }
 
             function openDayTotalJoModal(trigger) {
@@ -6275,37 +6857,59 @@
                 cell.setAttribute("tabindex", (isClickable || isReportClickable) ? "0" : "-1");
             }
 
-            function refreshAvailabilityAfterSave(technicianId, scheduleDate, fallbackDisplay, callback, targetCell) {
-                callAssignPageMethod(
-                    "RefreshAvailability",
-                    {
-                        technicianId: technicianId || "",
-                        schDate: scheduleDate || ""
-                    },
-                    function (result) {
-                        var isSuccess = (result.Result || "").toUpperCase() === "SUCCESS";
-                        if (isSuccess) {
-                            updateCellVisualAfterSave(
-                                result.DisplayValue || fallbackDisplay,
-                                result.CanAssign,
-                                targetCell,
-                                {
-                                    hasRemainingJo: !!result.HasRemainingJo,
-                                    remainingJo: parseInt(result.RemainingJo, 10)
-                                });
-                        } else {
-                            updateCellVisualAfterSave(fallbackDisplay, false, targetCell);
-                        }
-                        if (typeof callback === "function") {
-                            callback();
-                        }
-                    },
-                    function () {
-                        updateCellVisualAfterSave(fallbackDisplay, false, targetCell);
-                        if (typeof callback === "function") {
-                            callback();
-                        }
-                    });
+            function refreshAvailabilityAfterSave(technicianId, scheduleDate, fallbackDisplay, callback, targetCell, extraTechnicianIds) {
+                var techIds = [];
+                var seen = {};
+                function addTechId(id) {
+                    id = (id || "").trim();
+                    if (!id || seen[id]) {
+                        return;
+                    }
+                    seen[id] = true;
+                    techIds.push(id);
+                }
+
+                addTechId(technicianId);
+                if (extraTechnicianIds && extraTechnicianIds.length) {
+                    for (var i = 0; i < extraTechnicianIds.length; i++) {
+                        addTechId(extraTechnicianIds[i]);
+                    }
+                }
+                if (!techIds.length) {
+                    techIds.push((technicianId || "").trim());
+                }
+
+                var pending = techIds.length;
+                function finishOne() {
+                    pending--;
+                    if (pending <= 0 && typeof callback === "function") {
+                        callback();
+                    }
+                }
+
+                for (var j = 0; j < techIds.length; j++) {
+                    (function (techId) {
+                        var cellForTech = targetCell
+                            && normalizeTechId(targetCell.getAttribute("data-tech-id")) === normalizeTechId(techId)
+                            ? targetCell
+                            : findScheduleCell(techId, scheduleDate);
+
+                        callAssignPageMethod(
+                            "RefreshAvailability",
+                            {
+                                technicianId: techId || "",
+                                schDate: scheduleDate || ""
+                            },
+                            function (result) {
+                                applyRefreshAvailabilityResult(result, techId, scheduleDate, fallbackDisplay, cellForTech);
+                                finishOne();
+                            },
+                            function () {
+                                applyRefreshAvailabilityResult(null, techId, scheduleDate, fallbackDisplay, cellForTech);
+                                finishOne();
+                            });
+                    })(techIds[j]);
+                }
             }
 
             function getJoInfoBackdrop() {
@@ -6319,6 +6923,51 @@
                     .replace(/>/g, "&gt;")
                     .replace(/"/g, "&quot;")
                     .replace(/'/g, "&#39;");
+            }
+
+            function renderJoExpandableText(value) {
+                var text = String(value == null || value === "" ? "-" : value);
+                var safe = escapeHtml(text);
+                if (text === "-") {
+                    return "<span class=\"assign-jo-text-plain\">" + safe + "</span>";
+                }
+                return "<div class=\"assign-jo-expandable\">"
+                    + "<span class=\"assign-jo-text-content\">" + safe + "</span>"
+                    + "<button type=\"button\" class=\"assign-jo-text-toggle\" aria-expanded=\"false\" hidden>Show</button>"
+                    + "</div>";
+            }
+
+            function syncJoExpandableTextToggles(root) {
+                var run = function () {
+                    var scope = root || document;
+                    var wraps = scope.querySelectorAll ? scope.querySelectorAll(".assign-jo-expandable") : [];
+                    for (var i = 0; i < wraps.length; i++) {
+                        var wrap = wraps[i];
+                        var content = wrap.querySelector(".assign-jo-text-content");
+                        var toggle = wrap.querySelector(".assign-jo-text-toggle");
+                        if (!content || !toggle) {
+                            continue;
+                        }
+
+                        wrap.classList.remove("is-expanded", "has-overflow");
+                        toggle.setAttribute("aria-expanded", "false");
+                        toggle.textContent = "Show";
+                        toggle.hidden = true;
+
+                        if (content.scrollWidth > content.clientWidth + 1) {
+                            wrap.classList.add("has-overflow");
+                            toggle.hidden = false;
+                        }
+                    }
+                };
+
+                if (window.requestAnimationFrame) {
+                    window.requestAnimationFrame(function () {
+                        window.requestAnimationFrame(run);
+                    });
+                } else {
+                    setTimeout(run, 0);
+                }
             }
 
             function normalizeJoTypeForApi(value) {
@@ -6387,18 +7036,8 @@
                 return toInt(order && order.CustomerAcsCount, 0);
             }
 
-            function isJobOrderTransfer(order) {
-                if (!order) {
-                    return false;
-                }
-                if (order.IsTransfer === true || order.IsTransfer === "true" || order.IsTransfer === 1) {
-                    return true;
-                }
-                return toInt(order.TotalAssign, 0) > 0 && toInt(order.RemainingUnit, 0) <= 0;
-            }
-
-            function getJobOrderTransferLabel(order) {
-                if (!isJobOrderTransfer(order)) {
+            function getJobOrderTransferLabel(order, targetTechnicianId) {
+                if (!requiresTransferNoteForOrder(order, targetTechnicianId)) {
                     return "";
                 }
                 var itName = (order.AssignedTechnicianName || order.AssignedTechnicianId || "-").toString().trim();
@@ -6416,7 +7055,7 @@
             }
 
             function getJoInfoTableColspan() {
-                return normalizeJoTypeForApi(assignModalState.joType) === "installation" ? 11 : 10;
+                return 14;
             }
 
             function renderJoBranchFilterOptions(branchOptions, selectedValue) {
@@ -6487,7 +7126,7 @@
 
                 var url = getAssignPageUrl()
                     + "?action=load_job_order"
-                    + "&activeTab=" + encodeURIComponent(normalizeJoTypeForApi(assignModalState.joType))
+                    + "&activeTab=all"
                     + "&searchKeyword=" + encodeURIComponent(assignModalState.joSearchText || "")
                     + "&branchFilter=" + encodeURIComponent(assignModalState.joBranchFilter || "")
                     + "&pageIndex=" + encodeURIComponent(String(assignModalState.joPage || 1))
@@ -6538,10 +7177,6 @@
             }
 
             function getSelectedOrder() {
-                if (!assignModalState.selectedOrder) {
-                    var source = getCurrentJoRows();
-                    assignModalState.selectedOrder = source.length ? source[0] : null;
-                }
                 return assignModalState.selectedOrder;
             }
 
@@ -6568,7 +7203,7 @@
                     element.textContent = "Belum ada Job Order dipilih";
                     return;
                 }
-                var transferLabel = getJobOrderTransferLabel(selected);
+                var transferLabel = getJobOrderTransferLabel(selected, getTargetAssignTechnicianId("main"));
                 element.textContent = selected.JobID + " - " + getCustomerDisplayText(selected) + " (" + selected.BranchName + ")";
                 if (transferLabel) {
                     element.textContent += " [" + transferLabel + "]";
@@ -6602,6 +7237,7 @@
                     }
                     syncAssignInputByDeviceGroup(0);
                     renderSelectedJoText();
+                    syncTransferNoteField("assignTransferNoteWrap", "assignTransferNoteInput", null, getTargetAssignTechnicianId("main"));
                     if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(assignModalState.selectedAreaId)) {
                         areaSelect.value = normalizeAreaId(assignModalState.selectedAreaId);
                     }
@@ -6626,6 +7262,7 @@
                 }
                 syncAssignInputByDeviceGroup(assignedItSupport);
                 renderSelectedJoText();
+                syncTransferNoteField("assignTransferNoteWrap", "assignTransferNoteInput", selected, getTargetAssignTechnicianId("main"));
                 if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(assignModalState.selectedAreaId)) {
                     areaSelect.value = normalizeAreaId(assignModalState.selectedAreaId);
                 }
@@ -6669,15 +7306,8 @@
                 var selectedGroup = normalizeDeviceGroup(assignModalState.deviceGroupId);
                 var groupText = getDeviceGroupDisplayText(selectedGroup);
                 var remainingUnit = getRemainingUnitByDeviceGroup(order, selectedGroup);
-                var selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
-                if (!selectedAreaId) {
-                    if (showFeedback) {
-                        setFeedback("Area wajib dipilih.", true, false);
-                    }
-                    return false;
-                }
 
-                if (remainingUnit <= 0 && !isJobOrderTransfer(order)) {
+                if (remainingUnit <= 0 && !isJobOrderTransfer(order, getTargetAssignTechnicianId("main"))) {
                     if (showFeedback) {
                         var assignedCount = toInt(order.TotalAssign, 0);
                         if (assignedCount > 0) {
@@ -6689,8 +7319,21 @@
                     return false;
                 }
 
-                if (isJobOrderTransfer(order) && showFeedback) {
-                    setFeedback(getJobOrderTransferLabel(order), false, false);
+                if (requiresTransferNoteForOrder(order, getTargetAssignTechnicianId("main"))) {
+                    var transferNote = getDashboardNoteValue("assignTransferNoteInput");
+                    if (!transferNote) {
+                        if (showFeedback) {
+                            setFeedback("Catatan pindah IT Support wajib diisi.", true, false);
+                            var transferInput = document.getElementById("assignTransferNoteInput");
+                            if (transferInput) {
+                                transferInput.focus();
+                            }
+                        }
+                        return false;
+                    }
+                    if (showFeedback) {
+                        setFeedback(getJobOrderTransferLabel(order, getTargetAssignTechnicianId("main")), false, false);
+                    }
                 }
 
                 return true;
@@ -6708,7 +7351,7 @@
                 syncJoDeviceTypeColumnVisibility();
                 var rowsData = getCurrentJoRows();
                 var totalPages = Math.max(1, assignModalState.joTotalPages || 1);
-                var showDeviceType = normalizeJoTypeForApi(assignModalState.joType) === "installation";
+                var showDeviceType = true;
                 var tableColspan = getJoInfoTableColspan();
 
                 if (errorMessage) {
@@ -6720,31 +7363,37 @@
                     for (var i = 0; i < rowsData.length; i++) {
                         var item = rowsData[i];
                         var customerGps = getCustomerGpsCount(item);
-                        var customerAcs = getCustomerAcsCount(item);
                         var lastAssign = item.LastAssignDate || "-";
-                        var transfer = isJobOrderTransfer(item);
+                        var assignDate = item.AssignDate || "-";
+                        var slaDays = toInt(item.SlaDays, 0);
+                        var transfer = isJobOrderTransferCandidate(item);
                         var pickLabel = transfer ? "Pindah" : "Pilih";
                         var pickClass = transfer ? "assign-jo-pick-btn assign-jo-transfer-btn" : "assign-jo-pick-btn";
                         var transferHint = transfer
-                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item)) + "</div>"
+                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item, getTargetAssignTechnicianId(joLookupOwner === "report" ? "report" : "main"))) + "</div>"
                             : "";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
                             : "";
                         rows.push("<tr>" +
                             "<td>" + escapeHtml(item.JobID) + transferHint + "</td>" +
-                            "<td>" + escapeHtml(getCustomerDisplayText(item)) + "</td>" +
-                            "<td>" + escapeHtml(item.BranchName || "-") + "</td>" +
-                            "<td class=\"assign-jo-address-col\">" + escapeHtml(item.Address || "-") + "</td>" +
-                            "<td>" + escapeHtml(item.MarketingName || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(getCustomerDisplayText(item)) + "</td>" +
+                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.BranchName || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.Address || "-") + "</td>" +
+                            "<td>" + escapeHtml(item.PicName || "-") + "</td>" +
+                            "<td>" + escapeHtml(item.CustomerNumber || item.PicPhone || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.MarketingName || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.Remark || "-") + "</td>" +
                             deviceTypeCell +
                             "<td>" + escapeHtml(customerGps.toString()) + "</td>" +
-                            "<td>" + escapeHtml(customerAcs.toString()) + "</td>" +
                             "<td>" + escapeHtml(lastAssign) + "</td>" +
+                            "<td>" + escapeHtml(assignDate) + "</td>" +
+                            "<td>" + escapeHtml(slaDays.toString()) + "</td>" +
                             "<td><button type=\"button\" class=\"" + pickClass + "\" data-pick-index=\"" + i + "\">" + pickLabel + "</button></td>" +
                             "</tr>");
                     }
                     body.innerHTML = rows.join("");
+                    syncJoExpandableTextToggles(body);
                 }
 
                 prevBtn.disabled = assignModalState.joPage <= 1;
@@ -6880,6 +7529,7 @@
                 assignModalState.supAreaId = (cell.getAttribute("data-sup-area") || "").trim();
                 assignModalState.selectedAreaId = "";
                 assignModalState.selectedOrder = null;
+                clearDashboardNote("assignTransferNoteInput");
                 assignModalState.submitAction = "assign";
                 assignModalState.joRows = [];
                 assignModalState.joTotalPages = 1;
@@ -7177,6 +7827,190 @@
                 }
             }
 
+            function findScheduleCell(technicianId, scheduleDate) {
+                var wantTech = normalizeTechId(technicianId);
+                var wantDate = (scheduleDate || "").trim();
+                if (!wantTech || !wantDate) {
+                    return null;
+                }
+
+                var cells = document.querySelectorAll(".assign-cell-trigger[data-tech-id][data-date]");
+                for (var i = 0; i < cells.length; i++) {
+                    var cell = cells[i];
+                    if (normalizeTechId(cell.getAttribute("data-tech-id")) === wantTech
+                        && (cell.getAttribute("data-date") || "").trim() === wantDate) {
+                        return cell;
+                    }
+                }
+                return null;
+            }
+
+            function updateDayTotalButtonLabel(scheduleDate, dayTotalJo) {
+                var wantDate = (scheduleDate || "").trim();
+                if (!wantDate) {
+                    return;
+                }
+
+                var total = parseInt(dayTotalJo, 10);
+                if (isNaN(total) || total < 0) {
+                    total = 0;
+                }
+
+                var buttons = document.querySelectorAll(".assign-day-total-trigger");
+                for (var i = 0; i < buttons.length; i++) {
+                    var btn = buttons[i];
+                    if ((btn.getAttribute("data-date") || "").trim() !== wantDate) {
+                        continue;
+                    }
+                    btn.setAttribute("data-total-jo", String(total));
+                    btn.textContent = String(total);
+                    btn.classList.toggle("is-zero", total <= 0);
+                    btn.setAttribute("title", "Total JO: " + total);
+                }
+            }
+
+            function applyRefreshAvailabilityResult(result, technicianId, scheduleDate, fallbackDisplay, targetCell) {
+                var isSuccess = result && (result.Result || "").toUpperCase() === "SUCCESS";
+                var cell = targetCell || findScheduleCell(technicianId, scheduleDate);
+                if (isSuccess) {
+                    updateCellVisualAfterSave(
+                        result.DisplayValue || fallbackDisplay,
+                        result.CanAssign,
+                        cell,
+                        {
+                            hasRemainingJo: !!result.HasRemainingJo,
+                            remainingJo: parseInt(result.RemainingJo, 10)
+                        });
+                    if (result.HasDayTotalJo) {
+                        updateDayTotalButtonLabel(scheduleDate, result.DayTotalJo);
+                    }
+                    return;
+                }
+
+                if (cell) {
+                    updateCellVisualAfterSave(fallbackDisplay, false, cell);
+                }
+            }
+
+            function findAnyScheduleCellForTech(technicianId) {
+                var wantTech = normalizeTechId(technicianId);
+                if (!wantTech) {
+                    return null;
+                }
+
+                var cells = document.querySelectorAll(".assign-cell-trigger[data-tech-id]");
+                for (var i = 0; i < cells.length; i++) {
+                    if (normalizeTechId(cells[i].getAttribute("data-tech-id")) === wantTech) {
+                        return cells[i];
+                    }
+                }
+                return null;
+            }
+
+            function updateTotalJoAssignCell(technicianId, totalJoAssign, scheduleDate) {
+                var anchor = findScheduleCell(technicianId, scheduleDate) || findAnyScheduleCellForTech(technicianId);
+                if (!anchor || !anchor.closest) {
+                    return;
+                }
+
+                var row = anchor.closest("tr");
+                if (!row) {
+                    return;
+                }
+
+                var col = row.querySelector(".col-total-assign");
+                if (!col) {
+                    return;
+                }
+
+                var total = parseInt(totalJoAssign, 10);
+                col.textContent = String(isNaN(total) || total < 0 ? 0 : total);
+            }
+
+            function applyScheduleDayStateResult(result, scheduleDate, primaryCell) {
+                if (!result || (result.Result || "").toUpperCase() !== "SUCCESS") {
+                    return false;
+                }
+
+                updateDayTotalButtonLabel(scheduleDate, result.DayTotalJo);
+                var cells = result.Cells || [];
+                for (var i = 0; i < cells.length; i++) {
+                    var item = cells[i] || {};
+                    var techId = (item.TechnicianId || "").trim();
+                    if (!techId) {
+                        continue;
+                    }
+
+                    var cell = primaryCell
+                        && normalizeTechId(primaryCell.getAttribute("data-tech-id")) === normalizeTechId(techId)
+                        ? primaryCell
+                        : findScheduleCell(techId, scheduleDate);
+                    updateCellVisualAfterSave(item.DisplayValue || "AV", !!item.CanAssign, cell);
+                    updateTotalJoAssignCell(techId, item.TotalJoAssign, scheduleDate);
+                }
+                return true;
+            }
+
+            function refreshScheduleDayState(scheduleDate, technicianIds, primaryCell, callback) {
+                var ids = [];
+                var seen = {};
+                (technicianIds || []).forEach(function (id) {
+                    id = (id || "").trim();
+                    if (!id || seen[id]) {
+                        return;
+                    }
+                    seen[id] = true;
+                    ids.push(id);
+                });
+
+                function finishFallback() {
+                    refreshAvailabilityAfterSave(
+                        ids.length ? ids[0] : "",
+                        scheduleDate,
+                        "AV",
+                        function () {
+                            callAssignPageMethod(
+                                "GetDayTotalJoList",
+                                { scheduleDate: scheduleDate },
+                                function (dayResult) {
+                                    if (dayResult && (dayResult.Result || "").toUpperCase() === "SUCCESS") {
+                                        updateDayTotalButtonLabel(scheduleDate, dayResult.TotalJO);
+                                    }
+                                    if (typeof callback === "function") {
+                                        callback();
+                                    }
+                                },
+                                callback);
+                        },
+                        primaryCell,
+                        ids.slice(1));
+                }
+
+                if (!scheduleDate) {
+                    if (typeof callback === "function") {
+                        callback();
+                    }
+                    return;
+                }
+
+                callAssignPageMethod(
+                    "RefreshScheduleDayState",
+                    {
+                        schDate: scheduleDate,
+                        technicianIds: ids
+                    },
+                    function (result) {
+                        if (applyScheduleDayStateResult(result, scheduleDate, primaryCell)) {
+                            if (typeof callback === "function") {
+                                callback();
+                            }
+                            return;
+                        }
+                        finishFallback();
+                    },
+                    finishFallback);
+            }
+
             function syncDayTotalButtonLabels() {
                 var buttons = document.querySelectorAll(".assign-day-total-trigger");
                 for (var i = 0; i < buttons.length; i++) {
@@ -7240,7 +8074,8 @@
                         return;
                     }
 
-                    var reportDetailBtn = closestByClass(event.target, "assign-report-detail-btn");
+                    var reportDetailBtn = closestByClass(event.target, "assign-report-training-btn")
+                        || closestByClass(event.target, "assign-report-detail-btn");
                     if (reportDetailBtn) {
                         var reportDetailIndex = parseInt(reportDetailBtn.getAttribute("data-row-index"), 10);
                         if (!isNaN(reportDetailIndex) && reportModalState.rows && reportDetailIndex >= 0 && reportDetailIndex < reportModalState.rows.length) {
@@ -7273,6 +8108,10 @@
                 // Do not close on backdrop click. Close only via explicit actions.
                 document.addEventListener("keydown", function (event) {
                     if (event.key === "Escape") {
+                        if (reportModalState.pendingDeleteRowIndex >= 0 && isCompletedReportModalOpen()) {
+                            cancelReportDeletePanel();
+                            return;
+                        }
                         var reportRemarkBackdrop = getReportRemarkBackdrop();
                         if (reportRemarkBackdrop && reportRemarkBackdrop.classList.contains("open")) {
                             closeReportRemarkModal();
@@ -7334,6 +8173,8 @@
                 var reportInputUnit = document.getElementById("assignReportInputUnit");
                 var reportAreaSelect = document.getElementById("assignReportAreaSelect");
                 var reportAssignBtn = document.getElementById("assignReportAssignBtn");
+                var reportAddBtn = document.getElementById("assignReportAddBtn");
+                var reportCancelAddBtn = document.getElementById("assignReportCancelAddBtn");
                 var techStockCloseBtn = document.getElementById("assignTechStockCloseBtn");
                 var techStockCloseActionBtn = document.getElementById("assignTechStockCloseActionBtn");
                 var techDetailCloseBtn = document.getElementById("assignTechDeviceDetailCloseBtn");
@@ -7544,6 +8385,12 @@
                         setReportFeedback("", false, false);
                     });
                 }
+                if (reportAddBtn) {
+                    reportAddBtn.addEventListener("click", openReportAssignCreator);
+                }
+                if (reportCancelAddBtn) {
+                    reportCancelAddBtn.addEventListener("click", cancelReportAssignForm);
+                }
                 if (reportAssignBtn) {
                     reportAssignBtn.addEventListener("click", function () {
                         submitAssignFromReportModal("assign");
@@ -7560,6 +8407,14 @@
                 }
                 if (techDetailCloseActionBtn) {
                     techDetailCloseActionBtn.addEventListener("click", closeTechDeviceDetailModal);
+                }
+                var reportDeleteConfirmBtn = document.getElementById("assignReportDeleteConfirmBtn");
+                var reportDeleteCancelBtn = document.getElementById("assignReportDeleteCancelBtn");
+                if (reportDeleteConfirmBtn) {
+                    reportDeleteConfirmBtn.addEventListener("click", confirmReportDelete);
+                }
+                if (reportDeleteCancelBtn) {
+                    reportDeleteCancelBtn.addEventListener("click", cancelReportDeletePanel);
                 }
                 if (reportRemarkCloseBtn) {
                     reportRemarkCloseBtn.addEventListener("click", closeReportRemarkModal);
@@ -7601,6 +8456,22 @@
                 }
                 if (joTableBody) {
                     joTableBody.addEventListener("click", function (event) {
+                        var toggleBtn = closestByClass(event.target, "assign-jo-text-toggle");
+                        if (toggleBtn) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            var wrap = toggleBtn.closest ? toggleBtn.closest(".assign-jo-expandable") : null;
+                            if (!wrap && toggleBtn.parentNode) {
+                                wrap = toggleBtn.parentNode;
+                            }
+                            if (wrap) {
+                                var expanded = wrap.classList.toggle("is-expanded");
+                                toggleBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+                                toggleBtn.textContent = expanded ? "Hide" : "Show";
+                            }
+                            return;
+                        }
+
                         var button = closestByClass(event.target, "assign-jo-pick-btn");
                         if (!button) {
                             return;
@@ -7612,17 +8483,7 @@
                         }
                         var selectedOrder = rowsData[index];
                         var shouldApplyToReport = joLookupOwner === "report" || isCompletedReportModalOpen();
-                        if (shouldApplyToReport) {
-                            reportModalState.selectedOrder = selectedOrder;
-                            reportModalState.editingRowIndex = -1;
-                            applySelectedOrderAreaFromCustomer(selectedOrder, reportModalState);
-                            renderReportAssignForm();
-                            setReportFeedback("", false, false);
-                        } else {
-                            assignModalState.selectedOrder = selectedOrder;
-                            applySelectedOrderAreaFromCustomer(selectedOrder, assignModalState);
-                            renderOrderInfo();
-                        }
+                        applySelectedJobOrder(selectedOrder, shouldApplyToReport ? "report" : "main");
                         joLookupOwner = "main";
                         closeJoInfoModal();
                     });
@@ -7759,56 +8620,91 @@
                             if (!validateAssignUnitInput(true)) {
                                 return;
                             }
-                            selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
+                            selectedAreaId = order ? normalizeAreaId(order.DefaultAreaId || "") : "";
                             qty = 1;
                             fallbackDisplay = "1";
                         }
 
-                        setAssignSubmitLoading(true);
-                        setFeedback("Menyimpan assignment...", false, false);
+                        function runMainAssignSave(assignRemark) {
+                            setAssignSubmitLoading(true);
+                            setFeedback("Menyimpan assignment...", false, false);
 
-                        callAssignPageMethod(
-                            "SaveAssignJob",
-                            {
-                                assignId: "",
-                                jobId: order ? (order.JobID || "") : "",
-                                custId: order ? (order.Customer || "") : "",
-                                technicianId: technicianId,
-                                schDate: scheduleDate,
-                                qtyAssign: qty,
-                                deviceGroupId: selectedDeviceGroup,
-                                areaId: selectedAreaId,
-                                targetStatus: selectedStatus,
-                                insDeviceTypeId: getInsDeviceTypeId(assignModalState.joType, order)
-                            },
-                            function (result) {
-                                var isSuccess = (result.Result || "").toUpperCase() === "SUCCESS";
-                                if (!isSuccess) {
-                                    setAssignSubmitLoading(false);
-                                    var failedMessage = result.Message || "Gagal menyimpan assignment.";
-                                    if ((failedMessage || "").toLowerCase().indexOf("itid") >= 0) {
-                                        window.alert("ITID not exist");
+                            callAssignPageMethod(
+                                "SaveAssignJob",
+                                {
+                                    assignId: "",
+                                    jobId: order ? (order.JobID || "") : "",
+                                    custId: order ? (order.Customer || "") : "",
+                                    technicianId: technicianId,
+                                    schDate: scheduleDate,
+                                    qtyAssign: qty,
+                                    deviceGroupId: selectedDeviceGroup,
+                                    areaId: selectedAreaId,
+                                    targetStatus: selectedStatus,
+                                    insDeviceTypeId: getInsDeviceTypeId(assignModalState.joType, order),
+                                    assignRemark: assignRemark
+                                },
+                                function (result) {
+                                    var isSuccess = (result.Result || "").toUpperCase() === "SUCCESS";
+                                    if (!isSuccess) {
+                                        setAssignSubmitLoading(false);
+                                        var failedMessage = result.Message || "Gagal menyimpan assignment.";
+                                        if ((failedMessage || "").toLowerCase().indexOf("itid") >= 0) {
+                                            window.alert("ITID not exist");
+                                        }
+                                        if ((failedMessage || "").toLowerCase().indexOf("catatan pindah") >= 0 && order) {
+                                            order._requiresTransferNote = true;
+                                            assignModalState.selectedOrder = order;
+                                            renderOrderInfo();
+                                        }
+                                        setFeedback(failedMessage, true, false);
+                                        showAssignToast(failedMessage, true);
+                                        return;
                                     }
-                                    setFeedback(failedMessage, true, false);
-                                    showAssignToast(failedMessage, true);
+
+                                    var successMessage = result.Message || "Assignment berhasil disimpan.";
+                                    setFeedback(successMessage, false, true);
+                                    showAssignToast(successMessage, false);
+
+                                    var techIds = [technicianId];
+                                    var sourceTechId = getOrderAssignedTechnicianId(order);
+                                    if (sourceTechId && isJobOrderTransfer(order, technicianId)) {
+                                        techIds.push(sourceTechId);
+                                    }
+                                    refreshScheduleDayState(scheduleDate, techIds, activeCell, function () {
+                                        setAssignSubmitLoading(false);
+                                        closeAssignModal();
+                                    });
+                                },
+                                function (errorMessage) {
+                                    setAssignSubmitLoading(false);
+                                    setFeedback("Gagal menyimpan assignment. " + (errorMessage || ""), true, false);
+                                    showAssignToast("Gagal menyimpan assignment.", true);
+                                });
+                        }
+
+                        if (!isAvailableStatus || !order) {
+                            runMainAssignSave("");
+                            return;
+                        }
+
+                        enrichSelectedOrderAssignContext(order, "main", function (enriched) {
+                            assignModalState.selectedOrder = enriched;
+                            renderOrderInfo();
+                            var assignRemark = "";
+                            if (requiresTransferNoteForOrder(enriched, technicianId)) {
+                                assignRemark = getDashboardNoteValue("assignTransferNoteInput");
+                                if (!assignRemark) {
+                                    setFeedback("Catatan pindah IT Support wajib diisi.", true, false);
+                                    var transferInput = document.getElementById("assignTransferNoteInput");
+                                    if (transferInput) {
+                                        transferInput.focus();
+                                    }
                                     return;
                                 }
-
-                                var successMessage = result.Message || "Assignment berhasil disimpan.";
-                                setFeedback(successMessage, false, true);
-                                showAssignToast(successMessage, false);
-
-                                refreshAvailabilityAfterSave(technicianId, scheduleDate, fallbackDisplay, function () {
-                                    setAssignSubmitLoading(false);
-                                    closeAssignModal();
-                                    window.location.reload();
-                                });
-                            },
-                            function (errorMessage) {
-                                setAssignSubmitLoading(false);
-                                setFeedback("Gagal menyimpan assignment. " + (errorMessage || ""), true, false);
-                                showAssignToast("Gagal menyimpan assignment.", true);
-                            });
+                            }
+                            runMainAssignSave(assignRemark);
+                        });
                     });
                 }
                 if (administrationBtn) {
@@ -7851,7 +8747,7 @@
                             if (!validateAssignUnitInput(true)) {
                                 return;
                             }
-                            selectedAreaId = normalizeAreaId(assignModalState.selectedAreaId);
+                            selectedAreaId = order ? normalizeAreaId(order.DefaultAreaId || "") : "";
                             qty = 1;
                             fallbackDisplay = "1";
                         }
@@ -7887,10 +8783,9 @@
                                 setFeedback(successMessage, false, true);
                                 showAssignToast(successMessage, false);
 
-                                refreshAvailabilityAfterSave(technicianId, scheduleDate, fallbackDisplay, function () {
+                                refreshScheduleDayState(scheduleDate, [technicianId], activeCell, function () {
                                     setAssignSubmitLoading(false);
                                     closeAssignModal();
-                                    window.location.reload();
                                 });
                             },
                             function (errorMessage) {

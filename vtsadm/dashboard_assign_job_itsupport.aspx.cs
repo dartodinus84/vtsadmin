@@ -16,7 +16,6 @@ namespace vtsadm
     {
       public int AssignGps { get; set; }
       public int AssignAcs { get; set; }
-      public string LastAssignDate { get; set; }
       public string TechnicianId { get; set; }
       public string TechnicianName { get; set; }
     }
@@ -82,7 +81,8 @@ namespace vtsadm
         string deviceGroupId,
         string areaId,
         string targetStatus,
-        string insDeviceTypeId)
+        string insDeviceTypeId,
+        string assignRemark = "")
     {
       return dashboard_assign_job.SaveAssignJob(
           assignId,
@@ -94,7 +94,8 @@ namespace vtsadm
           deviceGroupId,
           areaId,
           targetStatus,
-          insDeviceTypeId);
+          insDeviceTypeId,
+          assignRemark);
     }
 
     [WebMethod(EnableSession = true)]
@@ -153,9 +154,9 @@ namespace vtsadm
 
     [WebMethod(EnableSession = true)]
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-    public new static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq)
+    public new static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq, string actionRemark = "")
     {
-      return dashboard_assign_job.DeleteScheduleAssign(assignId, seq);
+      return dashboard_assign_job.DeleteScheduleAssign(assignId, seq, actionRemark);
     }
 
     [WebMethod(EnableSession = true)]
@@ -163,6 +164,13 @@ namespace vtsadm
     public new static RefreshAvailabilityResponse RefreshAvailability(string technicianId, string schDate)
     {
       return dashboard_assign_job.RefreshAvailability(technicianId, schDate);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public new static RefreshScheduleDayStateResponse RefreshScheduleDayState(string schDate, string[] technicianIds)
+    {
+      return dashboard_assign_job.RefreshScheduleDayState(schDate, technicianIds);
     }
 
     [WebMethod(EnableSession = true)]
@@ -246,6 +254,58 @@ namespace vtsadm
       return status != "DE";
     }
 
+    private static Dictionary<string, string> BuildCustomerLastClosedAssignDateMap()
+    {
+      Dictionary<string, string> map =
+          new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+      DataTable table = ExecuteJobTrainingQuery(
+          "SELECT LTRIM(RTRIM(ISNULL(h.CustID, ''))) AS CustID, "
+          + "MAX(CONVERT(varchar(10), d.SchDate, 120)) AS LastClosedAssignDate "
+          + "FROM trx_job_assign_header h WITH (NOLOCK) "
+          + "INNER JOIN trx_job_assign_detail d WITH (NOLOCK) "
+          + "ON d.AssignID = h.AssignID AND ISNULL(d.Status, '') NOT IN ('DE') "
+          + "INNER JOIN trx_training_order t WITH (NOLOCK) ON t.TrainingID = d.JobID "
+          + "WHERE ISNULL(h.Status, '') NOT IN ('DE') "
+          + "AND LTRIM(RTRIM(ISNULL(h.CustID, ''))) <> '' "
+          + "AND UPPER(LTRIM(RTRIM(ISNULL(t.Status, '')))) IN ('CL', 'CLOSE', 'CLOSED') "
+          + "GROUP BY h.CustID");
+      if (table == null || table.Rows.Count == 0)
+      {
+        return map;
+      }
+
+      foreach (DataRow row in table.Rows)
+      {
+        string custId = GetValue(row, "CustID").Trim();
+        string closedDate = GetValue(row, "LastClosedAssignDate").Trim();
+        if (string.IsNullOrWhiteSpace(custId) || string.IsNullOrWhiteSpace(closedDate))
+        {
+          continue;
+        }
+
+        map[custId] = closedDate;
+      }
+
+      return map;
+    }
+
+    private static int CalculateJobOrderSlaDays(string createDateRaw)
+    {
+      DateTime createDate;
+      if (!DateTime.TryParseExact(
+              (createDateRaw ?? string.Empty).Trim(),
+              "yyyy-MM-dd",
+              CultureInfo.InvariantCulture,
+              DateTimeStyles.None,
+              out createDate)
+          && !DateTime.TryParse((createDateRaw ?? string.Empty).Trim(), out createDate))
+      {
+        return 0;
+      }
+
+      return Math.Max(0, (DateTime.Today - createDate.Date).Days);
+    }
+
     private static Dictionary<string, JobTrxAssignStats> BuildJobTrainingGlobalAssignStatsMap()
     {
       Dictionary<string, JobTrxAssignStats> map =
@@ -255,7 +315,7 @@ namespace vtsadm
           "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status, DeviceGroupID, QtyGPS, QtyACS "
           + "FROM trx_job_assign_detail WITH (NOLOCK) "
           + "WHERE ISNULL(Status, '') NOT IN ('DE') "
-          + "ORDER BY DtmUpd DESC, SchDate DESC");
+          + "ORDER BY SchDate DESC");
       if (details == null || details.Rows.Count == 0)
       {
         return map;
@@ -278,7 +338,6 @@ namespace vtsadm
             ? map[jobId]
             : new JobTrxAssignStats
             {
-              LastAssignDate = string.Empty,
               TechnicianId = string.Empty,
               TechnicianName = string.Empty
             };
@@ -301,21 +360,6 @@ namespace vtsadm
         else
         {
           stats.AssignGps += qtyGps > 0 ? qtyGps : 1;
-        }
-
-        string schDate = FirstNonEmptyStatic(GetValue(row, "SchDate"), GetValue(row, "ScheduleDate"));
-        if (!string.IsNullOrWhiteSpace(schDate))
-        {
-          DateTime schValue;
-          if (DateTime.TryParse(schDate, out schValue))
-          {
-            string formatted = schValue.ToString("yyyy-MM-dd");
-            if (string.IsNullOrWhiteSpace(stats.LastAssignDate)
-                || formatted.CompareTo(stats.LastAssignDate) > 0)
-            {
-              stats.LastAssignDate = formatted;
-            }
-          }
         }
 
         map[jobId] = stats;
@@ -401,6 +445,9 @@ namespace vtsadm
             + GetValue(row, "CustomerName") + " "
             + GetValue(row, "BranchName") + " "
             + GetValue(row, "Address") + " "
+            + GetValue(row, "PicName") + " "
+            + GetValue(row, "CustomerNumber") + " "
+            + GetValue(row, "Remark") + " "
             + GetValue(row, "MarketingName") + " "
             + GetValue(row, "DeviceTypeDesc")).ToLowerInvariant();
         if (merged.Contains(search.ToLowerInvariant()))
@@ -502,7 +549,8 @@ namespace vtsadm
 
       try
       {
-        bool isVisitTab = !IsInstallationTab(activeTab);
+        bool showAllJoTypes = string.Equals((activeTab ?? string.Empty).Trim(), "all", StringComparison.OrdinalIgnoreCase);
+        bool isVisitTab = !showAllJoTypes && !IsInstallationTab(activeTab);
         DataTable raw = LoadJobTrainingHeaderTable(string.Empty);
         DateTime monthStart = ResolveJobOrderPeriodeMonthStart();
         string viewDateFrom = monthStart.AddYears(-1).ToString("yyyy-MM-dd");
@@ -521,8 +569,9 @@ namespace vtsadm
         Dictionary<string, string> marketingByCustId = ItsSupportAssignData.LoadCustomerMarketingMap();
         Dictionary<string, string> marketingByTrainingId = ItsSupportAssignData.LoadTrainingMarketingMap();
         Dictionary<string, JobTrxAssignStats> trxStats = BuildJobTrainingGlobalAssignStatsMap();
+        Dictionary<string, string> customerLastClosedAssignMap = BuildCustomerLastClosedAssignDateMap();
         Dictionary<string, ItsSupportAssignData.CustomerDeviceCounts> customerDeviceCounts =
-            ItsSupportAssignData.LoadCustomerGpsAcsCountMap();
+            ItsSupportAssignData.LoadCustomerGpsCountMap();
 
         DataTable mapped = new DataTable();
         mapped.Columns.Add("JobID");
@@ -538,6 +587,11 @@ namespace vtsadm
         mapped.Columns.Add("TotalAssignGps", typeof(int));
         mapped.Columns.Add("TotalAssignAcs", typeof(int));
         mapped.Columns.Add("LastAssignDate");
+        mapped.Columns.Add("AssignDate");
+        mapped.Columns.Add("SlaDays", typeof(int));
+        mapped.Columns.Add("Remark");
+        mapped.Columns.Add("PicName");
+        mapped.Columns.Add("CustomerNumber");
         mapped.Columns.Add("RemainingUnit", typeof(int));
         mapped.Columns.Add("TotalUnit", typeof(int));
         mapped.Columns.Add("RemainingUnitGps", typeof(int));
@@ -572,7 +626,7 @@ namespace vtsadm
             }
 
             bool isVisit = IsVisitCategory(categoryName, categoryId);
-            if (isVisitTab != isVisit)
+            if (!showAllJoTypes && isVisitTab != isVisit)
             {
               continue;
             }
@@ -598,7 +652,19 @@ namespace vtsadm
             int assignGps = trxStat != null ? trxStat.AssignGps : 0;
             int assignAcs = trxStat != null ? trxStat.AssignAcs : 0;
             int assignedTotal = assignGps + assignAcs;
-            string lastAssignDate = trxStat != null ? trxStat.LastAssignDate : string.Empty;
+            string lastAssignDate = string.Empty;
+            if (!string.IsNullOrWhiteSpace(custId) && customerLastClosedAssignMap.ContainsKey(custId))
+            {
+              lastAssignDate = customerLastClosedAssignMap[custId];
+            }
+            string assignDate = FirstNonEmptyStatic(
+                GetValue(row, "sReqDate"),
+                GetValue(row, "ReqDate"));
+            int slaDays = CalculateJobOrderSlaDays(assignDate);
+            // JO header remark from trx_training_order (same as sp_list_header_job_training).
+            string remark = FirstNonEmptyStatic(
+                GetValue(row, "Remark"),
+                GetValue(row, "Remarks"));
 
             // IT Support Training/Visit: assign slot is per trx_job_assign_detail, not installation GPS units.
             // Training JO close status (CL) must not block IT Support scheduling.
@@ -606,12 +672,18 @@ namespace vtsadm
             int remaining = Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
 
             string address = FirstNonEmptyStatic(
-                GetValue(row, "BranchAddress"),
                 GetValue(row, "Address"),
-                customerContext != null ? customerContext.BranchAddress : string.Empty,
                 customerContext != null ? customerContext.Address : string.Empty,
-                GetValue(row, "RemarkTraining"),
-                GetValue(row, "Remark"));
+                GetValue(row, "CustAddress"));
+            string picName = FirstNonEmptyStatic(
+                GetValue(row, "PICName1"),
+                GetValue(row, "PicName"),
+                customerContext != null ? customerContext.PicName : string.Empty);
+            string customerNumber = FirstNonEmptyStatic(
+                GetValue(row, "OfficePhone1"),
+                GetValue(row, "MobilePhone1"),
+                GetValue(row, "CustomerNumber"),
+                customerContext != null ? customerContext.CustomerNumber : string.Empty);
             string marketingName = FirstNonEmptyStatic(
                 GetValue(row, "MarketingName"),
                 GetValue(row, "Marketing"),
@@ -619,14 +691,14 @@ namespace vtsadm
                 customerContext != null ? customerContext.MarketingName : string.Empty,
                 ItsSupportAssignData.ResolveMarketingName(jobId, marketingByTrainingId),
                 ItsSupportAssignData.ResolveMarketingName(custId, marketingByCustId));
-            string defaultAreaId = customerContext != null ? customerContext.SupAreaID : string.Empty;
-            ItsSupportAssignData.CustomerDeviceCounts deviceCounts = null;
+            string defaultAreaId = FirstNonEmptyStatic(
+                GetValue(row, "SupAreaID"),
+                customerContext != null ? customerContext.SupAreaID : string.Empty);
+            int customerGpsCount = 0;
             if (!string.IsNullOrWhiteSpace(custId) && customerDeviceCounts.ContainsKey(custId))
             {
-              deviceCounts = customerDeviceCounts[custId];
+              customerGpsCount = customerDeviceCounts[custId].TotalGps;
             }
-            int customerGpsCount = deviceCounts != null ? deviceCounts.TotalGps : 0;
-            int customerAcsCount = deviceCounts != null ? deviceCounts.TotalAcs : 0;
             string assignedTechnicianId = trxStat != null
                 ? FirstNonEmptyStatic(trxStat.TechnicianId)
                 : string.Empty;
@@ -655,6 +727,11 @@ namespace vtsadm
             target["TotalAssignGps"] = assignGps;
             target["TotalAssignAcs"] = assignAcs;
             target["LastAssignDate"] = lastAssignDate;
+            target["AssignDate"] = assignDate;
+            target["SlaDays"] = slaDays;
+            target["Remark"] = remark;
+            target["PicName"] = picName;
+            target["CustomerNumber"] = customerNumber;
             target["RemainingUnit"] = remaining;
             target["TotalUnit"] = totalUnit;
             target["RemainingUnitGps"] = remaining;
@@ -664,7 +741,7 @@ namespace vtsadm
             target["TotalUnitGpsDone"] = assignGps;
             target["TotalUnitAcsDone"] = assignAcs;
             target["CustomerGpsCount"] = customerGpsCount;
-            target["CustomerAcsCount"] = customerAcsCount;
+            target["CustomerAcsCount"] = 0;
             target["IsTransfer"] = isTransfer;
             target["AssignedTechnicianId"] = assignedTechnicianId;
             target["AssignedTechnicianName"] = assignedTechnicianName;
@@ -704,6 +781,11 @@ namespace vtsadm
             TotalAssignGps = ParseIntFromColumns(row, "TotalAssignGps"),
             TotalAssignAcs = ParseIntFromColumns(row, "TotalAssignAcs"),
             LastAssignDate = FormatDateForDisplay(GetValue(row, "LastAssignDate")),
+            AssignDate = FormatDateForDisplay(GetValue(row, "AssignDate")),
+            SlaDays = ParseIntFromColumns(row, "SlaDays"),
+            Remark = GetValue(row, "Remark"),
+            PicName = GetValue(row, "PicName"),
+            CustomerNumber = GetValue(row, "CustomerNumber"),
             RemainingUnit = ParseIntFromColumns(row, "RemainingUnit"),
             TotalUnit = ParseIntFromColumns(row, "TotalUnit"),
             RemainingUnitGps = ParseIntFromColumns(row, "RemainingUnitGps"),
@@ -713,7 +795,7 @@ namespace vtsadm
             TotalUnitGpsDone = ParseIntFromColumns(row, "TotalUnitGpsDone"),
             TotalUnitAcsDone = ParseIntFromColumns(row, "TotalUnitAcsDone"),
             CustomerGpsCount = ParseIntFromColumns(row, "CustomerGpsCount"),
-            CustomerAcsCount = ParseIntFromColumns(row, "CustomerAcsCount"),
+            CustomerAcsCount = 0,
             IsTransfer = ParseBoolFromDataRow(row, "IsTransfer"),
             AssignedTechnicianId = GetValue(row, "AssignedTechnicianId"),
             AssignedTechnicianName = GetValue(row, "AssignedTechnicianName")

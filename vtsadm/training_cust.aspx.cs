@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -16,6 +16,9 @@ namespace vtsadm
 {
     public partial class training_cust : System.Web.UI.Page
     {
+        private const string TrainCategoryTrainingId = "TRC0000001";
+        private const string TrainCategoryVisitId = "TRC0000002";
+
         static ITelegramBotClient botClient;
 
         public training_cust()
@@ -300,6 +303,322 @@ namespace vtsadm
             return raw.Trim();
         }
 
+        private string FormatDateForInput(string raw)
+        {
+            DateTime dt;
+            if (DateTime.TryParse(raw, out dt))
+            {
+                return dt.ToString("yyyy-MM-dd");
+            }
+            return "";
+        }
+
+        private string GetRowValue(DataRow row, params string[] columns)
+        {
+            if (row == null || row.Table == null || columns == null)
+            {
+                return "";
+            }
+
+            foreach (string column in columns)
+            {
+                if (string.IsNullOrWhiteSpace(column) || !row.Table.Columns.Contains(column))
+                {
+                    continue;
+                }
+
+                string value = SafeTrim(Convert.ToString(row[column]));
+                if (!string.IsNullOrWhiteSpace(value) && value != "&nbsp;")
+                {
+                    return value;
+                }
+            }
+
+            return "";
+        }
+
+        private string FindCategoryIdByKeyword(string keyword)
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                return string.Empty;
+            }
+
+            foreach (ListItem item in CmbTrainCategoryID.Items)
+            {
+                if (item.Value == "[Select]")
+                {
+                    continue;
+                }
+
+                if (item.Text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return item.Value;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private string ResolveTrainCategoryDropdownId(string categoryId, string categoryName)
+        {
+            categoryId = SafeTrim(categoryId);
+            categoryName = SafeTrim(categoryName);
+
+            if (categoryId != "" && categoryId != "[Select]")
+            {
+                ListItem byId = CmbTrainCategoryID.Items.FindByValue(categoryId);
+                if (byId != null)
+                {
+                    return byId.Value;
+                }
+
+                foreach (ListItem item in CmbTrainCategoryID.Items)
+                {
+                    if (string.Equals(item.Value, categoryId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return item.Value;
+                    }
+                }
+            }
+
+            if (categoryName != "")
+            {
+                foreach (ListItem item in CmbTrainCategoryID.Items)
+                {
+                    if (item.Value == "[Select]")
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(item.Text, categoryName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return item.Value;
+                    }
+                }
+
+                foreach (ListItem item in CmbTrainCategoryID.Items)
+                {
+                    if (item.Value == "[Select]")
+                    {
+                        continue;
+                    }
+
+                    string itemText = item.Text ?? "";
+                    if (itemText.IndexOf(categoryName, StringComparison.OrdinalIgnoreCase) >= 0
+                        || categoryName.IndexOf(itemText, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return item.Value;
+                    }
+                }
+
+                if (categoryName.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return FindCategoryIdByKeyword("visit");
+                }
+
+                if (categoryName.IndexOf("train", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return FindCategoryIdByKeyword("train");
+                }
+            }
+
+            if (categoryId != "" && categoryId != "[Select]")
+            {
+                if (categoryId.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return FindCategoryIdByKeyword("visit");
+                }
+
+                if (categoryId.IndexOf("train", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return FindCategoryIdByKeyword("train");
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private void ApplyTrainCategorySelection(string categoryId, string categoryName)
+        {
+            EnsureDropdownsLoaded();
+            string resolvedId = ResolveTrainCategoryDropdownId(categoryId, categoryName);
+            if (resolvedId == "" || resolvedId == "[Select]")
+            {
+                return;
+            }
+
+            CmbTrainCategoryID.ClearSelection();
+            ListItem item = CmbTrainCategoryID.Items.FindByValue(resolvedId);
+            if (item == null)
+            {
+                foreach (ListItem candidate in CmbTrainCategoryID.Items)
+                {
+                    if (string.Equals(candidate.Value, resolvedId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        item = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (item == null)
+            {
+                return;
+            }
+
+            item.Selected = true;
+        }
+
+        private DataRow LoadTrainingOrderAssignRow(string trainingId, string userId, string conn)
+        {
+            string sql =
+                "SELECT TOP 1 "
+                + "ISNULL(NULLIF(LTRIM(RTRIM(t.TrainCategoryID)), ''), NULLIF(LTRIM(RTRIM(ja.DeviceTypeID)), '')) AS TrainCategoryID, "
+                + "ISNULL(NULLIF(LTRIM(RTRIM(cat.TrainCategoryDesc)), ''), ISNULL(catAssign.TrainCategoryDesc, '')) AS TrainCategoryDesc, "
+                + "t.ScheduleDate, "
+                + "ja.SchDate AS AssignDate, "
+                + "ISNULL(itA.Name, ISNULL(itA.UserID, '')) AS AssignTrainerName, "
+                + "ISNULL(itU.Name, ISNULL(itU.UserID, '')) AS UserTrainerName "
+                + "FROM trx_training_order t WITH (NOLOCK) "
+                + "LEFT JOIN ref_train_category cat WITH (NOLOCK) ON cat.TrainCategoryID = t.TrainCategoryID "
+                + "OUTER APPLY ( "
+                + "  SELECT TOP 1 d.SchDate, d.TechnicianID, d.DeviceTypeID "
+                + "  FROM trx_job_assign_detail d WITH (NOLOCK) "
+                + "  WHERE LTRIM(RTRIM(d.JobID)) = LTRIM(RTRIM(t.TrainingID)) "
+                + "    AND ISNULL(d.Status, '') NOT IN ('DE') "
+                + "  ORDER BY CASE WHEN EXISTS ( "
+                + "    SELECT 1 FROM mst_itsupport i WITH (NOLOCK) "
+                + "    WHERE i.ITID = d.TechnicianID "
+                + "      AND LTRIM(RTRIM(i.UserID)) = '" + SqlLiteral(userId) + "' "
+                + "      AND ISNULL(i.Status, '') NOT IN ('DE','BL')) THEN 0 ELSE 1 END, d.DtmUpd DESC "
+                + ") ja "
+                + "LEFT JOIN ref_train_category catAssign WITH (NOLOCK) ON catAssign.TrainCategoryID = ja.DeviceTypeID "
+                + "LEFT JOIN mst_itsupport itA WITH (NOLOCK) ON itA.ITID = ja.TechnicianID AND ISNULL(itA.Status, '') NOT IN ('DE','BL') "
+                + "LEFT JOIN mst_itsupport itU WITH (NOLOCK) ON LTRIM(RTRIM(itU.UserID)) = '" + SqlLiteral(userId) + "' AND ISNULL(itU.Status, '') NOT IN ('DE','BL') "
+                + "WHERE LTRIM(RTRIM(t.TrainingID)) = '" + SqlLiteral(trainingId) + "'";
+
+            string sErr = "";
+            Recordset rec = new Recordset();
+            rec.Open(sql, conn, ref sErr);
+            if (!string.IsNullOrEmpty(sErr) || rec.RecordCount() <= 0 || rec.RecData == null || rec.RecData.Tables.Count == 0)
+            {
+                return null;
+            }
+
+            return rec.RecData.Tables[0].Rows[0];
+        }
+
+        private DataRow LoadSavedTrainingCustomerRow(string trainingId, string conn)
+        {
+            string sErr = "";
+            Recordset rec = new Recordset();
+            rec.Open(
+                "sp_view_job_training '" + SqlLiteral(trainingId) + "','','2000-01-01','2099-12-31'",
+                conn,
+                ref sErr);
+            if (!string.IsNullOrEmpty(sErr) || rec.RecordCount() <= 0 || rec.RecData == null || rec.RecData.Tables.Count == 0)
+            {
+                return null;
+            }
+
+            return rec.RecData.Tables[0].Rows[0];
+        }
+
+        private void BindTrainingInformation(string trainingId)
+        {
+            trainingId = SafeTrim(trainingId);
+            if (trainingId == "")
+            {
+                return;
+            }
+
+            EnsureDropdownsLoaded();
+
+            string pickedCategoryId = GetHiddenValue(hfPickedTrainCategoryID);
+            string pickedCategoryDesc = GetHiddenValue(hfPickedTrainCategoryDesc);
+            string postedCategoryId = GetSelectedDropDownValue(CmbTrainCategoryID);
+
+            txtTrainingDate.Text = "";
+            txtTrainers.Value = "";
+            txtAttendances.Value = "";
+            txtRemark.Value = "";
+            if (CmbTrainCategoryID.Items.FindByValue("[Select]") != null)
+            {
+                CmbTrainCategoryID.SelectedValue = "[Select]";
+            }
+
+            string conn = GetDbConnectionString();
+            if (conn == "")
+            {
+                return;
+            }
+
+            string userId = GetSessionUserId();
+            DataRow orderRow = LoadTrainingOrderAssignRow(trainingId, userId, conn);
+            DataRow savedRow = LoadSavedTrainingCustomerRow(trainingId, conn);
+
+            string categoryId = GetRowValue(orderRow, "TrainCategoryID");
+            string categoryName = GetRowValue(orderRow, "TrainCategoryDesc", "TrainingCategoryName", "TrainCategoryName");
+            if (categoryId == "")
+            {
+                categoryId = GetRowValue(savedRow, "TrainCategoryID", "TrainingCategoryID");
+            }
+            if (categoryName == "")
+            {
+                categoryName = GetRowValue(savedRow, "TrainCategoryDesc", "TrainingCategoryName", "TrainCategoryName", "CategoryName", "TrainingCategoryName");
+            }
+            if (categoryId == "")
+            {
+                categoryId = pickedCategoryId;
+            }
+            if (categoryId == "" && postedCategoryId != "" && postedCategoryId != "[Select]")
+            {
+                categoryId = postedCategoryId;
+            }
+            if (categoryName == "")
+            {
+                categoryName = pickedCategoryDesc;
+            }
+            ApplyTrainCategorySelection(categoryId, categoryName);
+
+            string trainingDate = GetRowValue(savedRow, "sTrainingDate", "TrainingDate");
+            if (trainingDate == "")
+            {
+                trainingDate = GetRowValue(orderRow, "AssignDate");
+            }
+            if (trainingDate == "")
+            {
+                trainingDate = GetRowValue(orderRow, "ScheduleDate");
+            }
+            if (trainingDate == "")
+            {
+                trainingDate = GetInputValue(txtSchDate);
+            }
+            txtTrainingDate.Text = FormatDateForInput(trainingDate);
+
+            string trainers = GetRowValue(savedRow, "Trainers");
+            if (trainers == "")
+            {
+                trainers = GetRowValue(orderRow, "AssignTrainerName");
+            }
+            if (trainers == "")
+            {
+                trainers = GetRowValue(orderRow, "UserTrainerName");
+            }
+            if (trainers == "")
+            {
+                trainers = userId;
+            }
+            txtTrainers.Value = trainers;
+            txtAttendances.Value = GetRowValue(savedRow, "Attendances");
+
+            txtRemark.Value = GetRowValue(savedRow, "RemarkTraining", "Remark");
+
+            Session["ClsTypeNewPictureTraining"] = GetRowValue(savedRow, "PictureFileName");
+            BindTrainingPicturePreview();
+        }
+
         private void clear()
         {
             try
@@ -328,6 +647,8 @@ namespace vtsadm
                 {
                     CmbTrainCategoryID.SelectedValue = "[Select]";
                 }
+                hfPickedTrainCategoryID.Value = "";
+                hfPickedTrainCategoryDesc.Value = "";
                 
                 Session["ClsTypeNewPictureTraining"] = "";
                 lblUploadMsg.InnerHtml = "";
@@ -735,7 +1056,9 @@ namespace vtsadm
             try
             {
                 div_comment.InnerHtml = "";
-                Open_GridViews(GridView2, "sp_list_trx_training_notes", txtTrainingID.Value.ToString(), "RecListTrainingNotes", LblPaging);
+                string trainingId = GetInputValue(txtTrainingID);
+                BindTrainingInformation(trainingId);
+                Open_GridViews(GridView2, "sp_list_trx_training_notes", trainingId, "RecListTrainingNotes", LblPaging);
             }
             catch (Exception ex)
             {
