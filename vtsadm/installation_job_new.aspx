@@ -2,12 +2,15 @@
 
 <asp:Content ID="Content1" ContentPlaceHolderID="ContentPlaceHolder1" runat="server">
     <style>
+        .ijm-page { overflow-x: hidden; }
         .ijm-page .form-control { background-color: #fff !important; }
-        .ijm-page .box { border-radius: 4px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .ijm-page .box { border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .ijm-page .box-header .box-title { white-space: normal; line-height: 1.3; }
         .ijm-page .box-body { padding: 18px 20px; }
         .ijm-page .box-footer { padding: 12px 20px; background: #f9f9f9; border-top: 1px solid #eee; }
         .ijm-page .form-group-sm { margin-bottom: 14px; }
         .ijm-page .form-group-sm > label { font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; display: block; }
+        .ijm-page .ijm-search-group { width: 100%; }
         .ijm-job-summary-wrap { margin-top: 8px; border-top: 1px dashed #d9e3ef; padding-top: 12px; }
         .ijm-job-summary-title { font-size: 12px; font-weight: 700; color: #003481; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .03em; }
         .ijm-job-summary-table { font-size: 12px; margin-bottom: 0; }
@@ -33,12 +36,13 @@
         .ijm-tech-meta { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px dashed #ddd; }
         .ijm-info-row { margin-bottom: 10px; }
         .ijm-info-row:last-child { margin-bottom: 0; }
-        .ijm-info-row label { font-size: 11px; color: #888; margin-bottom: 3px; display: block; font-weight: 600; text-transform: uppercase; }
+        .ijm-info-row label,
+        .ijm-maint-input .ijm-info-row label { font-size: 11px; color: #888; margin-bottom: 3px; display: block; font-weight: 600; text-transform: uppercase; }
         .ijm-ro, .ijm-preview-val { background: #f5f7fa !important; color: #333; font-weight: 500; border: 1px solid #e3e8ef; min-height: 30px; box-shadow: none; word-break: break-word; }
-        .ijm-maint-input { background: #fffdf7; border: 1px solid #f0ad4e; border-left: 4px solid #f39c12; border-radius: 4px; padding: 16px 18px; margin-bottom: 14px; height: 100%; }
-        .ijm-maint-input label { font-size: 13px; font-weight: 700; color: #003481; margin-bottom: 8px; display: block; }
+        .ijm-maint-input { background: #fffdf7; border: 1px solid #f0ad4e; border-left: 4px solid #f39c12; border-radius: 8px; padding: 16px 18px; margin-bottom: 14px; }
+        .ijm-maint-input > label { font-size: 13px; font-weight: 700; color: #003481; margin-bottom: 8px; display: block; }
         .ijm-maint-hint { font-size: 12px; color: #777; margin: 0 0 16px; padding: 10px 12px; background: #fff8e6; border-radius: 4px; border-left: 3px solid #f39c12; line-height: 1.5; }
-        .ijm-preview-box { border: 1px solid #e8e8e8; border-radius: 4px; padding: 14px 16px 10px; background: #fafafa; margin-top: 10px; }
+        .ijm-preview-box { border: 1px solid #e8e8e8; border-radius: 4px; padding: 14px 16px 10px; background: #fafafa; margin-top: 12px; }
         .ijm-preview-title { font-size: 12px; font-weight: 700; color: #666; text-transform: uppercase; margin: 0 0 12px; }
         .ijm-req { color: #dd4b39; }
         .ijm-action-btns { text-align: right; }
@@ -57,16 +61,23 @@
         .ijm-attach-item { border: 1px solid #dfe7f0; border-radius: 8px; padding: 6px; background: #fff; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
         .ijm-attach-item img { width: 100%; height: 88px; object-fit: cover; border-radius: 6px; display: block; }
         .ijm-attach-name { font-size: 10px; color: #556577; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ijm-attach-remove { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: #dd4b39; color: #fff; font-size: 12px; line-height: 20px; text-align: center; cursor: pointer; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+        .ijm-attach-remove { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: #dd4b39; color: #fff; font-size: 14px; line-height: 20px; text-align: center; cursor: pointer; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
         .ijm-picker-modal { z-index: 1060 !important; }
         body > .modal-backdrop { z-index: 1040 !important; }
+        .ijm-picker-modal .form-control { background-color: #fff !important; }
         .ijm-picker-modal .modal-header {
             background: linear-gradient(135deg, #003481 0%, #3c8dbc 100%);
             color: #fff;
-            border-radius: 4px 4px 0 0;
+            border-radius: 8px 8px 0 0;
         }
         .ijm-picker-modal .modal-header .close { color: #fff; opacity: .85; }
+        .ijm-picker-body { max-height: 480px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .ijm-acc-toolbar { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .ijm-acc-search { flex: 1 1 240px; max-width: 320px; }
+        .ijm-acc-req-hint { font-size: 12px; font-weight: 600; }
+        .ijm-acc-req-hint.ijm-acc-req-ok { color: #3c763d; }
+        .ijm-acc-req-hint.ijm-acc-req-warn { color: #c87f0a; }
+        .ijm-acc-req-hint.ijm-acc-req-err { color: #dd4b39; }
         .ijm-acc-table { font-size: 12px; margin-bottom: 0; }
         .ijm-acc-table th { background: #f5f7fa; color: #003481; white-space: nowrap; }
         .ijm-acc-table td { vertical-align: middle !important; }
@@ -80,6 +91,9 @@
         .ijm-customer-row .ijm-info-group { margin-bottom: 0; }
         #pnlChannelSetting { margin-bottom: 16px; }
         #pnlChannelSetting .table { background: #fff; }
+        .ijm-channel-wrap { margin-bottom: 8px; }
+        .ijm-tech-pick-row { margin-top: 2px; }
+
         @media (min-width: 992px) {
             .ijm-detail-cards .ijm-info-group { min-height: 160px; margin-bottom: 0; }
             .ijm-detail-cards > [class*="col-"] { margin-bottom: 0; }
@@ -88,28 +102,172 @@
             .ijm-tech-meta > [class*="col-"] { margin-bottom: 0; }
             .ijm-install-row > [class*="col-"] { margin-bottom: 0; }
             .ijm-customer-row .ijm-info-group { min-height: 120px; }
+            .ijm-tech-pick-row > [class*="col-"] { margin-bottom: 0; }
         }
+
+        @media (min-width: 768px) {
+            .ijm-pick-grid {
+                display: flex;
+                flex-wrap: wrap;
+            }
+            .ijm-pick-grid > [class*="col-"] {
+                display: flex;
+                flex-direction: column;
+            }
+            .ijm-pick-grid .ijm-maint-input {
+                display: flex;
+                flex-direction: column;
+                flex: 1 1 auto;
+                height: 100%;
+                margin-bottom: 0;
+            }
+            .ijm-pick-grid .ijm-preview-box { flex: 1 1 auto; }
+        }
+
+        @media (max-width: 991px) {
+            .content-header { padding: 12px 12px 0; }
+            .content-header > h1 { font-size: 20px; margin: 0 0 8px; }
+            .ijm-page { padding: 10px 8px 110px; }
+            .ijm-page .box { margin-bottom: 12px; }
+            .ijm-page .box-body { padding: 14px 12px; }
+            .ijm-page .box-header { padding: 10px 12px; }
+            .ijm-page .box-header .box-tools { display: none; }
+            .ijm-action-wrap {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 1040;
+                margin: 0;
+                box-shadow: 0 -4px 16px rgba(0,0,0,.14);
+            }
+            .ijm-action-wrap .box { margin: 0; border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; }
+            .ijm-action-wrap .box-footer { padding: 10px 12px; }
+            .ijm-action-btns { display: flex; flex-direction: column-reverse; gap: 8px; text-align: center; }
+            .ijm-action-btns .btn { width: 100%; margin: 0; min-height: 44px; font-size: 16px; }
+            body.embed-mode .ijm-action-wrap { bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+            body.embed-mode .ijm-page { padding-bottom: 96px; }
+            .ijm-pick-grid > [class*="col-"] { margin-bottom: 12px; }
+            .ijm-tech-pick-row > [class*="col-"] { margin-bottom: 10px; }
+        }
+
         @media (max-width: 767px) {
+            .content-header .breadcrumb { display: none; }
+            .ijm-page { padding-bottom: 160px; }
+            .ijm-action-wrap { bottom: 60px; }
             .ijm-job-row > [class*="col-"],
             .ijm-job-meta > [class*="col-"],
             .ijm-tech-meta > [class*="col-"],
             .ijm-customer-row > [class*="col-"],
-            .ijm-install-row > [class*="col-"] { margin-bottom: 12px; }
-            .ijm-page { padding-bottom: 80px; }
-            .ijm-page .box-body { padding: 14px 12px; }
-            .ijm-page .form-control { min-height: 44px; font-size: 16px; }
+            .ijm-install-row > [class*="col-"],
+            .ijm-tech-pick-row > [class*="col-"],
+            .ijm-install-fields > [class*="col-"] { margin-bottom: 12px; }
+            .ijm-maint-input { padding: 14px 12px; margin-bottom: 0; }
+            .ijm-page .form-control,
+            .ijm-page select.form-control,
+            .ijm-page textarea.form-control { min-height: 44px; font-size: 16px; }
+            .ijm-page .input-group-sm > .form-control,
+            .ijm-page .input-group-sm > .input-group-btn > .btn {
+                height: 44px;
+                padding: 8px 12px;
+                font-size: 16px;
+                line-height: 1.35;
+            }
+            .ijm-page .input-group-sm > .input-group-btn > .btn { min-width: 48px; }
+            .ijm-ro, .ijm-preview-val { min-height: 44px; padding-top: 10px; }
             .ijm-job-summary-card { padding: 12px; }
             .ijm-job-summary-head { font-size: 13px; }
-            .ijm-upload-drop { padding: 14px 10px; }
+            .ijm-upload-drop { padding: 16px 10px; }
             .ijm-upload-title { font-size: 14px; }
             .ijm-upload-btn { min-height: 36px; line-height: 24px; }
-            .ijm-attach-preview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-            .ijm-attach-item img { height: 84px; }
-            .ijm-acc-wrap { max-height: 260px; }
-            .ijm-action-wrap { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1040; margin: 0; box-shadow: 0 -2px 10px rgba(0,0,0,.12); }
-            .ijm-action-wrap .box { margin: 0; border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; }
-            .ijm-action-btns { display: flex; flex-direction: column-reverse; gap: 8px; text-align: center; }
-            .ijm-action-btns .btn { width: 100%; margin: 0; min-height: 44px; font-size: 16px; }
+            .ijm-attach-preview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+            .ijm-attach-item img { height: 92px; }
+            .ijm-acc-search { max-width: none; width: 100%; flex: 1 1 100%; }
+            .ijm-acc-toolbar .btn { min-height: 40px; }
+            .ijm-acc-wrap { max-height: none; }
+            .ijm-stack-wrap {
+                border: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            .ijm-stack-table thead { display: none; }
+            .ijm-stack-table,
+            .ijm-stack-table tbody,
+            .ijm-stack-table tr,
+            .ijm-stack-table td {
+                display: block;
+                width: 100% !important;
+            }
+            .ijm-stack-table tbody tr {
+                margin-bottom: 10px;
+                border: 1px solid #d8e4f2;
+                border-radius: 8px;
+                overflow: hidden;
+                background: #fff;
+                box-shadow: 0 1px 2px rgba(0,0,0,.04);
+            }
+            .ijm-stack-table tbody tr:last-child { margin-bottom: 0; }
+            .ijm-stack-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 10px;
+                padding: 9px 12px !important;
+                border: 0 !important;
+                border-bottom: 1px solid #eef3f8 !important;
+                text-align: right;
+                white-space: normal;
+                word-break: break-word;
+                vertical-align: top !important;
+            }
+            .ijm-stack-table td:last-child { border-bottom: 0 !important; }
+            .ijm-stack-table td:before {
+                content: attr(data-label);
+                font-weight: 700;
+                font-size: 11px;
+                color: #003481;
+                text-transform: uppercase;
+                letter-spacing: .03em;
+                text-align: left;
+                flex: 0 0 42%;
+            }
+            .ijm-job-summary-table tbody tr.ijm-job-summary-row-closed > td,
+            .ijm-job-summary-table tbody tr.ijm-job-summary-row-open > td,
+            .ijm-acc-table tbody tr:hover { background: transparent !important; }
+            .ijm-job-summary-table tbody tr.ijm-job-summary-row-closed { background: #ecf7ed; }
+            .ijm-job-summary-table tbody tr.ijm-job-summary-row-open { background: #fffbea; }
+            .ijm-picker-modal .modal-dialog {
+                width: auto;
+                margin: 8px;
+            }
+            .ijm-picker-modal .modal-content { border-radius: 10px; }
+            .ijm-picker-body { max-height: calc(100vh - 150px) !important; }
+            .ijm-picker-table .btn-ijn-pick { width: 100%; min-height: 40px; }
+            .ijm-picker-modal .form-control { min-height: 44px; font-size: 16px; }
+            .ijm-picker-modal .input-group-sm > .form-control,
+            .ijm-picker-modal .input-group-sm > .input-group-btn > .btn {
+                height: 44px;
+                padding: 8px 12px;
+                font-size: 16px;
+                line-height: 1.35;
+            }
+            .ijm-picker-modal .input-group-sm > .input-group-btn > .btn { min-width: 48px; }
+            #channelSettingTable thead { display: none; }
+            #channelSettingTable,
+            #channelSettingTable tbody,
+            #channelSettingTable tr,
+            #channelSettingTable td { display: block; width: 100%; }
+            #channelSettingTable tr {
+                margin-bottom: 8px;
+                border: 1px solid #d8e4f2;
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            #channelSettingTable td { border: 0; padding: 8px 12px; }
+            #btnSaveChannelSetting { width: 100%; min-height: 44px; }
+            .ijm-acc-chk,
+            #ijmAccCheckAllHead { width: 20px; height: 22px; }
+            .ijm-attach-remove { width: 28px; height: 28px; line-height: 26px; font-size: 16px; top: -6px; right: -6px; }
         }
     </style>
 
@@ -139,10 +297,10 @@
                     </div>
                     <div class="box-body">
                         <div class="row ijm-job-row">
-                            <div class="col-md-6 col-sm-8 col-xs-12">
+                            <div class="col-lg-5 col-md-7 col-xs-12">
                                 <div class="form-group form-group-sm">
                                     <label>Job ID <span class="ijm-req">*</span></label>
-                                    <div class="input-group input-group-sm">
+                                    <div class="input-group input-group-sm ijm-search-group">
                                         <input type="text" id="txtJobID" class="form-control ijm-job-id-input" placeholder="Klik tombol cari..." readonly="readonly" />
                                         <span class="input-group-btn">
                                             <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="job" title="Cari Job ID"><i class="fa fa-search"></i></button>
@@ -154,8 +312,8 @@
                         <div class="ijm-job-summary-wrap">
                             <p class="ijm-job-summary-title"><i class="fa fa-list-alt"></i> Job Detail Information</p>
                             <div id="ijmJobSummaryEmpty" class="ijm-job-summary-empty"></div>
-                            <div class="table-responsive" id="ijmJobSummaryWrap" style="display:none;">
-                                <table class="table table-bordered table-striped ijm-job-summary-table">
+                            <div class="table-responsive ijm-stack-wrap" id="ijmJobSummaryWrap" style="display:none;">
+                                <table class="table table-bordered table-striped ijm-job-summary-table ijm-stack-table">
                                     <thead>
                                         <tr>
                                             <th>Device Group</th>
@@ -184,36 +342,40 @@
                         <p class="ijm-maint-hint"><i class="fa fa-info-circle"></i> Pilih data instalasi berikut secara berurutan. Detail referensi job tersedia di bagian bawah.</p>
 
                         <div class="row ijm-install-row">
-                            <div class="col-md-6 col-sm-12 col-xs-12">
+                            <div class="col-md-12 col-xs-12">
                                 <div class="ijm-maint-input">
                                     <label><i class="fa fa-user-md"></i> Technician ID <span class="ijm-req">*</span></label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="txtTechnicianID" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
-                                        <span class="input-group-btn">
-                                            <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="tech" title="Cari Technician"><i class="fa fa-search"></i></button>
-                                        </span>
+                                    <div class="row ijm-tech-pick-row">
+                                        <div class="col-md-6 col-xs-12">
+                                            <div class="input-group input-group-sm ijm-search-group">
+                                                <input type="text" id="txtTechnicianID" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
+                                                <span class="input-group-btn">
+                                                    <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="tech" title="Cari Technician"><i class="fa fa-search"></i></button>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 col-sm-6 col-xs-12">
+                                            <div class="ijm-info-row">
+                                                <label>Name</label>
+                                                <div class="ijm-ro form-control input-sm" data-field="TechnicianName">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 col-sm-6 col-xs-12">
+                                            <div class="ijm-info-row">
+                                                <label>Branch Name</label>
+                                                <div class="ijm-ro form-control input-sm" data-field="TechBranchName">-</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6 col-xs-12">
-                                <div class="form-group form-group-sm">
-                                    <label>Name</label>
-                                    <div class="ijm-ro form-control input-sm" data-field="TechnicianName">-</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-sm-6 col-xs-12">
-                                <div class="form-group form-group-sm">
-                                    <label>Branch Name</label>
-                                    <div class="ijm-ro form-control input-sm" data-field="TechBranchName">-</div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="row ijm-install-row">
-                            <div class="col-lg-4 col-md-6 col-xs-12">
+                        <div class="row ijm-install-row ijm-pick-grid">
+                            <div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
                                 <div class="ijm-maint-input">
                                     <label><i class="fa fa-car"></i> Police No <span class="ijm-req">*</span></label>
-                                    <div class="input-group input-group-sm">
+                                    <div class="input-group input-group-sm ijm-search-group">
                                         <input type="text" id="txtPoliceNo" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
                                         <span class="input-group-btn">
                                             <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="vehicle"><i class="fa fa-search"></i></button>
@@ -232,10 +394,10 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-lg-4 col-md-6 col-xs-12">
+                            <div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
                                 <div class="ijm-maint-input">
                                     <label><i class="fa fa-hdd-o"></i> No SN <span class="ijm-req">*</span></label>
-                                    <div class="input-group input-group-sm">
+                                    <div class="input-group input-group-sm ijm-search-group">
                                         <input type="text" id="txtNoSN" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
                                         <span class="input-group-btn">
                                             <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="device"><i class="fa fa-search"></i></button>
@@ -254,10 +416,10 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-lg-4 col-md-12 col-xs-12">
+                            <div class="col-lg-4 col-md-12 col-sm-12 col-xs-12">
                                 <div class="ijm-maint-input">
                                     <label><i class="fa fa-mobile"></i> No GSM <span class="ijm-req">*</span></label>
-                                    <div class="input-group input-group-sm">
+                                    <div class="input-group input-group-sm ijm-search-group">
                                         <input type="text" id="txtNoGSM" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
                                         <span class="input-group-btn">
                                             <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="gsm"><i class="fa fa-search"></i></button>
@@ -288,6 +450,7 @@
                                         <div id="channelSettingLoading" style="display: none; margin-bottom: 8px;">
                                             <i class="fa fa-circle-o-notch fa-spin"></i> Memuat channel...
                                         </div>
+                                        <div class="table-responsive ijm-channel-wrap">
                                         <table class="table table-bordered" id="channelSettingTable" style="display: none; margin-bottom: 8px;">
                                             <thead>
                                                 <tr>
@@ -297,11 +460,12 @@
                                             </thead>
                                             <tbody id="channelSettingRows"></tbody>
                                         </table>
+                                        </div>
                                         <button type="button" class="btn btn-primary btn-sm" id="btnSaveChannelSetting" disabled="disabled">
                                             <i class="fa fa-save"></i>&nbsp;Save Setting Channel
                                         </button>
                                     </div>
-                                    <div class="row">
+                                    <div class="row ijm-install-fields">
                                         <div class="col-md-3 col-sm-6 col-xs-12">
                                             <div class="form-group form-group-sm">
                                                 <label>Server Name <span class="ijm-req">*</span></label>
@@ -366,21 +530,22 @@
                     </div>
                     <div class="box-body">
                         <div class="ijm-acc-toolbar">
-                            <div class="input-group input-group-sm" style="max-width:280px;">
+                            <div class="input-group input-group-sm ijm-acc-search">
                                 <input type="text" id="txtAccSearch" class="form-control" placeholder="Cari No SN..." maxlength="50" />
                                 <span class="input-group-btn">
                                     <button type="button" class="btn btn-warning btn-sm" id="btnAccSearch"><i class="fa fa-search"></i></button>
                                 </span>
                             </div>
-                            <button type="button" class="btn btn-default btn-xs" id="btnAccCheckAll"><i class="fa fa-check-square-o"></i> Check All</button>
-                            <button type="button" class="btn btn-default btn-xs" id="btnAccUncheckAll"><i class="fa fa-square-o"></i> Uncheck All</button>
+                            <button type="button" class="btn btn-default btn-sm" id="btnAccCheckAll"><i class="fa fa-check-square-o"></i> Check All</button>
+                            <button type="button" class="btn btn-default btn-sm" id="btnAccUncheckAll"><i class="fa fa-square-o"></i> Uncheck All</button>
                             <span class="text-muted" id="ijmAccCount" style="font-size:12px;"></span>
+                            <span id="ijmAccReqHint" class="ijm-acc-req-hint" style="display:none;"></span>
                         </div>
                         <div class="ijm-list-loading ijm-acc-loading"><i class="fa fa-spinner fa-spin"></i> Memuat accessories...</div>
                         <div class="ijm-list-empty ijm-acc-empty" style="display:none;">Lengkapi data instalasi untuk memuat list accessories.</div>
                         <div class="ijm-list-error alert alert-danger ijm-acc-error" style="display:none;"></div>
-                        <div class="table-responsive ijm-acc-wrap" style="display:none;">
-                            <table class="table table-bordered table-striped table-hover ijm-acc-table">
+                        <div class="table-responsive ijm-acc-wrap ijm-stack-wrap" style="display:none;">
+                            <table class="table table-bordered table-striped table-hover ijm-acc-table ijm-stack-table">
                                 <thead>
                                     <tr>
                                         <th class="text-center" style="width:44px;">
@@ -498,15 +663,15 @@
 
         <!-- Generic Picker Modal -->
         <div class="modal fade ijm-picker-modal" id="modal-ijn-picker" tabindex="-1" role="dialog" data-backdrop="static">
-            <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-dialog modal-lg ijm-picker-dialog" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
                         <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                         <h4 class="modal-title"><i class="fa fa-search"></i> <span id="ijmPickerTitle">Pilih</span></h4>
                     </div>
-                    <div class="modal-body" style="max-height:480px;overflow-y:auto;">
+                    <div class="modal-body ijm-picker-body">
                         <div class="ijm-list-search" style="margin-bottom:12px;">
-                            <div class="input-group input-group-sm">
+                            <div class="input-group input-group-sm ijm-search-group">
                                 <input type="text" class="form-control ijm-picker-search-input" placeholder="Ketik kata kunci..." maxlength="100" autocomplete="off" />
                                 <span class="input-group-btn">
                                     <button type="button" class="btn btn-primary btn-ijn-picker-search"><i class="fa fa-search"></i> Cari</button>
@@ -516,8 +681,8 @@
                         <div class="ijm-list-loading ijm-picker-loading"><i class="fa fa-spinner fa-spin"></i> Memuat data...</div>
                         <div class="ijm-list-empty ijm-picker-empty" style="display:none;">Tidak ada data.</div>
                         <div class="ijm-list-error alert alert-danger ijm-picker-error" style="display:none;"></div>
-                        <div class="table-responsive ijm-picker-wrap" style="display:none;">
-                            <table class="table table-bordered table-striped table-hover ijm-picker-table">
+                        <div class="table-responsive ijm-picker-wrap ijm-stack-wrap" style="display:none;">
+                            <table class="table table-bordered table-striped table-hover ijm-picker-table ijm-stack-table">
                                 <thead class="ijm-picker-thead"></thead>
                                 <tbody class="ijm-picker-tbody"></tbody>
                             </table>
@@ -540,6 +705,7 @@
             var ijnPickerType = null;
             var ijnPickerCache = [];
             var ijnAccCache = [];
+            var ijnJobSummaryRows = [];
             var ijnSelectedPictureFiles = [];
 
             var ijnPickerDefs = {
@@ -636,18 +802,6 @@
             function isLockedTechGroup() {
                 return ijnContains(ijnSessionUserGroupId, 'TECH') || ijnEquals(ijnSessionUserGroupId, 'TH');
             }
-            function canOpenPicker(type) {
-                if (!isLockedTechGroup()) return true;
-                return !(type === 'job' || type === 'tech');
-            }
-            function applyPickerLockByGroup() {
-                if (!isLockedTechGroup()) return;
-                $('#txtJobID, #txtTechnicianID').prop('readonly', true).addClass('ijm-ro');
-                $('.btn-ijn-open[data-picker="job"], .btn-ijn-open[data-picker="tech"]')
-                    .prop('disabled', true)
-                    .addClass('disabled')
-                    .attr('title', 'Readonly untuk group TECH/TH');
-            }
             function ijnGetQueryParam(name) {
                 if (!name) return '';
                 try {
@@ -690,9 +844,11 @@
             }
 
             function clearJobSummary() {
+                ijnJobSummaryRows = [];
                 $('#ijmJobSummaryBody').empty();
                 $('#ijmJobSummaryWrap').hide();
                 renderJobSummaryState('empty', 'Pilih Job ID untuk menampilkan detail item pekerjaan.', 'Device Group, Device Type, Qty Request, dan Qty Done akan tampil otomatis setelah Job ID dipilih.');
+                updateAccCount();
             }
 
             function renderJobSummaryState(state, title, text) {
@@ -733,13 +889,17 @@
 
             function loadJobSummary(jobId) {
                 if (!jobId) { clearJobSummary(); return; }
+                ijnJobSummaryRows = [];
                 $('#ijmJobSummaryBody').empty();
                 $('#ijmJobSummaryWrap').hide();
                 renderJobSummaryState('loading', 'Memuat detail job...', 'Mohon tunggu, sistem sedang mengambil informasi item pekerjaan.');
+                updateAccCount();
                 ijnCall('GetNewInstallJobCreateDetails', { JobID: jobId }, function (res) {
                     var rows = res.Data || [];
+                    ijnJobSummaryRows = rows;
                     if (!rows.length) {
                         renderJobSummaryState('empty', 'Detail job belum tersedia.', 'Belum ada data Device Group/Device Type untuk Job ID ini.');
+                        updateAccCount();
                         return;
                     }
                     var $body = $('#ijmJobSummaryBody');
@@ -754,18 +914,21 @@
                         var statusHtml = renderJobDetailStatusCell(rawStatus);
                         $body.append(
                             '<tr class="' + rowCls + '">' +
-                            '<td>' + dg + '</td>' +
-                            '<td>' + dt + '</td>' +
-                            '<td class="text-right">' + q + '</td>' +
-                            '<td class="text-right">' + qd + '</td>' +
-                            '<td>' + statusHtml + '</td>' +
+                            '<td data-label="Device Group">' + dg + '</td>' +
+                            '<td data-label="Device Type">' + dt + '</td>' +
+                            '<td class="text-right" data-label="Qty Request">' + q + '</td>' +
+                            '<td class="text-right" data-label="Qty Done">' + qd + '</td>' +
+                            '<td data-label="Status">' + statusHtml + '</td>' +
                             '</tr>'
                         );
                     });
                     $('#ijmJobSummaryEmpty').hide();
                     $('#ijmJobSummaryWrap').show();
+                    updateAccCount();
                 }, function () {
+                    ijnJobSummaryRows = [];
                     renderJobSummaryState('error', 'Gagal memuat detail job.', 'Silakan coba lagi beberapa saat, atau pilih ulang Job ID.');
+                    updateAccCount();
                 });
             }
 
@@ -888,10 +1051,6 @@
             }
 
             function openPicker(type) {
-                if (!canOpenPicker(type)) {
-                    Swal.fire({ icon: 'info', title: 'Info', text: 'Job ID dan Technician ID readonly untuk group TECH/TH.' });
-                    return;
-                }
                 var def = ijnPickerDefs[type];
                 if (!def) return;
                 if (def.require && !def.require()) {
@@ -948,9 +1107,9 @@
                 rows.forEach(function (row, idx) {
                     var tr = '<tr>';
                     def.cols.forEach(function (c) {
-                        tr += '<td>' + ijnEsc(row[c.key] || row[c.key.toLowerCase()] || '') + '</td>';
+                        tr += '<td data-label="' + ijnEsc(c.label) + '">' + ijnEsc(row[c.key] || row[c.key.toLowerCase()] || '') + '</td>';
                     });
-                    tr += '<td class="text-center"><button type="button" class="btn btn-success btn-xs btn-ijn-pick" data-idx="' + idx + '"><i class="fa fa-check"></i> Pilih</button></td></tr>';
+                    tr += '<td class="text-center" data-label="Action"><button type="button" class="btn btn-success btn-xs btn-ijn-pick" data-idx="' + idx + '"><i class="fa fa-check"></i> Pilih</button></td></tr>';
                     $tbody.append(tr);
                 });
                 $m.find('.ijm-picker-wrap').show();
@@ -1076,6 +1235,60 @@
                 return isNaN(n) ? 0 : n;
             }
 
+            function normalizeDeviceGroupKey(row) {
+                return {
+                    id: String(cell(row, ['DeviceGroupID']) || '').trim().toUpperCase(),
+                    desc: String(cell(row, ['DeviceGroupDesc']) || '').trim().toUpperCase()
+                };
+            }
+            function isGpsDeviceGroup(row) {
+                var g = normalizeDeviceGroupKey(row);
+                return g.id === 'GPS' || g.desc === 'GPS';
+            }
+            function isAccessoriesDeviceGroup(row) {
+                var g = normalizeDeviceGroupKey(row);
+                return g.id === 'ACS' || g.desc === 'ACCESSORIES';
+            }
+            function getJobQtyRequestTotals() {
+                var gps = 0;
+                var acc = 0;
+                (ijnJobSummaryRows || []).forEach(function (row) {
+                    var qty = parseIntSafe(cell(row, ['Quantity']));
+                    if (qty < 0) qty = 0;
+                    if (isGpsDeviceGroup(row)) gps += qty;
+                    else if (isAccessoriesDeviceGroup(row)) acc += qty;
+                });
+                return { gps: gps, acc: acc };
+            }
+            function getRequiredAccessoriesCount() {
+                var totals = getJobQtyRequestTotals();
+                if (totals.gps <= 0) return 0;
+                if (totals.acc <= 0) return 0;
+                var ratio = totals.acc / totals.gps;
+                return Math.round(totals.gps * ratio);
+            }
+            function getSelectedAccessoriesCount() {
+                return $('.ijm-acc-chk:checked').length;
+            }
+            function validateAccessoriesSelection() {
+                var required = getRequiredAccessoriesCount();
+                var selected = getSelectedAccessoriesCount();
+                if (required <= 0) {
+                    return { ok: true, required: 0, selected: selected, remaining: 0 };
+                }
+                var remaining = required - selected;
+                if (remaining < 0) remaining = 0;
+                return {
+                    ok: selected >= required,
+                    required: required,
+                    selected: selected,
+                    remaining: remaining
+                };
+            }
+            function accessoriesRequirementMessage(result) {
+                return 'Accessories wajib dipilih. Required: ' + result.required + ', Selected: ' + result.selected + ', Remaining: ' + result.remaining + '.';
+            }
+
             function readPictureFileHeader(file, len) {
                 return new Promise(function (resolve, reject) {
                     var reader = new FileReader();
@@ -1191,6 +1404,13 @@
                     return;
                 }
 
+                var accCheck = validateAccessoriesSelection();
+                if (!accCheck.ok) {
+                    Swal.fire({ icon: 'warning', title: 'Perhatian', text: accessoriesRequirementMessage(accCheck) });
+                    updateSaveButtonState();
+                    return;
+                }
+
                 $('#btnSaveClient').prop('disabled', true);
                 buildPicturePayload()
                     .then(function (filePayload) {
@@ -1258,6 +1478,7 @@
                 $('.ijm-acc-empty').show().text('Pilih Job ID dan Technician untuk memuat list accessories.');
                 $('#ijmAccBody').empty();
                 $('#ijmAccCount').text('');
+                updateAccRequirementHint();
             }
 
             function loadAccessories() {
@@ -1286,6 +1507,8 @@
                 if (!rows.length) {
                     $('.ijm-acc-empty').show().text('Tidak ada accessories tersedia.');
                     $('#ijmAccCount').text('');
+                    ijnSet('hfSelectedAcc', '');
+                    updateAccRequirementHint();
                     return;
                 }
                 rows.forEach(function (row, idx) {
@@ -1294,11 +1517,11 @@
                     var tdtId = cell(row, ['TdtID']);
                     $body.append(
                         '<tr>' +
-                        '<td class="text-center"><input type="checkbox" class="ijm-acc-chk" data-idx="' + idx + '" data-deviceid="' + ijnEsc(deviceId) + '" data-tdtid="' + ijnEsc(tdtId) + '" /></td>' +
-                        '<td>' + ijnEsc(deviceId) + '</td>' +
-                        '<td>' + ijnEsc(noSn) + '</td>' +
-                        '<td>' + ijnEsc(cell(row, ['DeviceTypeDesc'])) + '</td>' +
-                        '<td>' + ijnEsc(cell(row, ['Status'])) + '</td>' +
+                        '<td class="text-center" data-label="Pilih"><input type="checkbox" class="ijm-acc-chk" data-idx="' + idx + '" data-deviceid="' + ijnEsc(deviceId) + '" data-tdtid="' + ijnEsc(tdtId) + '" /></td>' +
+                        '<td data-label="Device ID">' + ijnEsc(deviceId) + '</td>' +
+                        '<td data-label="No SN">' + ijnEsc(noSn) + '</td>' +
+                        '<td data-label="Device Type Desc">' + ijnEsc(cell(row, ['DeviceTypeDesc'])) + '</td>' +
+                        '<td data-label="Status">' + ijnEsc(cell(row, ['Status'])) + '</td>' +
                         '</tr>'
                     );
                 });
@@ -1322,6 +1545,19 @@
                     if (ijnAccCache[i]) sel.push(ijnAccCache[i]);
                 });
                 ijnSet('hfSelectedAcc', sel.length ? JSON.stringify(sel) : '');
+                updateAccRequirementHint();
+            }
+            function updateAccRequirementHint() {
+                var $hint = $('#ijmAccReqHint');
+                var required = getRequiredAccessoriesCount();
+                if (required <= 0) {
+                    $hint.hide().text('').removeClass('ijm-acc-req-ok ijm-acc-req-warn ijm-acc-req-err');
+                    return;
+                }
+                var result = validateAccessoriesSelection();
+                $hint.show().text(accessoriesRequirementMessage(result));
+                $hint.removeClass('ijm-acc-req-ok ijm-acc-req-warn ijm-acc-req-err');
+                $hint.addClass(result.ok ? 'ijm-acc-req-ok' : (result.selected > 0 ? 'ijm-acc-req-warn' : 'ijm-acc-req-err'));
             }
             function setAllAccChecked(checked) {
                 $('.ijm-acc-chk').prop('checked', checked);
@@ -1397,8 +1633,10 @@
                     var code = m.ChanelCode ? (' <small class="text-muted">(' + chEscapeHtml(m.ChanelCode) + ')</small>') : '';
                     var tr = document.createElement('tr');
                     var tdLabel = document.createElement('td');
+                    tdLabel.setAttribute('data-label', 'Channel');
                     tdLabel.innerHTML = '<strong>' + chEscapeHtml(label) + '</strong>' + code;
                     var tdSel = document.createElement('td');
+                    tdSel.setAttribute('data-label', 'Tipe Channel');
                     var sel = document.createElement('select');
                     sel.className = 'form-control input-sm channel-type-select';
                     sel.setAttribute('data-chanelid', m.ChanelID);
@@ -1524,12 +1762,12 @@
                 $(document).off('click.ijnOpen', '.btn-ijn-open').on('click.ijnOpen', '.btn-ijn-open', function (e) {
                     e.preventDefault();
                     var picker = $(this).data('picker');
-                    if (canOpenPicker(picker)) openPicker(picker);
+                    openPicker(picker);
                 });
                 $(document).off('click.ijnPickInput', '.ijm-pick-input, .ijm-job-id-input').on('click.ijnPickInput', '.ijm-pick-input, .ijm-job-id-input', function () {
                     var id = this.id;
                     var map = { txtJobID: 'job', txtTechnicianID: 'tech', txtPoliceNo: 'vehicle', txtNoSN: 'device', txtNoGSM: 'gsm' };
-                    if (map[id] && canOpenPicker(map[id])) openPicker(map[id]);
+                    if (map[id]) openPicker(map[id]);
                 });
                 $(document).off('click.ijnPick', '.btn-ijn-pick').on('click.ijnPick', '.btn-ijn-pick', function () {
                     var row = ijnPickerCache[parseInt($(this).data('idx'), 10)];
@@ -1695,7 +1933,6 @@
             $(document).ready(function () {
                 ijnSyncPickerModal();
                 bindEvents();
-                applyPickerLockByGroup();
                 clearAccList();
                 resetInstallationInfo();
                 clearJobSummary();
@@ -1705,7 +1942,6 @@
                     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function () {
                         ijnSyncPickerModal();
                         bindEvents();
-                        applyPickerLockByGroup();
                         updateSaveButtonState();
                     });
                 }

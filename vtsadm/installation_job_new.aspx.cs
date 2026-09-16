@@ -123,6 +123,65 @@ namespace vtsadm
             return int.TryParse((value ?? "").Trim(), out n) ? n : 0;
         }
 
+        private static bool IsGpsDeviceGroup(Dictionary<string, string> row)
+        {
+            string id = F(row, "DeviceGroupID").ToUpperInvariant();
+            string desc = F(row, "DeviceGroupDesc").ToUpperInvariant();
+            return id == "GPS" || desc == "GPS";
+        }
+
+        private static bool IsAccessoriesDeviceGroup(Dictionary<string, string> row)
+        {
+            string id = F(row, "DeviceGroupID").ToUpperInvariant();
+            string desc = F(row, "DeviceGroupDesc").ToUpperInvariant();
+            return id == "ACS" || desc == "ACCESSORIES";
+        }
+
+        private static int CountUniqueSelectedAccessories(List<AccessoryPickInput> selectedAccessories)
+        {
+            if (selectedAccessories == null || selectedAccessories.Count == 0) return 0;
+            var uniq = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < selectedAccessories.Count; i++)
+            {
+                var item = selectedAccessories[i] ?? new AccessoryPickInput();
+                var accTdtId = (item.TdtID ?? "").Trim();
+                var accDeviceId = (item.DeviceID ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(accTdtId) && string.IsNullOrWhiteSpace(accDeviceId))
+                    continue;
+                uniq.Add(accTdtId + "|" + accDeviceId);
+            }
+            return uniq.Count;
+        }
+
+        private static string ValidateAccessoriesRequirement(string jobId, int selectedCount)
+        {
+            if (string.IsNullOrWhiteSpace(jobId)) return "";
+
+            string err = "";
+            var rows = QuerySpRows("sp_view_job_create_details '" + Esc(jobId.Trim()) + "',''", out err);
+            if (!string.IsNullOrEmpty(err) || rows == null || rows.Count == 0)
+                return "";
+
+            int gpsQty = 0;
+            int accQty = 0;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                int qty = ParseIntSafe(F(rows[i], "Quantity"));
+                if (qty < 0) qty = 0;
+                if (IsGpsDeviceGroup(rows[i])) gpsQty += qty;
+                else if (IsAccessoriesDeviceGroup(rows[i])) accQty += qty;
+            }
+
+            if (gpsQty <= 0) return "";
+            if (accQty <= 0) return "";
+
+            int required = (int)Math.Round(gpsQty * ((double)accQty / gpsQty));
+            if (selectedCount >= required) return "";
+
+            int remaining = required - selectedCount;
+            return "Accessories wajib dipilih. Required: " + required + ", Selected: " + selectedCount + ", Remaining: " + remaining + ".";
+        }
+
         private static string NormalizeBase64(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "";
@@ -787,6 +846,10 @@ namespace vtsadm
                         return new ApiResult { Success = false, Message = "Format accessories terpilih tidak valid." };
                     }
                 }
+
+                string accValidation = ValidateAccessoriesRequirement(JobID, CountUniqueSelectedAccessories(selectedAccessories));
+                if (!string.IsNullOrWhiteSpace(accValidation))
+                    return new ApiResult { Success = false, Message = accValidation };
 
                 var pendingFiles = new List<PendingImageFile>();
                 for (int i = 0; i < files.Count; i++)
