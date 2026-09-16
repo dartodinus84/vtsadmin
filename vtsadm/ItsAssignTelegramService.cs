@@ -41,11 +41,97 @@ namespace vtsadm
             string technicianId,
             DateTime schDate)
         {
+            AssignDetail detail = ResolveAssignNotificationDetail(
+                connString,
+                jobId,
+                custId,
+                technicianId,
+                schDate);
+            if (detail == null)
+            {
+                return;
+            }
+
+            SendNotificationMessage(connString, BuildDetailMessage(detail));
+        }
+
+        public static void NotifyAfterTransfer(
+            string connString,
+            string jobId,
+            string custId,
+            string fromTechnicianId,
+            string toTechnicianId,
+            DateTime schDate,
+            string actionNote = "")
+        {
+            if (string.IsNullOrWhiteSpace(connString)
+                || string.IsNullOrWhiteSpace(jobId)
+                || string.IsNullOrWhiteSpace(fromTechnicianId)
+                || string.IsNullOrWhiteSpace(toTechnicianId))
+            {
+                return;
+            }
+
+            AssignDetail detail = ResolveAssignNotificationDetail(
+                connString,
+                jobId,
+                custId,
+                toTechnicianId,
+                schDate);
+            if (detail == null)
+            {
+                return;
+            }
+
+            detail.PreviousTechnicianId = fromTechnicianId.Trim();
+            detail.PreviousTechnicianName = ResolveItsSupportName(connString, fromTechnicianId);
+            detail.ActionNote = (actionNote ?? string.Empty).Trim();
+            SendNotificationMessage(connString, BuildTransferMessage(detail));
+        }
+
+        public static AssignDetail PrepareDeleteNotification(
+            string connString,
+            string assignId,
+            int seq,
+            string actionNote)
+        {
+            if (string.IsNullOrWhiteSpace(connString) || string.IsNullOrWhiteSpace(assignId))
+            {
+                return null;
+            }
+
+            AssignDetail detail = LoadAssignDetail(connString, assignId, seq);
+            if (detail == null)
+            {
+                return null;
+            }
+
+            detail.ActionNote = (actionNote ?? string.Empty).Trim();
+            return detail;
+        }
+
+        public static void NotifyAfterDelete(string connString, AssignDetail detail)
+        {
+            if (detail == null || string.IsNullOrWhiteSpace(detail.JobId))
+            {
+                return;
+            }
+
+            SendNotificationMessage(connString, BuildDeleteMessage(detail));
+        }
+
+        private static AssignDetail ResolveAssignNotificationDetail(
+            string connString,
+            string jobId,
+            string custId,
+            string technicianId,
+            DateTime schDate)
+        {
             if (string.IsNullOrWhiteSpace(connString)
                 || string.IsNullOrWhiteSpace(jobId)
                 || string.IsNullOrWhiteSpace(technicianId))
             {
-                return;
+                return null;
             }
 
             string assignId;
@@ -62,10 +148,19 @@ namespace vtsadm
 
             if (detail == null || string.IsNullOrWhiteSpace(detail.JobId))
             {
+                return null;
+            }
+
+            return detail;
+        }
+
+        private static void SendNotificationMessage(string connString, string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
                 return;
             }
 
-            string text = BuildDetailMessage(detail);
             TelegramConfig config = LoadTelegramConfig(connString);
             if (!config.IsValid)
             {
@@ -73,6 +168,22 @@ namespace vtsadm
             }
 
             SendTelegramMessage(config.ApiToken, config.ChatId, text);
+        }
+
+        private static string ResolveItsSupportName(string connString, string technicianId)
+        {
+            if (string.IsNullOrWhiteSpace(technicianId))
+            {
+                return string.Empty;
+            }
+
+            AssignDetail temp = new AssignDetail
+            {
+                TechnicianId = technicianId.Trim(),
+                TechnicianName = technicianId.Trim()
+            };
+            EnrichFromItsSupport(connString, temp);
+            return FirstNonEmpty(temp.TechnicianName, technicianId.Trim());
         }
 
         public static void ProcessWebhook(HttpContext context)
@@ -84,6 +195,11 @@ namespace vtsadm
 
             EnsureTls12();
             context.Response.ContentType = "text/plain; charset=utf-8";
+
+            if (TryHandleSimulateRequest(context))
+            {
+                return;
+            }
 
             if (TryHandleSetupRequest(context))
             {
@@ -182,8 +298,8 @@ namespace vtsadm
                     config.ApiToken,
                     chatId,
                     "<b>IT Support Assign Bot</b>\r\n"
-                    + "/open — daftar penugasan belum selesai\r\n"
-                    + "/detail &lt;AssignID&gt; [Seq] — detail penugasan\r\n"
+                    + "/open — penugasan IT Support yang sudah di-assign &amp; belum selesai\r\n"
+                    + "/detail &lt;JobID&gt; [Seq] — detail penugasan\r\n"
                     + "/chatid — tampilkan Chat ID chat ini");
                 return;
             }
@@ -196,7 +312,10 @@ namespace vtsadm
 
             if (text.StartsWith("/open", StringComparison.OrdinalIgnoreCase)
                 || text.StartsWith("/list", StringComparison.OrdinalIgnoreCase)
-                || text.StartsWith("/belumselesai", StringComparison.OrdinalIgnoreCase))
+                || text.StartsWith("/belumselesai", StringComparison.OrdinalIgnoreCase)
+                || IsBotCommand(text, "/open")
+                || IsBotCommand(text, "/list")
+                || IsBotCommand(text, "/belumselesai"))
             {
                 if (string.IsNullOrWhiteSpace(connString))
                 {
@@ -219,22 +338,26 @@ namespace vtsadm
                 string[] parts = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 2)
                 {
-                    SendHtmlMessage(config.ApiToken, chatId, "Format: /detail &lt;AssignID&gt; [Seq]");
+                    SendHtmlMessage(
+                        config.ApiToken,
+                        chatId,
+                        "Format: /detail &lt;JobID&gt; [Seq]\r\n"
+                        + "Contoh: /detail TRO0006127\r\n"
+                        + "Atau: /detail TRO0006127 1");
                     return;
                 }
 
-                string assignId = parts[1].Trim();
                 int seq = 1;
                 if (parts.Length >= 3)
                 {
                     int parsedSeq;
-                    if (int.TryParse(parts[2], out parsedSeq) && parsedSeq > 0)
+                    if (int.TryParse(parts[2].Trim(), out parsedSeq) && parsedSeq > 0)
                     {
                         seq = parsedSeq;
                     }
                 }
 
-                AssignDetail detail = LoadAssignDetail(connString, assignId, seq);
+                AssignDetail detail = LoadAssignDetailByJobId(connString, parts[1], seq);
                 if (detail == null)
                 {
                     SendHtmlMessage(config.ApiToken, chatId, "Data penugasan tidak ditemukan.");
@@ -277,33 +400,64 @@ namespace vtsadm
                 return;
             }
 
-            if (!data.StartsWith("itsd:", StringComparison.OrdinalIgnoreCase))
+            if (data.StartsWith("itsj:", StringComparison.OrdinalIgnoreCase)
+                || data.StartsWith("itsd:", StringComparison.OrdinalIgnoreCase))
             {
-                return;
-            }
+                string[] parts = data.Split(':');
+                if (parts.Length < 2)
+                {
+                    return;
+                }
 
-            string[] parts = data.Split(':');
-            if (parts.Length < 3)
-            {
-                return;
-            }
+                if (data.StartsWith("itsj:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string jobId = parts[1].Trim();
+                    if (string.IsNullOrWhiteSpace(jobId))
+                    {
+                        return;
+                    }
 
-            string assignId = parts[1].Trim();
-            int seq = 1;
-            int parsedSeq;
-            if (int.TryParse(parts[2], out parsedSeq) && parsedSeq > 0)
-            {
-                seq = parsedSeq;
-            }
+                    int seq = 1;
+                    int parsedSeq;
+                    if (parts.Length >= 3 && int.TryParse(parts[2], out parsedSeq) && parsedSeq > 0)
+                    {
+                        seq = parsedSeq;
+                    }
 
-            AssignDetail detail = LoadAssignDetail(connString, assignId, seq);
-            if (detail == null)
-            {
-                SendHtmlMessage(config.ApiToken, chatId, "Data penugasan tidak ditemukan.");
-                return;
-            }
+                    AssignDetail detail = LoadAssignDetailByJobId(connString, jobId, seq);
+                    if (detail == null)
+                    {
+                        SendHtmlMessage(config.ApiToken, chatId, "Data penugasan tidak ditemukan.");
+                        return;
+                    }
 
-            SendHtmlMessage(config.ApiToken, chatId, BuildDetailMessage(detail));
+                    SendHtmlMessage(config.ApiToken, chatId, BuildDetailMessage(detail));
+                }
+                else
+                {
+                    if (parts.Length < 3)
+                    {
+                        return;
+                    }
+
+                    string assignId = parts[1].Trim();
+                    int seq = 1;
+                    int parsedSeq;
+                    if (int.TryParse(parts[2], out parsedSeq) && parsedSeq > 0)
+                    {
+                        seq = parsedSeq;
+                    }
+
+                    AssignDetail detail = LoadAssignDetail(connString, assignId, seq);
+                    if (detail == null)
+                    {
+                        SendHtmlMessage(config.ApiToken, chatId, "Data penugasan tidak ditemukan.");
+                        return;
+                    }
+
+                    SendHtmlMessage(config.ApiToken, chatId, BuildDetailMessage(detail));
+                }
+            }
         }
 
         private static void SendOpenAssignList(string connString, string apiToken, string chatId)
@@ -311,12 +465,12 @@ namespace vtsadm
             List<OpenAssignSummary> rows = LoadOpenAssignSummaries(connString);
             if (rows.Count == 0)
             {
-                SendHtmlMessage(apiToken, chatId, "Tidak ada penugasan IT Support yang belum selesai.");
+                SendHtmlMessage(apiToken, chatId, "Tidak ada penugasan IT Support yang sudah di-assign dan belum selesai.");
                 return;
             }
 
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("<b>📋 Penugasan IT Support belum selesai</b>");
+            sb.AppendLine("<b>📋 Penugasan IT Support (belum selesai)</b>");
             sb.AppendLine("<i>Klik tombol di bawah untuk detail</i>");
             sb.AppendLine();
 
@@ -336,7 +490,7 @@ namespace vtsadm
                 string label = TrimButtonLabel(row.JobId + " - " + row.CustomerName, 40);
                 Dictionary<string, string> button = new Dictionary<string, string>();
                 button["text"] = label;
-                button["callback_data"] = "itsd:" + row.AssignId + ":" + row.Seq.ToString();
+                button["callback_data"] = "itsj:" + row.JobId + ":" + row.Seq.ToString();
                 keyboard.Add(new List<Dictionary<string, string>> { button });
             }
 
@@ -349,84 +503,179 @@ namespace vtsadm
         private static List<OpenAssignSummary> LoadOpenAssignSummaries(string connString)
         {
             List<OpenAssignSummary> list = new List<OpenAssignSummary>();
-            DateTime monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            string fromText = monthStart.ToString("yyyy-MM-dd");
-
-            string[] queries = new string[]
+            DataTable table = ItsSupportAssignData.LoadOpenItSupportAssignRows(OpenListMaxRows, connString);
+            if (table == null || table.Rows.Count == 0)
             {
-                "SELECT TOP " + OpenListMaxRows.ToString()
-                    + " d.AssignID, d.Seq, d.JobID, d.SchDate, "
-                    + "ISNULL(d.CustomerName, d.Customer) AS CustomerName, "
-                    + "ISNULL(d.TechnicianName, d.TechnicianID) AS TechnicianName, d.Status "
-                    + "FROM trx_job_assign_detail d WITH (NOLOCK) "
-                    + "WHERE d.SchDate >= '" + fromText.Replace("'", "''") + "' "
-                    + "AND UPPER(LTRIM(RTRIM(ISNULL(d.TechnicianID,'')))) LIKE 'IT%' "
-                    + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status,'')))) NOT IN ('CL','CLOSE','CLOSED','SELESAI') "
-                    + "ORDER BY d.SchDate DESC, d.JobID ASC",
-                "SELECT TOP " + OpenListMaxRows.ToString()
-                    + " d.AssignID, d.Seq, d.JobID, d.SchDate, "
-                    + "ISNULL(d.Customer, '') AS CustomerName, "
-                    + "d.TechnicianID AS TechnicianName, d.Status "
-                    + "FROM trx_job_assign_detail d WITH (NOLOCK) "
-                    + "WHERE d.SchDate >= '" + fromText.Replace("'", "''") + "' "
-                    + "AND UPPER(LTRIM(RTRIM(ISNULL(d.TechnicianID,'')))) LIKE 'IT%' "
-                    + "AND UPPER(LTRIM(RTRIM(ISNULL(d.Status,'')))) NOT IN ('CL','CLOSE','CLOSED','SELESAI') "
-                    + "ORDER BY d.SchDate DESC, d.JobID ASC"
-            };
-
-            foreach (string sql in queries)
-            {
-                DataTable table = ExecuteQuery(connString, sql);
-                if (table != null && table.Rows.Count > 0)
+                string[] queries =
                 {
-                    foreach (DataRow row in table.Rows)
+                    ItsSupportAssignData.BuildOpenItSupportAssignListSql(OpenListMaxRows),
+                    ItsSupportAssignData.BuildOpenItSupportAssignBareSql(OpenListMaxRows),
+                    ItsSupportAssignData.BuildOpenItSupportAssignListFallbackSql(OpenListMaxRows)
+                };
+
+                foreach (string sql in queries)
+                {
+                    table = ExecuteBotQuery(connString, sql);
+                    if (table != null && table.Rows.Count > 0)
                     {
-                        OpenAssignSummary item = new OpenAssignSummary();
-                        item.AssignId = GetRowString(row, "AssignID");
-                        item.Seq = ParseInt(GetRowString(row, "Seq"), 1);
-                        item.JobId = GetRowString(row, "JobID");
-                        item.SchDate = ParseDate(GetRowString(row, "SchDate"));
-                        item.CustomerName = FirstNonEmpty(
-                            GetRowString(row, "CustomerName"),
-                            GetRowString(row, "Customer"),
-                            "-");
-                        item.TechnicianName = FirstNonEmpty(
-                            GetRowString(row, "TechnicianName"),
-                            GetRowString(row, "TechnicianID"),
-                            "-");
-                        list.Add(item);
+                        break;
                     }
-                    break;
                 }
+            }
+
+            if (table == null || table.Rows.Count == 0)
+            {
+                return list;
+            }
+
+            Dictionary<string, string> itSupportNames = ItsSupportAssignData.LoadItSupportNameMap();
+            foreach (DataRow row in table.Rows)
+            {
+                if (!ItsSupportAssignData.IsOpenItSupportAssignStatus(GetRowString(row, "Status")))
+                {
+                    continue;
+                }
+
+                string jobId = GetRowString(row, "JobID");
+                string technicianId = GetRowString(row, "TechnicianID");
+                if (string.IsNullOrWhiteSpace(jobId))
+                {
+                    continue;
+                }
+
+                if (!ItsSupportAssignData.IsAssignedItSupportTechnician(technicianId, itSupportNames))
+                {
+                    continue;
+                }
+
+                OpenAssignSummary item = new OpenAssignSummary();
+                item.AssignId = GetRowString(row, "AssignID");
+                item.Seq = ParseInt(GetRowString(row, "Seq"), 1);
+                item.JobId = jobId;
+                item.SchDate = ParseDate(GetRowString(row, "SchDate"));
+                item.CustomerName = ResolveOpenListCustomerDisplayName(
+                    connString,
+                    jobId,
+                    FirstNonEmpty(
+                        GetRowString(row, "CustomerName"),
+                        "-"));
+                item.TechnicianName = FirstNonEmpty(
+                    GetRowString(row, "TechnicianName"),
+                    ItsSupportAssignData.ResolveItSupportName(technicianId, itSupportNames),
+                    ResolveItsSupportName(connString, technicianId),
+                    technicianId,
+                    "-");
+                list.Add(item);
             }
 
             return list;
         }
 
+        private static AssignDetail LoadAssignDetailByJobId(string connString, string jobId, int seq)
+        {
+            if (string.IsNullOrWhiteSpace(connString) || string.IsNullOrWhiteSpace(jobId))
+            {
+                return null;
+            }
+
+            int requestedSeq = Math.Max(1, seq);
+            DataTable keyTable = ItsSupportAssignData.FindAssignDetailKeyByJobId(
+                jobId.Trim(),
+                requestedSeq,
+                connString);
+            if (keyTable == null || keyTable.Rows.Count == 0)
+            {
+                keyTable = ItsSupportAssignData.FindAssignDetailKeyByJobId(jobId.Trim(), 0, connString);
+            }
+
+            if (keyTable == null || keyTable.Rows.Count == 0)
+            {
+                return null;
+            }
+
+            string assignId = GetRowString(keyTable.Rows[0], "AssignID");
+            int resolvedSeq = ParseInt(GetRowString(keyTable.Rows[0], "Seq"), requestedSeq);
+            string resolvedJobId = FirstNonEmpty(
+                GetRowString(keyTable.Rows[0], "JobID"),
+                jobId.Trim());
+            if (string.IsNullOrWhiteSpace(assignId))
+            {
+                return null;
+            }
+
+            return LoadAssignDetail(connString, assignId, resolvedSeq, resolvedJobId);
+        }
+
         private static AssignDetail LoadAssignDetail(string connString, string assignId, int seq)
+        {
+            return LoadAssignDetail(connString, assignId, seq, null);
+        }
+
+        private static AssignDetail LoadAssignDetail(
+            string connString,
+            string assignId,
+            int seq,
+            string knownJobId)
         {
             if (string.IsNullOrWhiteSpace(assignId))
             {
                 return null;
             }
 
-            AssignDetail detail = TryLoadFromSp(connString, assignId);
-            if (detail == null)
+            int resolvedSeq = Math.Max(1, seq);
+            AssignDetail detail = new AssignDetail
             {
-                detail = new AssignDetail();
-                detail.AssignId = assignId.Trim();
-                detail.Seq = seq;
+                AssignId = assignId.Trim(),
+                Seq = resolvedSeq,
+                JobId = (knownJobId ?? string.Empty).Trim()
+            };
+
+            EnrichFromTrxRow(connString, detail, assignId, resolvedSeq);
+            if (string.IsNullOrWhiteSpace(detail.JobId))
+            {
+                AssignDetail fromSp = TryLoadFromSp(connString, assignId);
+                if (fromSp != null)
+                {
+                    detail = fromSp;
+                    detail.AssignId = assignId.Trim();
+                    detail.Seq = resolvedSeq;
+                }
             }
 
-            EnrichFromTrxRow(connString, detail, assignId, seq);
+            if (string.IsNullOrWhiteSpace(detail.JobId) && !string.IsNullOrWhiteSpace(knownJobId))
+            {
+                detail.JobId = knownJobId.Trim();
+            }
+
             EnrichFromAssignHeader(connString, detail);
-            EnrichFromCustomer(connString, detail);
             EnrichFromTrainingOrder(connString, detail);
+            EnrichFromCustomer(connString, detail);
             EnrichFromItsSupport(connString, detail);
+
+            if (!detail.AssignDate.HasValue && !string.IsNullOrWhiteSpace(detail.AssignId))
+            {
+                string assignDateText = ItsSupportAssignData.ResolveItSupportAssignDate(
+                    connString,
+                    detail.AssignId,
+                    detail.Seq,
+                    detail.JobId);
+                detail.AssignDate = ParseDate(assignDateText);
+            }
+
+            if (string.IsNullOrWhiteSpace(detail.JobId) && !string.IsNullOrWhiteSpace(knownJobId))
+            {
+                detail.JobId = knownJobId.Trim();
+            }
 
             if (string.IsNullOrWhiteSpace(detail.JobId))
             {
                 return null;
+            }
+
+            string resolvedCustomerName = ResolveBotCustomerDisplayName(detail);
+            if (!string.IsNullOrWhiteSpace(resolvedCustomerName) && !resolvedCustomerName.Equals("-", StringComparison.Ordinal))
+            {
+                detail.CustomerName = resolvedCustomerName;
             }
 
             return detail;
@@ -471,20 +720,25 @@ namespace vtsadm
 
         private static void EnrichFromTrxRow(string connString, AssignDetail detail, string assignId, int seq)
         {
-            string sql = "SELECT TOP 1 * FROM trx_job_assign_detail WITH (NOLOCK) "
-                + "WHERE AssignID = '" + EscapeSqlLiteral(assignId.Trim()) + "' "
-                + "AND Seq = " + seq.ToString()
-                + " ORDER BY Seq DESC";
-
-            DataTable table = ExecuteQuery(connString, sql);
+            DataTable table = ItsSupportAssignData.LoadAssignDetailRow(assignId, seq, connString);
             if (table == null || table.Rows.Count == 0)
             {
-                sql = "SELECT TOP 1 * FROM trx_job_assign_detail WITH (NOLOCK) "
+                table = ExecuteBotQuery(
+                    connString,
+                    "SELECT TOP 1 "
+                    + "LTRIM(RTRIM(ISNULL(AssignID, ''))) AS AssignID, "
+                    + "ISNULL(Seq, 0) AS Seq, "
+                    + "LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID, "
+                    + "LTRIM(RTRIM(ISNULL(TechnicianID, ''))) AS TechnicianID, "
+                    + "SchDate, "
+                    + "LTRIM(RTRIM(ISNULL(Remark, ''))) AS Remark, "
+                    + "LTRIM(RTRIM(ISNULL(Status, ''))) AS Status, "
+                    + "DtmUpd "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
                     + "WHERE AssignID = '" + EscapeSqlLiteral(assignId.Trim()) + "' "
-                    + "ORDER BY Seq DESC";
-                table = ExecuteQuery(connString, sql);
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "ORDER BY Seq DESC");
             }
-
             if (table == null || table.Rows.Count == 0)
             {
                 return;
@@ -494,19 +748,14 @@ namespace vtsadm
             detail.AssignId = FirstNonEmpty(GetRowString(row, "AssignID"), detail.AssignId);
             detail.Seq = ParseInt(GetRowString(row, "Seq"), detail.Seq);
             detail.JobId = FirstNonEmpty(GetRowString(row, "JobID"), detail.JobId);
-            detail.CustId = FirstNonEmpty(GetRowString(row, "CustID"), detail.CustId);
-            detail.CustomerName = FirstNonEmpty(
-                GetRowString(row, "CustomerName"),
-                GetRowString(row, "Customer"),
-                detail.CustomerName);
             detail.TechnicianId = FirstNonEmpty(
                 GetRowString(row, "TechnicianID"),
                 detail.TechnicianId);
             detail.TechnicianName = FirstNonEmpty(
-                GetRowString(row, "TechnicianName"),
-                GetRowString(row, "TechnicianID"),
-                detail.TechnicianName);
+                detail.TechnicianName,
+                detail.TechnicianId);
             detail.SchDate = ParseDate(FirstNonEmpty(GetRowString(row, "SchDate"), FormatDateValue(detail.SchDate)));
+            detail.AssignDate = ParseDate(FirstNonEmpty(GetRowString(row, "DtmUpd"), FormatDateValue(detail.AssignDate)));
             detail.Remark = FirstNonEmpty(GetRowString(row, "Remark"), detail.Remark);
             detail.PoliceNo = FirstNonEmpty(GetRowString(row, "PoliceNo"), detail.PoliceNo);
             detail.NoSn = FirstNonEmpty(GetRowString(row, "NoSN"), detail.NoSn);
@@ -526,13 +775,16 @@ namespace vtsadm
 
             string custId = EscapeSqlLiteral(detail.CustId.Trim());
             string sql = "SELECT TOP 1 c.CustID, c.FullName, c.BranchName, c.MarketingID, "
+                + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
+                + "LTRIM(RTRIM(ISNULL(c.BranchAddress, ''))) AS BranchAddress, "
+                + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
                 + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
                 + "FROM mst_customer c WITH (NOLOCK) "
                 + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
                 + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) "
                 + "WHERE c.CustID = '" + custId + "'";
 
-            DataTable table = ExecuteQuery(connString, sql);
+            DataTable table = ExecuteBotQuery(connString, sql);
             if (table == null || table.Rows.Count == 0)
             {
                 return;
@@ -549,6 +801,8 @@ namespace vtsadm
 
             detail.BranchName = FirstNonEmpty(GetRowString(row, "BranchName"), detail.BranchName);
             detail.MarketingName = FirstNonEmpty(GetRowString(row, "MarketingName"), detail.MarketingName);
+            detail.Address = FirstNonEmpty(GetRowString(row, "Address"), detail.Address);
+            detail.PicName = FirstNonEmpty(GetRowString(row, "PICName1"), detail.PicName);
         }
 
         private static AssignDetail BuildFallbackAssignDetail(
@@ -591,7 +845,7 @@ namespace vtsadm
                 + "WHERE AssignID = '" + assignId + "' "
                 + "AND ISNULL(Status, '') NOT IN ('DE')";
 
-            DataTable table = ExecuteQuery(connString, sql);
+            DataTable table = ExecuteBotQuery(connString, sql);
             if (table == null || table.Rows.Count == 0)
             {
                 return;
@@ -635,7 +889,7 @@ namespace vtsadm
 
             foreach (string sql in queries)
             {
-                DataTable table = ExecuteQuery(connString, sql);
+                DataTable table = ExecuteBotQuery(connString, sql);
                 if (table == null || table.Rows.Count == 0)
                 {
                     continue;
@@ -687,18 +941,19 @@ namespace vtsadm
             }
 
             string jobId = EscapeSqlLiteral(detail.JobId.Trim());
+
             string[] queries = new string[]
             {
-                "SELECT TOP 1 TrainingID, CustID, sReqDate, ScheduleDate, Remark, RemarkTraining, BranchName, "
+                "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName, "
                     + "TrainingCategoryName, TrainCategoryName, CategoryName "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'",
-                "SELECT TOP 1 TrainingID, CustID, ReqDate, ScheduleDate, Remark, RemarkTraining, BranchName "
+                "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'"
             };
 
             foreach (string sql in queries)
             {
-                DataTable table = ExecuteQuery(connString, sql);
+                DataTable table = ExecuteBotQuery(connString, sql);
                 if (table == null || table.Rows.Count == 0)
                 {
                     continue;
@@ -706,10 +961,6 @@ namespace vtsadm
 
                 DataRow row = table.Rows[0];
                 detail.CustId = FirstNonEmpty(GetRowString(row, "CustID"), detail.CustId);
-                detail.ReqDate = ParseDate(FirstNonEmpty(
-                    GetRowString(row, "sReqDate"),
-                    GetRowString(row, "ReqDate"),
-                    FormatDateValue(detail.ReqDate)));
                 detail.TrainingScheduleDate = ParseDate(GetRowString(row, "ScheduleDate"));
                 string remarkTraining = FirstNonEmpty(GetRowString(row, "RemarkTraining"), GetRowString(row, "Remark"));
                 if (!string.IsNullOrWhiteSpace(remarkTraining))
@@ -731,29 +982,114 @@ namespace vtsadm
             }
         }
 
-        private static string BuildDetailMessage(AssignDetail detail)
+        private static string ResolveBotCustomerDisplayName(AssignDetail detail)
         {
-            string category = FirstNonEmpty(detail.CategoryLabel, detail.JobType, "Training/Visit");
-            if (category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (detail == null)
             {
-                category = "Visit";
-            }
-            else if (category.IndexOf("train", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                category = "Training";
+                return "-";
             }
 
+            string custId = FirstNonEmpty(detail.CustId, string.Empty).Trim();
+            string name = FirstNonEmpty(detail.CustomerName, string.Empty).Trim();
+
+            if (!string.IsNullOrWhiteSpace(name) && name.IndexOf(" - ", StringComparison.Ordinal) >= 0)
+            {
+                string[] parts = name.Split(new[] { " - " }, 2, StringSplitOptions.None);
+                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1]))
+                {
+                    name = parts[1].Trim();
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(name) && name.Contains("("))
+            {
+                int openIndex = name.LastIndexOf('(');
+                if (openIndex > 0 && name.EndsWith(")", StringComparison.Ordinal))
+                {
+                    name = name.Substring(0, openIndex).Trim();
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(name)
+                || name == "-"
+                || (!string.IsNullOrWhiteSpace(custId)
+                    && name.Equals(custId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return "-";
+            }
+
+            return name;
+        }
+
+        private static string ResolveOpenListCustomerDisplayName(string connString, string jobId, string rawName)
+        {
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                return "-";
+            }
+
+            string safeJobId = EscapeSqlLiteral(jobId.Trim());
+            DataTable table = ExecuteBotQuery(
+                connString,
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(c.FullName, ''))) AS FullName "
+                + "FROM trx_training_order t WITH (NOLOCK) "
+                + "LEFT JOIN mst_customer c WITH (NOLOCK) ON c.CustID = t.CustID "
+                + "WHERE t.TrainingID = '" + safeJobId + "' "
+                + "AND ISNULL(t.Status, '') NOT IN ('DE')");
+            if (table != null && table.Rows.Count > 0)
+            {
+                string fullName = GetRowString(table.Rows[0], "FullName").Trim();
+                if (!string.IsNullOrWhiteSpace(fullName))
+                {
+                    return fullName;
+                }
+            }
+
+            AssignDetail temp = new AssignDetail
+            {
+                CustId = string.Empty,
+                CustomerName = rawName
+            };
+            string resolved = ResolveBotCustomerDisplayName(temp);
+            return string.IsNullOrWhiteSpace(resolved) || resolved == "-" ? "-" : resolved;
+        }
+
+        private static void AppendBotCustomerContactSection(StringBuilder sb, AssignDetail detail)
+        {
+            string alamat = FirstNonEmpty(detail != null ? detail.Address : string.Empty, "-");
+            string picCustomer = FirstNonEmpty(detail != null ? detail.PicName : string.Empty, "-");
+            sb.AppendLine("Alamat : <b>" + EscapeHtml(alamat) + "</b>");
+            sb.AppendLine("PIC Customer : <b>" + EscapeHtml(picCustomer) + "</b>");
+        }
+
+        private static DateTime? ResolveBotAssignDate(AssignDetail detail)
+        {
+            if (detail == null)
+            {
+                return null;
+            }
+
+            if (detail.AssignDate.HasValue)
+            {
+                return detail.AssignDate;
+            }
+
+            return detail.ReqDate;
+        }
+
+        private static string BuildDetailMessage(AssignDetail detail)
+        {
+            string category = ResolveCategoryLabel(detail);
             StringBuilder sb = new StringBuilder();
-            string customerName = FirstNonEmpty(detail.CustomerName, detail.CompanyLine, detail.CustId, "-");
+            string customerName = ResolveBotCustomerDisplayName(detail);
             string itSupportName = FirstNonEmpty(detail.TechnicianName, "-");
             string remark = FirstNonEmpty(detail.RemarkTraining, detail.Remark, "-");
-            string lokasi = FirstNonEmpty(detail.AreaName, detail.BranchName, "-");
 
             sb.AppendLine("🛠 <b>NOTIFIKASI PENUGASAN PEKERJAAN</b>");
             sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
             sb.AppendLine();
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
-            sb.AppendLine("Tanggal JO : <b>" + EscapeHtml(FormatDateId(detail.ReqDate ?? detail.InstallDate)) + "</b>");
+            sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             sb.AppendLine();
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
@@ -767,15 +1103,153 @@ namespace vtsadm
             sb.AppendLine(EscapeHtml(remark));
             sb.AppendLine();
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
-            sb.AppendLine("Lokasi : <b>" + EscapeHtml(lokasi) + "</b>");
-            sb.AppendLine();
-            sb.AppendLine("<b>Detail Unit :</b>");
-            sb.AppendLine("Job Type  : <b>" + EscapeHtml(FirstNonEmpty(detail.JobType, category, "Training/Visit")) + "</b>");
-            sb.AppendLine("No Polisi    : <b>" + EscapeHtml(FirstNonEmpty(detail.PoliceNo, "-")) + "</b>");
-            sb.AppendLine("GPS SN      : <b>" + EscapeHtml(FirstNonEmpty(detail.NoSn, "-")) + "</b>");
-            sb.AppendLine("GSM No      : <b>" + EscapeHtml(FirstNonEmpty(detail.GsmNo, "-")) + "</b>");
+            AppendBotCustomerContactSection(sb, detail);
 
             return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildTransferMessage(AssignDetail detail)
+        {
+            string category = ResolveCategoryLabel(detail);
+            StringBuilder sb = new StringBuilder();
+            string customerName = ResolveBotCustomerDisplayName(detail);
+            string fromItSupport = FirstNonEmpty(detail.PreviousTechnicianName, detail.PreviousTechnicianId, "-");
+            string toItSupport = FirstNonEmpty(detail.TechnicianName, detail.TechnicianId, "-");
+            string remark = ResolveActionNoteForMessage(detail);
+
+            sb.AppendLine("🔁 <b>NOTIFIKASI PINDAH PENUGASAN</b>");
+            sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
+            sb.AppendLine();
+            sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
+            sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
+            sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            sb.AppendLine();
+            sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
+            sb.AppendLine("Dari IT Support : <b>" + EscapeHtml(fromItSupport) + "</b>");
+            sb.AppendLine("Ke IT Support : <b>" + EscapeHtml(toItSupport) + "</b>");
+            sb.AppendLine();
+            sb.AppendLine("<b>Catatan :</b>");
+            sb.AppendLine(EscapeHtml(remark));
+            sb.AppendLine();
+            sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            AppendBotCustomerContactSection(sb, detail);
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string BuildDeleteMessage(AssignDetail detail)
+        {
+            string category = ResolveCategoryLabel(detail);
+            StringBuilder sb = new StringBuilder();
+            string customerName = ResolveBotCustomerDisplayName(detail);
+            string itSupportName = FirstNonEmpty(detail.TechnicianName, detail.TechnicianId, "-");
+            string remark = ResolveActionNoteForMessage(detail);
+
+            sb.AppendLine("🗑 <b>NOTIFIKASI HAPUS PENUGASAN</b>");
+            sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
+            sb.AppendLine();
+            sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
+            sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
+            sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            sb.AppendLine();
+            sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
+            sb.AppendLine("IT Support : <b>" + EscapeHtml(itSupportName) + "</b>");
+            sb.AppendLine();
+            sb.AppendLine("<b>Catatan :</b>");
+            sb.AppendLine(EscapeHtml(remark));
+            sb.AppendLine();
+            sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            AppendBotCustomerContactSection(sb, detail);
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string ResolveCategoryLabel(AssignDetail detail)
+        {
+            string category = FirstNonEmpty(detail.CategoryLabel, detail.JobType, "Training/Visit");
+            if (category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Visit";
+            }
+
+            if (category.IndexOf("train", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Training";
+            }
+
+            return category;
+        }
+
+        private static string ResolveActionNoteForMessage(AssignDetail detail)
+        {
+            return FirstNonEmpty(detail.ActionNote, "-");
+        }
+
+        private static bool TryResolveAssignDetailKey(
+            string connString,
+            string input,
+            string optionalSeqText,
+            out string assignId,
+            out int seq)
+        {
+            assignId = string.Empty;
+            seq = 1;
+
+            string key = (input ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(optionalSeqText))
+            {
+                int parsedSeq;
+                if (int.TryParse(optionalSeqText.Trim(), out parsedSeq) && parsedSeq > 0)
+                {
+                    seq = parsedSeq;
+                }
+            }
+
+            DataTable byJob = ItsSupportAssignData.FindAssignDetailKeyByJobId(key, seq, connString);
+            if (byJob != null && byJob.Rows.Count > 0)
+            {
+                assignId = GetRowString(byJob.Rows[0], "AssignID");
+                seq = ParseInt(GetRowString(byJob.Rows[0], "Seq"), seq);
+                return !string.IsNullOrWhiteSpace(assignId);
+            }
+
+            if (seq > 0)
+            {
+                byJob = ItsSupportAssignData.FindAssignDetailKeyByJobId(key, 0, connString);
+                if (byJob != null && byJob.Rows.Count > 0)
+                {
+                    assignId = GetRowString(byJob.Rows[0], "AssignID");
+                    seq = ParseInt(GetRowString(byJob.Rows[0], "Seq"), seq);
+                    return !string.IsNullOrWhiteSpace(assignId);
+                }
+            }
+
+            if (AssignDetailRowExists(connString, key, seq))
+            {
+                assignId = key;
+                return true;
+            }
+
+            DataTable byAssign = ItsSupportAssignData.FindAssignDetailKeyByAssignId(key, connString);
+            if (byAssign != null && byAssign.Rows.Count > 0)
+            {
+                assignId = GetRowString(byAssign.Rows[0], "AssignID");
+                seq = ParseInt(GetRowString(byAssign.Rows[0], "Seq"), seq);
+                return !string.IsNullOrWhiteSpace(assignId);
+            }
+
+            return false;
+        }
+
+        private static bool AssignDetailRowExists(string connString, string assignId, int seq)
+        {
+            DataTable table = ItsSupportAssignData.LoadAssignDetailRow(assignId, seq, connString);
+            return table != null && table.Rows.Count > 0;
         }
 
         private static bool TryResolveLatestAssignKey(
@@ -817,7 +1291,7 @@ namespace vtsadm
 
             foreach (string sql in queries)
             {
-                DataTable table = ExecuteQuery(connString, sql);
+                DataTable table = ItsSupportAssignData.QueryDataTable(sql);
                 if (table == null || table.Rows.Count == 0)
                 {
                     continue;
@@ -1090,6 +1564,84 @@ namespace vtsadm
             return client.DownloadString(url);
         }
 
+        private static bool TryHandleSimulateRequest(HttpContext context)
+        {
+            string simulate = (context.Request["simulate"] ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(simulate))
+            {
+                return false;
+            }
+
+            string setupKey = (context.Request["setup"] ?? string.Empty).Trim();
+            string expectedKey = FirstNonEmpty(GetAppSetting("ItsSupportTelegramSetupKey"), "itssetup");
+            if (!setupKey.Equals(expectedKey, StringComparison.Ordinal))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.Write("Invalid setup key.");
+                return true;
+            }
+
+            string connString = ResolveConnString(context);
+            StringBuilder report = new StringBuilder();
+            report.AppendLine("IT Support Telegram simulate (local test, no Telegram send)");
+            report.AppendLine("DB connection: "
+                + (string.IsNullOrWhiteSpace(connString) ? "NOT CONFIGURED" : "OK"));
+            report.AppendLine();
+
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                context.Response.StatusCode = 200;
+                context.Response.Write(report.ToString().TrimEnd());
+                return true;
+            }
+
+            if (simulate.Equals("open", StringComparison.OrdinalIgnoreCase))
+            {
+                List<OpenAssignSummary> rows = LoadOpenAssignSummaries(connString);
+                report.AppendLine("/open bot summaries: " + rows.Count.ToString());
+                if (rows.Count == 0)
+                {
+                    report.AppendLine("Bot would reply: Tidak ada penugasan IT Support yang sudah di-assign dan belum selesai.");
+                }
+                else
+                {
+                    int index = 1;
+                    foreach (OpenAssignSummary row in rows)
+                    {
+                        report.AppendLine(index.ToString() + ". "
+                            + row.JobId + " | "
+                            + FormatDateShort(row.SchDate) + " | "
+                            + row.CustomerName + " | "
+                            + row.TechnicianName);
+                        index++;
+                    }
+                }
+            }
+            else if (simulate.Equals("detail", StringComparison.OrdinalIgnoreCase))
+            {
+                string jobId = FirstNonEmpty(context.Request["job"], "TRO0006127").Trim();
+                AssignDetail detail = LoadAssignDetailByJobId(connString, jobId, 1);
+                report.AppendLine("/detail " + jobId + " bot load: "
+                    + (detail == null ? "NOT FOUND" : "OK"));
+                if (detail != null)
+                {
+                    report.AppendLine();
+                    report.AppendLine(BuildDetailMessage(detail));
+                }
+            }
+            else
+            {
+                report.AppendLine("Unknown simulate command.");
+                report.AppendLine("Usage:");
+                report.AppendLine("  ?setup=itssetup&simulate=open");
+                report.AppendLine("  ?setup=itssetup&simulate=detail&job=TRO0006127");
+            }
+
+            context.Response.StatusCode = 200;
+            context.Response.Write(report.ToString().TrimEnd());
+            return true;
+        }
+
         private static bool TryHandleSetupRequest(HttpContext context)
         {
             string setupKey = (context.Request["setup"] ?? string.Empty).Trim();
@@ -1122,7 +1674,41 @@ namespace vtsadm
             StringBuilder report = new StringBuilder();
             report.AppendLine("IT Support Telegram setup");
             report.AppendLine("Webhook URL: " + webhookUrl);
+            report.AppendLine("DB connection: "
+                + (string.IsNullOrWhiteSpace(connString) ? "NOT CONFIGURED" : "OK"));
+            if (!string.IsNullOrWhiteSpace(connString))
+            {
+                DataTable openRows = ItsSupportAssignData.LoadOpenItSupportAssignRows(5, connString);
+                int openCount = openRows != null ? openRows.Rows.Count : 0;
+                report.AppendLine("/open sample rows: " + openCount.ToString());
+
+                List<OpenAssignSummary> botOpenRows = LoadOpenAssignSummaries(connString);
+                report.AppendLine("/open bot summaries: " + botOpenRows.Count.ToString());
+
+                DataTable detailKey = ItsSupportAssignData.FindAssignDetailKeyByJobId("TRO0006127", 0, connString);
+                int detailCount = detailKey != null ? detailKey.Rows.Count : 0;
+                report.AppendLine("/detail lookup TRO0006127: " + detailCount.ToString());
+
+                AssignDetail detail = LoadAssignDetailByJobId(connString, "TRO0006127", 1);
+                report.AppendLine("/detail bot load TRO0006127: "
+                    + (detail == null ? "NOT FOUND" : "OK"));
+            }
             report.AppendLine();
+            report.AppendLine("Local bot test (no Telegram):");
+            report.AppendLine("  " + BuildWebhookUrl(context) + "?setup=itssetup&simulate=open");
+            report.AppendLine("  " + BuildWebhookUrl(context) + "?setup=itssetup&simulate=detail&job=TRO0006127");
+            report.AppendLine();
+            report.AppendLine("NOTE: Telegram app sends commands to the registered webhook URL above, not localhost.");
+            report.AppendLine();
+
+            string skipRegister = (context.Request["register"] ?? string.Empty).Trim();
+            if (skipRegister == "0" || skipRegister.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                report.AppendLine("Skipped setWebhook (register=0).");
+                context.Response.StatusCode = 200;
+                context.Response.Write(report.ToString().TrimEnd());
+                return true;
+            }
 
             try
             {
@@ -1188,6 +1774,37 @@ namespace vtsadm
             }
         }
 
+        private static DataTable ExecuteBotQuery(string connString, string sql)
+        {
+            if (string.IsNullOrWhiteSpace(sql))
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(connString))
+            {
+                DataTable dashboardTable = dashboard_assign_job.ExecuteJobTrainingQuery(sql, connString);
+                if (dashboardTable != null && dashboardTable.Rows.Count > 0)
+                {
+                    return dashboardTable;
+                }
+
+                DataTable legacyTable = ExecuteQuery(connString, sql);
+                if (legacyTable != null && legacyTable.Rows.Count > 0)
+                {
+                    return legacyTable;
+                }
+            }
+
+            DataTable table = ItsSupportAssignData.QueryDataTable(sql, connString);
+            if (table != null && table.Rows.Count > 0)
+            {
+                return table;
+            }
+
+            return null;
+        }
+
         private static DataTable ExecuteQuery(string connString, string sql)
         {
             if (string.IsNullOrWhiteSpace(connString) || string.IsNullOrWhiteSpace(sql))
@@ -1195,9 +1812,14 @@ namespace vtsadm
                 return null;
             }
 
+            string trimmed = (sql ?? string.Empty).Trim();
+            if (trimmed.Length == 0)
+            {
+                return null;
+            }
+
             try
             {
-                string trimmed = sql.Trim();
                 if (trimmed.StartsWith("sp_", StringComparison.OrdinalIgnoreCase)
                     || trimmed.StartsWith("exec", StringComparison.OrdinalIgnoreCase))
                 {
@@ -1208,32 +1830,57 @@ namespace vtsadm
                 }
 
                 string sqlConn = ResolveSqlClientConnectionString(connString);
-                if (string.IsNullOrWhiteSpace(sqlConn))
+                if (!string.IsNullOrWhiteSpace(sqlConn))
+                {
+                    DataTable table = new DataTable();
+                    using (SqlConnection conn = new SqlConnection(sqlConn))
+                    {
+                        conn.Open();
+                        using (SqlCommand cmd = new SqlCommand(trimmed, conn))
+                        {
+                            cmd.CommandType = CommandType.Text;
+                            cmd.CommandTimeout = 120;
+                            using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+                            {
+                                adapter.Fill(table);
+                            }
+                        }
+                    }
+
+                    if (table.Rows.Count > 0)
+                    {
+                        return table;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if ((connString ?? string.Empty).IndexOf("provider=", StringComparison.OrdinalIgnoreCase) < 0)
                 {
                     return null;
                 }
 
-                DataTable table = new DataTable();
-                using (SqlConnection conn = new SqlConnection(sqlConn))
+                Recordset rec = new Recordset();
+                string openError = string.Empty;
+                rec.Open(trimmed, connString.Trim(), ref openError);
+                if (string.IsNullOrWhiteSpace(openError))
                 {
-                    conn.Open();
-                    using (SqlCommand cmd = new SqlCommand(trimmed, conn))
+                    DataTable recordsetTable = rec.DataRecord() ?? new DataTable();
+                    if (recordsetTable.Rows.Count > 0)
                     {
-                        cmd.CommandType = CommandType.Text;
-                        cmd.CommandTimeout = 120;
-                        using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
-                        {
-                            adapter.Fill(table);
-                        }
+                        return recordsetTable;
                     }
                 }
-
-                return table.Rows.Count > 0 ? table : null;
             }
             catch
             {
-                return null;
             }
+
+            return null;
         }
 
         private static string ResolveSqlClientConnectionString(string rawConnectionString)
@@ -1291,25 +1938,16 @@ namespace vtsadm
 
         private static string ResolveConnString(HttpContext context)
         {
-            if (context != null && context.Session != null)
+            string recordsetConn = ItsSupportAssignData.ResolveRecordsetConnectionString();
+            if (!string.IsNullOrWhiteSpace(recordsetConn))
             {
-                string sessionConn = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
-                if (!string.IsNullOrWhiteSpace(sessionConn))
-                {
-                    return sessionConn.Trim();
-                }
+                return recordsetConn;
             }
 
-            ConnectionStringSettings sqlSettings = ConfigurationManager.ConnectionStrings["VTSADMIN"];
-            if (sqlSettings != null && !string.IsNullOrWhiteSpace(sqlSettings.ConnectionString))
+            string sqlConn = ItsSupportAssignData.ResolveSqlClientConnectionString();
+            if (!string.IsNullOrWhiteSpace(sqlConn))
             {
-                return sqlSettings.ConnectionString.Trim();
-            }
-
-            ConnectionStringSettings oleDbSettings = ConfigurationManager.ConnectionStrings["VTSAdminDB"];
-            if (oleDbSettings != null && !string.IsNullOrWhiteSpace(oleDbSettings.ConnectionString))
-            {
-                return oleDbSettings.ConnectionString.Trim();
+                return sqlConn;
             }
 
             return string.Empty;
@@ -1420,13 +2058,27 @@ namespace vtsadm
 
         private static string GetRowString(DataRow row, string columnName)
         {
-            if (row == null || row.Table == null || !row.Table.Columns.Contains(columnName))
+            if (row == null || row.Table == null || string.IsNullOrWhiteSpace(columnName))
             {
                 return string.Empty;
             }
 
-            object value = row[columnName];
-            return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+            if (row.Table.Columns.Contains(columnName))
+            {
+                object value = row[columnName];
+                return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+            }
+
+            foreach (DataColumn column in row.Table.Columns)
+            {
+                if (column.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    object value = row[column];
+                    return value == null || value == DBNull.Value ? string.Empty : Convert.ToString(value).Trim();
+                }
+            }
+
+            return string.Empty;
         }
 
         private static string GetDictString(Dictionary<string, object> dict, string key)
@@ -1491,7 +2143,7 @@ namespace vtsadm
             public string TechnicianName { get; set; }
         }
 
-        private sealed class AssignDetail
+        public sealed class AssignDetail
         {
             public string AssignId { get; set; }
             public int Seq { get; set; }
@@ -1500,9 +2152,12 @@ namespace vtsadm
             public string CustomerName { get; set; }
             public string TechnicianId { get; set; }
             public string TechnicianName { get; set; }
+            public string PreviousTechnicianId { get; set; }
+            public string PreviousTechnicianName { get; set; }
             public string MarketingName { get; set; }
             public string Remark { get; set; }
             public string RemarkTraining { get; set; }
+            public string ActionNote { get; set; }
             public string PoId { get; set; }
             public string PoliceNo { get; set; }
             public string NoSn { get; set; }
@@ -1512,8 +2167,12 @@ namespace vtsadm
             public string CompanyLine { get; set; }
             public string BranchName { get; set; }
             public string AreaName { get; set; }
+            public string Address { get; set; }
+            public string PicName { get; set; }
+            public string CustomerNumber { get; set; }
             public string Status { get; set; }
             public DateTime? SchDate { get; set; }
+            public DateTime? AssignDate { get; set; }
             public DateTime? ReqDate { get; set; }
             public DateTime? InstallDate { get; set; }
             public DateTime? TrainingScheduleDate { get; set; }

@@ -442,10 +442,18 @@
         .assign-table {
             border-collapse: separate;
             border-spacing: 0;
-            width: 100%;
+            width: max-content;
             min-width: 100%;
             table-layout: fixed;
             margin-bottom: 0;
+        }
+
+        .assign-table-scroll-hint {
+            display: none;
+            padding: 8px 12px 0;
+            font-size: 11px;
+            font-weight: 600;
+            color: #7b7b74;
         }
 
         .assign-table thead th {
@@ -552,11 +560,30 @@
         }
 
         .col-no { width: 36px; min-width: 36px; }
-        .col-name { width: 200px; min-width: 200px; }
-        .col-total { width: 72px; min-width: 72px; }
-        .col-total-maint { width: 72px; min-width: 72px; }
-        .col-stock { width: 110px; min-width: 110px; }
+        .col-name { width: 168px; min-width: 168px; }
+        .col-total-assign,
+        .col-total,
+        .col-total-maint { width: 62px; min-width: 62px; }
+        .col-stock { width: 78px; min-width: 78px; }
         .col-day { width: 42px; min-width: 42px; }
+
+        .th-kicker {
+            display: block;
+            font-size: 9px;
+            font-weight: 600;
+            color: #9b9b93;
+            text-transform: uppercase;
+            letter-spacing: .3px;
+            line-height: 1.15;
+        }
+
+        .th-main {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: #5c5c55;
+            line-height: 1.2;
+        }
 
         .sticky-no, .sticky-name {
             position: -webkit-sticky;
@@ -584,12 +611,14 @@
             box-shadow: 2px 0 0 #d7d4cf;
         }
 
+        .assign-table thead th.col-total-assign,
         .assign-table thead th.col-total,
-        .assign-table thead th.col-total-maint {
-            font-size: 10px;
+        .assign-table thead th.col-total-maint,
+        .assign-table thead th.col-stock {
             white-space: normal;
-            line-height: 1.2;
-            padding: 4px 2px;
+            line-height: 1.15;
+            padding: 6px 4px;
+            vertical-align: bottom;
         }
 
         .assign-table th.sticky-no, .assign-table th.sticky-name {
@@ -629,13 +658,17 @@
 
         .assign-table tbody td.cell-name {
             text-align: left;
-            padding: 0 10px;
+            padding: 0 8px;
             font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 168px;
         }
 
         .cell-total,
         .cell-stock {
-            padding: 0 4px;
+            padding: 0 3px;
+            font-variant-numeric: tabular-nums;
         }
 
         .assign-totaljob-link {
@@ -654,20 +687,40 @@
             color: #0a5c48;
         }
 
+        .cap-header-cell .assign-totaljob-link {
+            color: #fff !important;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .cap-header-cell .assign-totaljob-link:hover {
+            color: #dbeafe !important;
+        }
+
+        .cap-assign .assign-totaljob-link {
+            color: #075985;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .cap-assign .assign-totaljob-link:hover {
+            color: #0c4a6e;
+        }
+
         .assign-stock-btn {
             border: 1px solid #b2ddd2;
             background: #e4f4ef;
             color: #0a5c48;
-            border-radius: 10px;
-            min-width: 78px;
-            height: 28px;
+            border-radius: 8px;
+            min-width: 58px;
+            height: 26px;
             font-size: 11px;
             font-weight: 700;
-            padding: 0 10px;
+            padding: 0 8px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 4px;
             cursor: pointer;
         }
 
@@ -811,6 +864,7 @@
             font-weight: 600;
         }
 
+        .cap-assign { background: #e0f2fe; color: #075985; }
         .cap-avail { background: #ecfdf5; color: #065f46; }
         .cap-jo1 { background: #fff7d6; color: #92400e; }
         .cap-jo2 { background: #fef3c7; color: #78350f; }
@@ -823,6 +877,12 @@
         .assign-table tbody:last-child td.cap-header-cell {
             background: #0a5c48 !important;
             color: #fff !important;
+        }
+
+        .assign-table tbody:last-child td.cap-assign {
+            background: #e0f2fe !important;
+            color: #075985;
+            font-weight: 700;
         }
 
         .assign-table tbody:last-child td.cap-avail {
@@ -2325,7 +2385,9 @@
         .assign-closed-actions {
             margin-top: 12px;
             display: flex;
+            align-items: center;
             justify-content: flex-end;
+            gap: 8px;
         }
 
         .assign-closed-close-btn {
@@ -3181,6 +3243,10 @@
                 font-size: 16px;
             }
 
+            .assign-table-scroll-hint {
+                display: block;
+            }
+
             .assign-table-wrap {
                 max-height: none;
                 overflow-y: visible;
@@ -3194,7 +3260,7 @@
             .assign-table thead th {
                 top: 0;
                 font-size: 10px;
-                padding: 5px 4px;
+                padding: 6px 3px;
             }
 
             .assign-day-no {
@@ -3207,42 +3273,76 @@
 
             .assign-table tbody td {
                 font-size: 11px;
-                height: 38px;
+                height: 40px;
             }
 
             .col-no {
-                width: 34px;
-                min-width: 34px;
+                width: 28px;
+                min-width: 28px;
             }
 
             .col-name {
-                width: 126px;
-                min-width: 126px;
+                width: 108px;
+                min-width: 108px;
             }
 
-            .col-total {
-                width: 66px;
-                min-width: 66px;
-            }
-
+            .col-total-assign,
+            .col-total,
             .col-total-maint {
-                width: 66px;
-                min-width: 66px;
+                width: 48px;
+                min-width: 48px;
             }
 
             .col-stock {
-                width: 92px;
-                min-width: 92px;
+                width: 56px;
+                min-width: 56px;
             }
 
+            .col-day {
+                width: 38px;
+                min-width: 38px;
+            }
+
+            .th-kicker {
+                font-size: 8px;
+            }
+
+            .th-main {
+                font-size: 10px;
+            }
+
+            .sticky-no {
+                left: 0;
+            }
 
             .sticky-name {
-                left: 34px;
+                left: 28px;
+            }
+
+            .assign-table th.col-no,
+            .assign-table td.col-no {
+                left: 0 !important;
             }
 
             .assign-table th.col-name,
             .assign-table td.col-name {
-                left: 34px !important;
+                left: 28px !important;
+            }
+
+            .assign-table tbody td.cell-name {
+                max-width: 108px;
+                padding: 0 6px;
+            }
+
+            .assign-stock-btn {
+                min-width: 44px;
+                height: 28px;
+                font-size: 10px;
+                padding: 0 6px;
+            }
+
+            .assign-stock-icon {
+                display: none;
             }
 
             .assign-tech-modal {
@@ -3699,15 +3799,17 @@
                 </div>
             </div>
             <div class="schedule-wrap">
+                <div class="assign-table-scroll-hint">Geser tabel ke samping untuk lihat tanggal</div>
                 <div class="assign-table-wrap">
                         <table class="assign-table">
                             <thead>
                                 <tr>
                                     <th class="col-no sticky-no">No</th>
                                     <th class="col-name sticky-name">Nama</th>
-                                    <th class="col-total">Total Closed JO New</th>
-                                    <th class="col-total-maint">Total Closed JO Maint</th>
-                                    <th class="col-stock">Stok Alat</th>
+                                    <th class="col-total-assign" title="Total JO Assign"><span class="th-kicker">JO</span><span class="th-main">Assign</span></th>
+                                    <th class="col-total" title="Total Closed JO New"><span class="th-kicker">Closed</span><span class="th-main">New</span></th>
+                                    <th class="col-total-maint" title="Total Closed JO Maint"><span class="th-kicker">Closed</span><span class="th-main">Maint</span></th>
+                                    <th class="col-stock" title="Stok Alat"><span class="th-kicker">Alat</span><span class="th-main">Stok</span></th>
                                     <asp:Literal ID="litScheduleHeader" runat="server"></asp:Literal>
                                 </tr>
                             </thead>
@@ -4163,16 +4265,17 @@
                 <div class="modal-body assign-closed-modal-body">
                     <div class="assign-totaljob-summary-wrap">
                         <div class="assign-totaljob-summary assign-totaljob-summary--jo">
-                            <span class="assign-totaljob-summary-label">Total Closed JO Bulan Ini</span>
+                            <span class="assign-totaljob-summary-label" id="assignTotalJobSummaryLabel">Total Closed JO Bulan Ini</span>
                             <strong id="assignTotalJobCount">0</strong>
                         </div>
                         <div class="assign-totaljob-summary assign-totaljob-summary--unit">
-                            <span class="assign-totaljob-summary-label">Total Closed Unit Bulan Ini</span>
+                            <span class="assign-totaljob-summary-label" id="assignTotalUnitSummaryLabel">Total Closed Unit Bulan Ini</span>
                             <strong id="assignTotalUnitCount">0</strong>
                         </div>
                     </div>
                     <div id="assignTotalJobContent"></div>
                     <div class="assign-closed-actions">
+                        <button type="button" class="detail-jo-export-btn" onclick="return exportClosedJobToExcel();">Export Excel (.xls)</button>
                         <button type="button" class="assign-closed-close-btn" data-dismiss="modal">Tutup Laporan</button>
                     </div>
                 </div>
@@ -5431,23 +5534,45 @@
                 request.send(null);
             }
 
+            var closedJobExportState = {
+                technicianId: "",
+                technicianName: "",
+                closeType: "new_install",
+                periode: ""
+            };
+
             function openTotalJobModal(trigger) {
                 var techName = trigger ? (trigger.getAttribute("data-tech-name") || "-") : "-";
                 var techId = trigger ? (trigger.getAttribute("data-tech-id") || "") : "";
                 var totalJob = toInt(trigger ? trigger.getAttribute("data-total-job") : 0, 0);
                 var closeType = trigger ? (trigger.getAttribute("data-close-type") || "new_install") : "new_install";
                 var periode = trigger ? (trigger.getAttribute("data-periode") || "") : "";
+                closedJobExportState.technicianId = techId;
+                closedJobExportState.technicianName = techName;
+                closedJobExportState.closeType = closeType;
+                closedJobExportState.periode = periode;
                 var title = document.getElementById("assignTotalJobTitle");
                 var count = document.getElementById("assignTotalJobCount");
                 var totalUnitCount = document.getElementById("assignTotalUnitCount");
                 var content = document.getElementById("assignTotalJobContent");
                 var eyebrow = document.getElementById("assignClosedJobEyebrow");
+                var joSummaryLabel = document.getElementById("assignTotalJobSummaryLabel");
+                var unitSummaryLabel = document.getElementById("assignTotalUnitSummaryLabel");
                 var requestToken = closedJobRequestToken + 1;
                 closedJobRequestToken = requestToken;
+                var isAssignList = (closeType || "").toLowerCase() === "assign";
                 var normalizedCloseType = (closeType || "").toLowerCase() === "maintenance" ? "maintenance" : "new_install";
-                var closeTypeLabel = normalizedCloseType === "maintenance"
-                    ? "Daftar Pekerjaan Diselesaikan Maintenance"
-                    : "Daftar Pekerjaan Diselesaikan New Installation";
+                var closeTypeLabel = isAssignList
+                    ? "Daftar JO Assign"
+                    : (normalizedCloseType === "maintenance"
+                        ? "Daftar Pekerjaan Diselesaikan Maintenance"
+                        : "Daftar Pekerjaan Diselesaikan New Installation");
+                if (joSummaryLabel) {
+                    joSummaryLabel.textContent = isAssignList ? "Total JO Assign Bulan Ini" : "Total Closed JO Bulan Ini";
+                }
+                if (unitSummaryLabel) {
+                    unitSummaryLabel.textContent = isAssignList ? "Total Unit Assign Bulan Ini" : "Total Closed Unit Bulan Ini";
+                }
 
                 if (title) {
                     title.textContent = techName;
@@ -5462,14 +5587,14 @@
                     totalUnitCount.textContent = "0";
                 }
                 if (content) {
-                    content.innerHTML = "<div class=\"assign-closed-loading\"><span class=\"assign-closed-loading-spinner\" aria-hidden=\"true\"></span><span>Memuat daftar pekerjaan selesai...</span></div>";
+                    content.innerHTML = "<div class=\"assign-closed-loading\"><span class=\"assign-closed-loading-spinner\" aria-hidden=\"true\"></span><span>" + (isAssignList ? "Memuat daftar JO assign..." : "Memuat daftar pekerjaan selesai...") + "</span></div>";
                 }
 
                 if (typeof $ !== "undefined" && $.fn && $.fn.modal) {
                     $("#assignClosedJobModal").modal("show");
                 }
 
-                if (!techId) {
+                if (!techId && !isAssignList) {
                     if (content && requestToken === closedJobRequestToken) {
                         content.innerHTML = "<div class=\"assign-closed-empty\"><div class=\"assign-closed-empty-icon\" aria-hidden=\"true\">&#128229;</div><p>TechnicianID tidak ditemukan.</p></div>";
                     }
@@ -5477,13 +5602,19 @@
                 }
 
                 callAssignPageMethod(
-                    "GetClosedJobList",
-                    {
-                        technicianId: techId,
-                        technicianName: techName,
-                        closeType: normalizedCloseType,
-                        periode: periode
-                    },
+                    isAssignList ? "GetAssignJobList" : "GetClosedJobList",
+                    isAssignList
+                        ? {
+                            technicianId: techId,
+                            technicianName: techName,
+                            periode: periode
+                        }
+                        : {
+                            technicianId: techId,
+                            technicianName: techName,
+                            closeType: normalizedCloseType,
+                            periode: periode
+                        },
                     function (result) {
                         if (requestToken !== closedJobRequestToken) {
                             return;
@@ -5509,9 +5640,9 @@
                         }
 
                         if (content) {
-                            content.innerHTML = (result && result.HtmlContent)
+                                content.innerHTML = (result && result.HtmlContent)
                                 ? result.HtmlContent
-                                : "<div class=\"assign-closed-empty\"><div class=\"assign-closed-empty-icon\" aria-hidden=\"true\">&#128229;</div><p>Belum ada pekerjaan selesai</p></div>";
+                                : "<div class=\"assign-closed-empty\"><div class=\"assign-closed-empty-icon\" aria-hidden=\"true\">&#128229;</div><p>" + (isAssignList ? "Belum ada JO assign" : "Belum ada pekerjaan selesai") + "</p></div>";
                         }
                     },
                     function (errorMessage) {
@@ -5848,6 +5979,16 @@
                     }
                     event.stopPropagation();
                     openDayTotalJoModal(dayTotalTrigger);
+                    return;
+                }
+
+                var assignTrigger = closestByClass(event.target, "tech-assignjob-trigger");
+                if (assignTrigger) {
+                    if (isKeyboard) {
+                        event.preventDefault();
+                    }
+                    assignTrigger.setAttribute("data-close-type", "assign");
+                    openTotalJobModal(assignTrigger);
                     return;
                 }
 
@@ -7567,6 +7708,23 @@
                     + "&status=" + encodeURIComponent(statusValue)
                     + "&detailJobType=" + encodeURIComponent(jobTypeValue)
                     + "&detailMetric=" + encodeURIComponent(metricValue);
+                window.open(exportUrl, "_blank");
+                return false;
+            };
+
+            window.exportClosedJobToExcel = function () {
+                var techId = closedJobExportState.technicianId || "ALL";
+                var techName = closedJobExportState.technicianName || "";
+                var closeType = closedJobExportState.closeType || "assign";
+                var periode = closedJobExportState.periode || "";
+                if (!techId && closeType !== "assign") {
+                    return false;
+                }
+                var exportUrl = getAssignPageUrl() + "?action=export_closed"
+                    + "&technicianId=" + encodeURIComponent(techId)
+                    + "&technicianName=" + encodeURIComponent(techName)
+                    + "&closeType=" + encodeURIComponent(closeType)
+                    + "&periode=" + encodeURIComponent(periode);
                 window.open(exportUrl, "_blank");
                 return false;
             };

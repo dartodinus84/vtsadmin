@@ -1,4 +1,4 @@
-﻿<%@ Page Title="" Language="C#" MasterPageFile="~/Site.Master" AutoEventWireup="true" CodeBehind="training_cust.aspx.cs" Inherits="vtsadm.training_cust" EnableEventValidation="false" %>
+<%@ Page Title="" Language="C#" MasterPageFile="~/Site.Master" AutoEventWireup="true" CodeBehind="training_cust.aspx.cs" Inherits="vtsadm.training_cust" EnableEventValidation="false" %>
 <asp:Content ID="Content1" ContentPlaceHolderID="ContentPlaceHolder1" runat="server">
     <style>
         .form-control {
@@ -125,7 +125,9 @@
                         </div>
                         <div class="form-group form-group-sm">
                             <label>Category <span style="color:red">*</span></label>
-                            <asp:DropDownList ID="CmbTrainCategoryID" runat="server" CssClass="form-control" required="required"></asp:DropDownList>
+                            <asp:DropDownList ID="CmbTrainCategoryID" runat="server" CssClass="form-control"></asp:DropDownList>
+                            <input type="hidden" id="hfPickedTrainCategoryID" runat="server" />
+                            <input type="hidden" id="hfPickedTrainCategoryDesc" runat="server" />
                         </div>
                         <div class="form-group form-group-sm">
                             <label>Remark</label>
@@ -140,7 +142,7 @@
                     </div>
                     <div class="box-footer">
                         <button id="CmdClear" type="reset" class="btn btn-primary" runat="server" onserverclick="CmdClear_ServerClick">Clear</button>
-                        <asp:Button ID="CmdLoadTraining" CssClass="btn btn-primary" runat="server" OnClick="CmdLoadTraining_Click" Text="Load" CausesValidation="false" />
+                        <asp:Button ID="CmdLoadTraining" CssClass="btn btn-primary" runat="server" OnClick="CmdLoadTraining_Click" Text="Load" CausesValidation="false" UseSubmitBehavior="true" formnovalidate="formnovalidate" />
                         <asp:Button ID="CmdFunc" CssClass="btn btn-primary" runat="server" OnClientClick="return showFunctionModal();" Text="Functions" />
                         <asp:Button ID="CmdRemark" CssClass="btn btn-warning" runat="server" OnClientClick="return confirmAddNote();" Text="Add Note" />
                         <asp:Button ID="CmdSubmit" CssClass="btn btn-primary" runat="server" OnClientClick="return confirmSubmit();" Text="Submit" />
@@ -464,7 +466,102 @@
             }
         }
 
-        function postJobTrainingChild(sTrainingID, sReqDate, sFullName, sSchDate, objCmd, sCustID, sCustBranchName, sBusinessFieldID) {
+        function toIsoDateInput(value) {
+            value = checkNbsp(value);
+            if (!value) {
+                return "";
+            }
+            var parts = value.split('/');
+            if (parts.length === 3) {
+                var mm = parts[0].length < 2 ? ('0' + parts[0]) : parts[0];
+                var dd = parts[1].length < 2 ? ('0' + parts[1]) : parts[1];
+                return parts[2] + '-' + mm + '-' + dd;
+            }
+            return value;
+        }
+
+        function setDropdownValue(elementId, value) {
+            var el = document.getElementById(elementId);
+            if (!el) {
+                return;
+            }
+            value = checkNbsp(value);
+            if (value) {
+                el.value = value;
+            }
+        }
+
+        function isSelectableDropdownOption(option) {
+            if (!option) {
+                return false;
+            }
+            var value = (option.value || "").trim();
+            return value !== "" && value !== "[Select]";
+        }
+
+        function setDropdownByIdOrText(elementId, idValue, textValue) {
+            var el = document.getElementById(elementId);
+            if (!el || !el.options || el.options.length === 0) {
+                return false;
+            }
+            idValue = checkNbsp(idValue);
+            textValue = checkNbsp(textValue);
+            var i;
+            if (idValue && idValue !== "[Select]") {
+                el.value = idValue;
+                if (el.value === idValue) {
+                    return true;
+                }
+                for (i = 0; i < el.options.length; i++) {
+                    if (!isSelectableDropdownOption(el.options[i])) {
+                        continue;
+                    }
+                    if ((el.options[i].value || "").toLowerCase() === idValue.toLowerCase()) {
+                        el.selectedIndex = i;
+                        return true;
+                    }
+                }
+            }
+            if (!textValue) {
+                return false;
+            }
+            var textLower = textValue.toLowerCase();
+            for (i = 0; i < el.options.length; i++) {
+                if (!isSelectableDropdownOption(el.options[i])) {
+                    continue;
+                }
+                var optText = (el.options[i].text || "").toLowerCase();
+                if (optText === textLower || optText.indexOf(textLower) >= 0 || textLower.indexOf(optText) >= 0) {
+                    el.selectedIndex = i;
+                    return true;
+                }
+            }
+            if (textLower.indexOf("visit") >= 0) {
+                for (i = 0; i < el.options.length; i++) {
+                    if (!isSelectableDropdownOption(el.options[i])) {
+                        continue;
+                    }
+                    if ((el.options[i].text || "").toLowerCase().indexOf("visit") >= 0) {
+                        el.selectedIndex = i;
+                        return true;
+                    }
+                }
+            }
+            if (textLower.indexOf("train") >= 0) {
+                for (i = 0; i < el.options.length; i++) {
+                    if (!isSelectableDropdownOption(el.options[i])) {
+                        continue;
+                    }
+                    if ((el.options[i].text || "").toLowerCase().indexOf("train") >= 0) {
+                        el.selectedIndex = i;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function postJobTrainingChild(sTrainingID, sReqDate, sFullName, sSchDate, objCmd, sCustID, sCustBranchName, sBusinessFieldID, sTrainCategoryID, sTrainCategoryDesc, sAssignDate, sAssignTrainer) {
             if (sTrainingID != '') {
                 document.getElementById('ContentPlaceHolder1_txtTrainingID').value = checkNbsp(sTrainingID);
                 document.getElementById('ContentPlaceHolder1_txtReqDate').value = checkNbsp(sReqDate);
@@ -476,6 +573,24 @@
                 var cmbBiz = document.getElementById('ContentPlaceHolder1_CmbBusinessField');
                 if (cmbBiz) {
                     cmbBiz.value = checkNbsp(sBusinessFieldID);
+                }
+
+                var hfCategoryId = document.getElementById('ContentPlaceHolder1_hfPickedTrainCategoryID');
+                var hfCategoryDesc = document.getElementById('ContentPlaceHolder1_hfPickedTrainCategoryDesc');
+                if (hfCategoryId) {
+                    hfCategoryId.value = checkNbsp(sTrainCategoryID);
+                }
+                if (hfCategoryDesc) {
+                    hfCategoryDesc.value = checkNbsp(sTrainCategoryDesc);
+                }
+                setDropdownByIdOrText('ContentPlaceHolder1_CmbTrainCategoryID', sTrainCategoryID, sTrainCategoryDesc);
+                var trainingDateEl = document.getElementById('ContentPlaceHolder1_txtTrainingDate');
+                if (trainingDateEl) {
+                    trainingDateEl.value = toIsoDateInput(sAssignDate || sSchDate);
+                }
+                var trainersEl = document.getElementById('ContentPlaceHolder1_txtTrainers');
+                if (trainersEl) {
+                    trainersEl.value = checkNbsp(sAssignTrainer);
                 }
 
                 var $ = window.jQuery;
