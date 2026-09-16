@@ -23,6 +23,12 @@ namespace vtsadm {
 
         protected global::System.Web.UI.WebControls.TextBox txtEndDate;
 
+        protected global::System.Web.UI.WebControls.RadioButtonList rblAudience;
+
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl divCompany;
+
+        protected global::System.Web.UI.WebControls.HiddenField hfSelectedCompanies;
+
         protected global::System.Web.UI.WebControls.CheckBox chkActive;
 
         protected global::System.Web.UI.WebControls.Button btnSave;

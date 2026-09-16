@@ -20,11 +20,7 @@ namespace vtsadm
 
         protected global::System.Web.UI.WebControls.DropDownList ddlPeriod;
 
-        protected global::System.Web.UI.WebControls.RadioButtonList rblTarget;
-
-        protected global::System.Web.UI.HtmlControls.HtmlGenericControl divCompany;
-
-        protected global::System.Web.UI.WebControls.HiddenField hfSelectedCompanies;
+        protected global::System.Web.UI.WebControls.Button btnLoad;
 
         protected global::System.Web.UI.WebControls.DropDownList ddlCategory;
 
@@ -46,6 +42,12 @@ namespace vtsadm
 
         protected global::System.Web.UI.WebControls.Button btnCancel;
 
+        protected global::System.Web.UI.WebControls.Panel pnlList;
+
+        protected global::System.Web.UI.WebControls.Label lblLoadedPeriod;
+
         protected global::System.Web.UI.WebControls.GridView gvData;
+
+        protected global::System.Web.UI.WebControls.Panel pnlListEmpty;
     }
 }
