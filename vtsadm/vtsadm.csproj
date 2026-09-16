@@ -8919,6 +8919,8 @@
     <Compile Include="installation_job_new.aspx.designer.cs">
       <DependentUpon>installation_job_new.aspx</DependentUpon>
     </Compile>
+    <Compile Include="ItsAssignTelegramService.cs" />
+    <Compile Include="ItsSupportAssignData.cs" />
     <Compile Include="job_assign_area_search.aspx.cs">
       <DependentUpon>job_assign_area_search.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>
@@ -11219,6 +11221,9 @@
     <Compile Include="telegram.aspx.designer.cs">
       <DependentUpon>telegram.aspx</DependentUpon>
     </Compile>
+    <Compile Include="telegram_itsupport_bot.ashx.cs">
+      <DependentUpon>telegram_itsupport_bot.ashx</DependentUpon>
+    </Compile>
     <Compile Include="topbar.aspx.cs">
       <DependentUpon>topbar.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>
@@ -12472,6 +12477,7 @@
     <Content Include="mdvr_channel.ashx" />
     <Content Include="device_maint_new_device.ashx" />
     <Content Include="Scripts\vc_vehicle_counting_zoning.js" />
+    <Content Include="telegram_itsupport_bot.ashx" />
     <None Include="Web.Debug.config">
       <DependentUpon>Web.config</DependentUpon>
     </None>
