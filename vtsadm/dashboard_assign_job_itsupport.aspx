@@ -4773,6 +4773,113 @@
                 return (order.AssignedTechnicianId || order.AssignedTechnicianID || "").toString().trim();
             }
 
+            function getOrderAssignedSchDate(order) {
+                if (!order) {
+                    return "";
+                }
+                return normalizeScheduleDateText(order.AssignedSchDate || order.AssignedScheduleDate || "");
+            }
+
+            function normalizeScheduleDateText(value) {
+                var text = (value || "").toString().trim();
+                if (!text) {
+                    return "";
+                }
+                var parsed = parseIsoDate(text);
+                if (parsed) {
+                    var month = parsed.getMonth() + 1;
+                    var day = parsed.getDate();
+                    return parsed.getFullYear()
+                        + "-" + (month < 10 ? "0" : "") + month
+                        + "-" + (day < 10 ? "0" : "") + day;
+                }
+                if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+                    return text.substring(0, 10);
+                }
+                return text;
+            }
+
+            function sameScheduleDate(left, right) {
+                var a = normalizeScheduleDateText(left);
+                var b = normalizeScheduleDateText(right);
+                return !!a && a === b;
+            }
+
+            function addAssignRefreshTarget(targets, dateText, technicianId) {
+                var date = normalizeScheduleDateText(dateText);
+                if (!date) {
+                    return;
+                }
+
+                var existing = null;
+                for (var i = 0; i < targets.length; i++) {
+                    if (targets[i].date === date) {
+                        existing = targets[i];
+                        break;
+                    }
+                }
+                if (!existing) {
+                    existing = { date: date, techIds: [] };
+                    targets.push(existing);
+                }
+
+                var techId = (technicianId || "").toString().trim();
+                if (techId && existing.techIds.indexOf(techId) < 0) {
+                    existing.techIds.push(techId);
+                }
+            }
+
+            function buildAssignRefreshTargets(primaryDate, technicianIds, previousDate, previousTechnicianId) {
+                var targets = [];
+                var ids = technicianIds || [];
+                if (ids.length) {
+                    for (var i = 0; i < ids.length; i++) {
+                        addAssignRefreshTarget(targets, primaryDate, ids[i]);
+                    }
+                } else {
+                    addAssignRefreshTarget(targets, primaryDate, "");
+                }
+                addAssignRefreshTarget(targets, previousDate, previousTechnicianId);
+                return targets;
+            }
+
+            function refreshAffectedScheduleDays(targets, primaryCell, callback) {
+                var list = targets || [];
+                function next(index) {
+                    if (index >= list.length) {
+                        if (typeof callback === "function") {
+                            callback();
+                        }
+                        return;
+                    }
+
+                    var item = list[index] || {};
+                    var cell = null;
+                    if (primaryCell && sameScheduleDate(primaryCell.getAttribute("data-date"), item.date)) {
+                        cell = primaryCell;
+                    } else if (item.techIds && item.techIds.length) {
+                        cell = findScheduleCell(item.techIds[0], item.date);
+                    }
+
+                    refreshScheduleDayState(item.date, item.techIds || [], cell, function () {
+                        next(index + 1);
+                    });
+                }
+                next(0);
+            }
+
+            function refreshAfterAssignChange(options, callback) {
+                options = options || {};
+                refreshAffectedScheduleDays(
+                    buildAssignRefreshTargets(
+                        options.scheduleDate,
+                        options.technicianIds,
+                        options.previousSchDate,
+                        options.previousTechnicianId),
+                    options.primaryCell || null,
+                    callback);
+            }
+
             function getTargetAssignTechnicianId(context) {
                 if (context === "report") {
                     return (reportModalState.technicianId || "").trim();
@@ -4855,6 +4962,9 @@
                             }
                             if (result.AssignedTechnicianName) {
                                 enriched.AssignedTechnicianName = result.AssignedTechnicianName;
+                            }
+                            if (result.AssignedSchDate) {
+                                enriched.AssignedSchDate = result.AssignedSchDate;
                             }
                             if (enriched._requiresTransferNote || enriched.IsAlreadyAssigned) {
                                 enriched.IsTransfer = true;
@@ -5015,11 +5125,11 @@
                         setReportFeedback((result && result.Message) || "Assign job berhasil dihapus.", false, true);
                         loadCompletedReportModalData(false);
                         renderReportDeletePanel();
-                        refreshScheduleDayState(
-                            reportModalState.schDate,
-                            [reportModalState.technicianId],
-                            reportModalState.activeCell,
-                            function () { });
+                        refreshAfterAssignChange({
+                            scheduleDate: (result && result.SchDate) || reportModalState.schDate,
+                            technicianIds: [(result && result.TechnicianId) || reportModalState.technicianId],
+                            primaryCell: reportModalState.activeCell
+                        }, function () { });
                         if (typeof fetchJobOrderInformation === "function") {
                             fetchJobOrderInformation();
                         }
@@ -5450,16 +5560,18 @@
                 var assignDate = formatScheduleAssignDate((row && row.AssignDate) || "");
                 var address = ((row && row.Address) || "-").toString();
                 var picName = ((row && row.PicName) || "-").toString();
+                var jobTypeText = ((row && row.JobType) || "").toString().toLowerCase();
+                var isVisit = jobTypeText.indexOf("visit") >= 0;
                 var remarkText = ((row && row.Remark) || "").toString().trim();
                 if (!remarkText) {
                     remarkText = "Tidak ada remark.";
                 }
 
                 if (title) {
-                    title.textContent = "Detail Training";
+                    title.textContent = isVisit ? "Detail Visit" : "Detail Training";
                 }
                 if (subtitle) {
-                    subtitle.textContent = "Training ID: " + jobId;
+                    subtitle.textContent = (isVisit ? "Visit ID: " : "Training ID: ") + jobId;
                 }
                 if (content) {
                     content.innerHTML = ""
@@ -5977,21 +6089,27 @@
                     setReportFeedback((result && result.Message) || "Assignment berhasil disimpan.", false, true);
                     reportModalState.showAssignForm = false;
                     reportModalState.editingRowIndex = -1;
-                    var sourceTechId = getOrderAssignedTechnicianId(selectedOrder);
+                    var sourceTechId = (result && result.PreviousTechnicianId) || getOrderAssignedTechnicianId(selectedOrder);
+                    var previousSchDate = (result && result.PreviousSchDate)
+                        || getOrderAssignedSchDate(selectedOrder)
+                        || (editingRow && editingRow.SchDate)
+                        || "";
                     var techIds = [reportModalState.technicianId];
-                    if (sourceTechId && isJobOrderTransfer(selectedOrder, reportModalState.technicianId)) {
+                    if (sourceTechId && normalizeTechId(sourceTechId) !== normalizeTechId(reportModalState.technicianId)) {
                         techIds.push(sourceTechId);
                     }
                     reportModalState.selectedOrder = null;
                     clearDashboardNote("assignReportTransferNoteInput");
                     loadCompletedReportModalData(false);
-                    refreshScheduleDayState(
-                        reportModalState.schDate,
-                        techIds,
-                        reportModalState.activeCell,
-                        function () {
-                            setReportAssignSaving(false);
-                        });
+                    refreshAfterAssignChange({
+                        scheduleDate: (result && result.SchDate) || reportModalState.schDate,
+                        technicianIds: techIds,
+                        previousSchDate: previousSchDate,
+                        previousTechnicianId: sourceTechId,
+                        primaryCell: reportModalState.activeCell
+                    }, function () {
+                        setReportAssignSaving(false);
+                    });
                 }
 
                 function runSaveAssign() {
@@ -7829,7 +7947,7 @@
 
             function findScheduleCell(technicianId, scheduleDate) {
                 var wantTech = normalizeTechId(technicianId);
-                var wantDate = (scheduleDate || "").trim();
+                var wantDate = normalizeScheduleDateText(scheduleDate);
                 if (!wantTech || !wantDate) {
                     return null;
                 }
@@ -7838,7 +7956,7 @@
                 for (var i = 0; i < cells.length; i++) {
                     var cell = cells[i];
                     if (normalizeTechId(cell.getAttribute("data-tech-id")) === wantTech
-                        && (cell.getAttribute("data-date") || "").trim() === wantDate) {
+                        && sameScheduleDate(cell.getAttribute("data-date"), wantDate)) {
                         return cell;
                     }
                 }
@@ -7846,7 +7964,7 @@
             }
 
             function updateDayTotalButtonLabel(scheduleDate, dayTotalJo) {
-                var wantDate = (scheduleDate || "").trim();
+                var wantDate = normalizeScheduleDateText(scheduleDate);
                 if (!wantDate) {
                     return;
                 }
@@ -7859,7 +7977,7 @@
                 var buttons = document.querySelectorAll(".assign-day-total-trigger");
                 for (var i = 0; i < buttons.length; i++) {
                     var btn = buttons[i];
-                    if ((btn.getAttribute("data-date") || "").trim() !== wantDate) {
+                    if (!sameScheduleDate(btn.getAttribute("data-date"), wantDate)) {
                         continue;
                     }
                     btn.setAttribute("data-total-jo", String(total));
@@ -8667,11 +8785,18 @@
                                     showAssignToast(successMessage, false);
 
                                     var techIds = [technicianId];
-                                    var sourceTechId = getOrderAssignedTechnicianId(order);
-                                    if (sourceTechId && isJobOrderTransfer(order, technicianId)) {
+                                    var sourceTechId = (result && result.PreviousTechnicianId) || getOrderAssignedTechnicianId(order);
+                                    var previousSchDate = (result && result.PreviousSchDate) || getOrderAssignedSchDate(order);
+                                    if (sourceTechId && normalizeTechId(sourceTechId) !== normalizeTechId(technicianId)) {
                                         techIds.push(sourceTechId);
                                     }
-                                    refreshScheduleDayState(scheduleDate, techIds, activeCell, function () {
+                                    refreshAfterAssignChange({
+                                        scheduleDate: (result && result.SchDate) || scheduleDate,
+                                        technicianIds: techIds,
+                                        previousSchDate: previousSchDate,
+                                        previousTechnicianId: sourceTechId,
+                                        primaryCell: activeCell
+                                    }, function () {
                                         setAssignSubmitLoading(false);
                                         closeAssignModal();
                                     });
@@ -8783,7 +8908,13 @@
                                 setFeedback(successMessage, false, true);
                                 showAssignToast(successMessage, false);
 
-                                refreshScheduleDayState(scheduleDate, [technicianId], activeCell, function () {
+                                refreshAfterAssignChange({
+                                    scheduleDate: (result && result.SchDate) || scheduleDate,
+                                    technicianIds: [technicianId],
+                                    previousSchDate: (result && result.PreviousSchDate) || "",
+                                    previousTechnicianId: (result && result.PreviousTechnicianId) || "",
+                                    primaryCell: activeCell
+                                }, function () {
                                     setAssignSubmitLoading(false);
                                     closeAssignModal();
                                 });

@@ -31,6 +31,11 @@ namespace vtsadm
             public int TotalAssignGps { get; set; }
             public int TotalAssignAcs { get; set; }
             public string LastAssignDate { get; set; }
+            public string AssignDate { get; set; }
+            public int SlaDays { get; set; }
+            public string Remark { get; set; }
+            public string PicName { get; set; }
+            public string CustomerNumber { get; set; }
             public int RemainingUnit { get; set; }
             public int TotalUnit { get; set; }
             public int RemainingUnitGps { get; set; }
@@ -47,6 +52,7 @@ namespace vtsadm
             public bool IsTransfer { get; set; }
             public string AssignedTechnicianId { get; set; }
             public string AssignedTechnicianName { get; set; }
+            public string AssignedSchDate { get; set; }
         }
 
         public class JobOrderInformationResponse
@@ -65,6 +71,10 @@ namespace vtsadm
             public string Result { get; set; }
             public string AssignID { get; set; }
             public string Message { get; set; }
+            public string TechnicianId { get; set; }
+            public string SchDate { get; set; }
+            public string PreviousTechnicianId { get; set; }
+            public string PreviousSchDate { get; set; }
         }
 
         public class TrainingLookupItem
@@ -229,6 +239,11 @@ namespace vtsadm
             public string InstallDate { get; set; }
             public string MISDate { get; set; }
             public string SchDate { get; set; }
+            public string AssignDate { get; set; }
+            public string CustomerName { get; set; }
+            public string FullName { get; set; }
+            public string Address { get; set; }
+            public string PicName { get; set; }
             public string TechnicianName { get; set; }
             public string StatusCode { get; set; }
             public string StatusText { get; set; }
@@ -252,6 +267,19 @@ namespace vtsadm
         {
             public string Result { get; set; }
             public string Message { get; set; }
+            public string TechnicianId { get; set; }
+            public string SchDate { get; set; }
+        }
+
+        public class JobOrderAssignContextResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public bool IsAlreadyAssigned { get; set; }
+            public bool RequiresTransferNote { get; set; }
+            public string AssignedTechnicianId { get; set; }
+            public string AssignedTechnicianName { get; set; }
+            public string AssignedSchDate { get; set; }
         }
 
         public class PerfTechnicianItem
@@ -873,7 +901,8 @@ namespace vtsadm
             {
                 return DeleteScheduleAssign(
                     GetPayloadString(args, "assignId"),
-                    GetPayloadInt(args, "seq", -1));
+                    GetPayloadInt(args, "seq", -1),
+                    GetPayloadString(args, "actionRemark"));
             }
 
             if (method.Equals("GetClosedJobList", StringComparison.OrdinalIgnoreCase))
@@ -909,9 +938,30 @@ namespace vtsadm
 
             if (method.Equals("RefreshAvailability", StringComparison.OrdinalIgnoreCase))
             {
+                if (IsJobTrainingAssignRequestContext())
+                {
+                    return BuildItsRefreshAvailability(
+                        GetPayloadString(args, "technicianId"),
+                        GetPayloadString(args, "schDate"));
+                }
+
                 return RefreshAvailability(
                     GetPayloadString(args, "technicianId"),
                     GetPayloadString(args, "schDate"));
+            }
+
+            if (method.Equals("RefreshScheduleDayState", StringComparison.OrdinalIgnoreCase))
+            {
+                return dashboard_assign_job_itsupport.RefreshScheduleDayState(
+                    GetPayloadString(args, "schDate"),
+                    GetPayloadStringArray(args, "technicianIds"));
+            }
+
+            if (method.Equals("GetJobOrderAssignContext", StringComparison.OrdinalIgnoreCase))
+            {
+                return dashboard_assign_job_itsupport.GetJobOrderAssignContext(
+                    GetPayloadString(args, "jobId"),
+                    GetPayloadString(args, "technicianId"));
             }
 
             if (method.Equals("UpdateTechnicianStatus", StringComparison.OrdinalIgnoreCase))
@@ -986,6 +1036,44 @@ namespace vtsadm
             }
 
             return Convert.ToString(payload[key], CultureInfo.InvariantCulture) ?? string.Empty;
+        }
+
+        private static string[] GetPayloadStringArray(Dictionary<string, object> payload, string key)
+        {
+            List<string> values = new List<string>();
+            if (payload == null || string.IsNullOrWhiteSpace(key) || !payload.ContainsKey(key) || payload[key] == null)
+            {
+                return values.ToArray();
+            }
+
+            object raw = payload[key];
+            string asString = raw as string;
+            if (asString != null)
+            {
+                if (!string.IsNullOrWhiteSpace(asString))
+                {
+                    values.Add(asString.Trim());
+                }
+
+                return values.ToArray();
+            }
+
+            System.Collections.IEnumerable enumerable = raw as System.Collections.IEnumerable;
+            if (enumerable == null)
+            {
+                return values.ToArray();
+            }
+
+            foreach (object item in enumerable)
+            {
+                string text = Convert.ToString(item, CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    values.Add(text.Trim());
+                }
+            }
+
+            return values.ToArray();
         }
 
         private static int GetPayloadInt(Dictionary<string, object> payload, string key, int defaultValue)
@@ -2311,6 +2399,9 @@ namespace vtsadm
             string[] formats =
             {
                 "yyyy-MM-dd",
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss.fff",
+                "yyyy-MM-ddTHH:mm:ss",
                 "dd/MM/yyyy",
                 "d/M/yyyy",
                 "dd-MM-yyyy",
@@ -2334,14 +2425,16 @@ namespace vtsadm
             {
                 if (DateTime.TryParseExact(source, formats, culture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal, out date))
                 {
+                    date = date.Date;
                     return true;
                 }
             }
 
             foreach (CultureInfo culture in cultures)
             {
-                if (DateTime.TryParse(source, culture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal, out date))
+                if (DateTime.TryParse(source, culture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal | DateTimeStyles.NoCurrentDateDefault, out date))
                 {
+                    date = date.Date;
                     return true;
                 }
             }
@@ -3062,7 +3155,7 @@ namespace vtsadm
             return true;
         }
 
-        private static bool TryResolveItsAssignTechnicianId(string userIdOrItId, out string itId, out string message)
+        protected static bool TryResolveItsAssignTechnicianId(string userIdOrItId, out string itId, out string message)
         {
             itId = string.Empty;
             message = string.Empty;
@@ -4947,6 +5040,8 @@ namespace vtsadm
             public string Address { get; set; }
             public string BranchAddress { get; set; }
             public string MarketingName { get; set; }
+            public string PicName { get; set; }
+            public string CustomerNumber { get; set; }
         }
 
         protected static Dictionary<string, CustomerScheduleContext> LoadCustomerScheduleContextMap()
@@ -4959,6 +5054,8 @@ namespace vtsadm
                 + "LTRIM(RTRIM(ISNULL(c.SupAreaID, ''))) AS SupAreaID, "
                 + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
                 + "LTRIM(RTRIM(ISNULL(c.BranchAddress, ''))) AS BranchAddress, "
+                + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PicName, "
+                + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ISNULL(c.MobilePhone1, '')))) AS CustomerNumber, "
                 + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
                 + "FROM mst_customer c WITH (NOLOCK) "
                 + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
@@ -4970,6 +5067,8 @@ namespace vtsadm
                     + "LTRIM(RTRIM(ISNULL(c.SupAreaID, ''))) AS SupAreaID, "
                     + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
                     + "LTRIM(RTRIM(ISNULL(c.BranchAddress, ''))) AS BranchAddress, "
+                    + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PicName, "
+                    + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ISNULL(c.MobilePhone1, '')))) AS CustomerNumber, "
                     + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
                     + "FROM mst_customer c WITH (NOLOCK) "
                     + "LEFT JOIN mst_marketing m WITH (NOLOCK) ON m.MarketingID = c.MarketingID");
@@ -5018,7 +5117,12 @@ namespace vtsadm
                     SupAreaID = supAreaId,
                     Address = FirstNonEmptyStatic(GetValue(row, "Address"), GetValue(row, "CustAddress")).Trim(),
                     BranchAddress = GetValue(row, "BranchAddress").Trim(),
-                    MarketingName = GetValue(row, "MarketingName").Trim()
+                    MarketingName = GetValue(row, "MarketingName").Trim(),
+                    PicName = FirstNonEmptyStatic(GetValue(row, "PicName"), GetValue(row, "PICName1")).Trim(),
+                    CustomerNumber = FirstNonEmptyStatic(
+                        GetValue(row, "CustomerNumber"),
+                        GetValue(row, "OfficePhone1"),
+                        GetValue(row, "MobilePhone1")).Trim()
                 };
             }
 
@@ -6148,7 +6252,7 @@ ORDER BY
                 litScheduleRows.Text = "<tr>"
                     + "<td class=\"col-no sticky-no cell-no\">-</td>"
                     + "<td class=\"col-name sticky-name cell-name\">-</td>"
-                    + (UseJobTrainingDataSource ? string.Empty : "<td class=\"col-total-assign cell-total\">0</td>")
+                    + "<td class=\"col-total-assign cell-total\">0</td>"
                     + "<td class=\"col-total cell-total\">0</td>"
                     + "<td class=\"col-total-maint cell-total\">0</td>"
                     + (UseJobTrainingDataSource ? string.Empty : "<td class=\"col-stock cell-stock\">-</td>")
@@ -6240,7 +6344,13 @@ ORDER BY
                 int totalClosedJobNew = techEntry.TotalClosedJobNew;
                 int totalClosedJobMaint = techEntry.TotalClosedJobMaint;
 
-                if (!UseJobTrainingDataSource)
+                if (UseJobTrainingDataSource)
+                {
+                    rows.Append("<td class=\"col-total-assign cell-total\">");
+                    rows.Append(HttpUtility.HtmlEncode(totalJobAssign.ToString()));
+                    rows.Append("</td>");
+                }
+                else
                 {
                     rows.Append("<td class=\"col-total-assign cell-total\">");
                     rows.Append("<button type=\"button\" class=\"assign-totaljob-link tech-assignjob-trigger\" data-tech-id=\"" + HttpUtility.HtmlAttributeEncode(techGroup.Key.TechnicianID) + "\" data-tech-name=\"" + technicianNameAttr + "\" data-total-job=\"" + totalJobAssign.ToString() + "\" data-periode=\"" + HttpUtility.HtmlAttributeEncode(periode) + "\" title=\"Lihat detail Total JO Assign\">");
@@ -6534,7 +6644,11 @@ ORDER BY
             cap.Append("<tr>");
             cap.Append("<td class=\"col-no sticky-no cap-header-cell\"></td>");
             cap.Append("<td class=\"col-name sticky-name cap-header-cell\">Kapasitas per Hari</td>");
-            if (!UseJobTrainingDataSource)
+            if (UseJobTrainingDataSource)
+            {
+                cap.Append("<td class=\"col-total-assign cap-header-cell\"></td>");
+            }
+            else
             {
                 cap.Append("<td class=\"col-total-assign cap-header-cell\" title=\"Lihat detail Total JO Assign semua teknisi bulan ini\">");
                 cap.Append(BuildAllAssignJobTrigger(monthAssignTotal.ToString(), monthAssignTotal, periode));
@@ -6595,7 +6709,11 @@ ORDER BY
             builder.Append("<tr>");
             builder.Append("<td class=\"col-no sticky-no cap-row-label " + cssClass + "\"></td>");
             builder.Append("<td class=\"col-name sticky-name cap-row-label " + cssClass + "\">" + label + "</td>");
-            if (!UseJobTrainingDataSource)
+            if (UseJobTrainingDataSource)
+            {
+                builder.Append("<td class=\"col-total-assign cap-scroll-gap " + cssClass + "\"></td>");
+            }
+            else
             {
                 builder.Append("<td class=\"col-total-assign cap-scroll-gap " + cssClass + "\">");
                 if (assignColumnTotal.HasValue)
@@ -7528,7 +7646,14 @@ ORDER BY
             {
                 return string.Empty;
             }
-            return Convert.ToString(row[columnName]).Trim();
+
+            object raw = row[columnName];
+            if (raw is DateTime)
+            {
+                return ((DateTime)raw).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+
+            return Convert.ToString(raw).Trim();
         }
 
         private void SetDefaultSummary()
@@ -7921,7 +8046,13 @@ ORDER BY
                 return string.Empty;
             }
 
-            return Convert.ToString(row[columnName]).Trim();
+            object raw = row[columnName];
+            if (raw is DateTime)
+            {
+                return ((DateTime)raw).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+
+            return Convert.ToString(raw).Trim();
         }
 
         protected static string NormalizeJobTrainingStatusCode(string status)
@@ -8540,6 +8671,13 @@ ORDER BY
 
             try
             {
+                string previousTechnicianId = string.Empty;
+                string previousSchDate = string.Empty;
+                if (requiresJobAssignment && IsJobTrainingAssignRequestContext())
+                {
+                    TryLoadActiveItsAssignSnapshot(jobId, out previousTechnicianId, out previousSchDate);
+                }
+
                 SaveAssignResponse saveOnce = ExecuteSaveAssignOnce(
                     connString,
                     jobId,
@@ -8559,6 +8697,14 @@ ORDER BY
 
                 response = saveOnce;
                 response.Result = "SUCCESS";
+                response.TechnicianId = (technicianId ?? string.Empty).Trim();
+                response.SchDate = schDateValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                if (!string.Equals(previousTechnicianId, response.TechnicianId, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(previousSchDate, response.SchDate, StringComparison.OrdinalIgnoreCase))
+                {
+                    response.PreviousTechnicianId = previousTechnicianId;
+                    response.PreviousSchDate = previousSchDate;
+                }
                 if (string.IsNullOrWhiteSpace(response.Message))
                 {
                     response.Message = "Assignment berhasil disimpan.";
@@ -8992,6 +9138,22 @@ ORDER BY
                             GetValue(row, "CustomerName"),
                             GetValue(row, "CustID"),
                             "-"),
+                        CustomerName = FirstNonEmpty(
+                            GetValue(row, "CustomerName"),
+                            GetValue(row, "FullName")),
+                        FullName = FirstNonEmpty(
+                            GetValue(row, "FullName"),
+                            GetValue(row, "CustomerName")),
+                        Address = FirstNonEmpty(
+                            GetValue(row, "Address"),
+                            GetValue(row, "CustAddress")),
+                        PicName = FirstNonEmpty(
+                            GetValue(row, "PICName1"),
+                            GetValue(row, "PicName"),
+                            GetValue(row, "PICName")),
+                        AssignDate = FormatDateForDisplay(FirstNonEmpty(
+                            GetValue(row, "AssignDate"),
+                            GetValue(row, "DtmUpd"))),
                         AreaID = FirstNonEmpty(GetValue(row, "AreaID"), GetValue(row, "SupAreaID")),
                         AreaName = FirstNonEmpty(
                             GetValue(row, "AreaName"),
@@ -9035,7 +9197,7 @@ ORDER BY
 
         [WebMethod(EnableSession = true)]
         [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq)
+        public static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq, string actionRemark = "")
         {
             DeleteScheduleAssignResponse response = new DeleteScheduleAssignResponse
             {
@@ -9072,6 +9234,22 @@ ORDER BY
 
             try
             {
+                string currentTechnicianId = string.Empty;
+                string currentSchDate = string.Empty;
+                TryLoadItsAssignSnapshotById(safeAssignId, seq, out currentTechnicianId, out currentSchDate);
+
+                ItsAssignTelegramService.AssignDetail pendingDelete = null;
+                bool notifyDelete = IsJobTrainingAssignRequestContext()
+                    && !string.IsNullOrWhiteSpace(actionRemark);
+                if (notifyDelete)
+                {
+                    pendingDelete = ItsAssignTelegramService.PrepareDeleteNotification(
+                        connString,
+                        safeAssignId,
+                        seq,
+                        actionRemark);
+                }
+
                 int affectRows = 0;
                 string executeMessage = string.Empty;
                 string sql = "sp_dashboard_assign_job_delete '"
@@ -9083,9 +9261,23 @@ ORDER BY
                 if (executeOk)
                 {
                     response.Result = "SUCCESS";
+                    response.TechnicianId = currentTechnicianId;
+                    response.SchDate = currentSchDate;
                     response.Message = string.IsNullOrWhiteSpace(executeMessage)
                         ? "Assign job berhasil dihapus."
                         : executeMessage;
+
+                    if (notifyDelete && pendingDelete != null)
+                    {
+                        try
+                        {
+                            ItsAssignTelegramService.NotifyAfterDelete(connString, pendingDelete);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
                     return response;
                 }
 
@@ -11164,16 +11356,408 @@ ORDER BY
 
             // Numbered col-day detail = assignments saved for this IT Support user (trx_job_assign_detail).
             ScheduleReportResponse response = LoadScheduleReport(resolvedItId, schDate, displayName);
-            if (response != null)
+            if (response == null)
             {
-                response.TechnicianID = TrimToLength((technicianId ?? string.Empty).Trim(), 20);
-                if (string.IsNullOrWhiteSpace(response.TechnicianName))
+                response = new ScheduleReportResponse
                 {
-                    response.TechnicianName = displayName;
+                    Result = "ERROR",
+                    Message = "Gagal memuat laporan schedule.",
+                    TechnicianID = TrimToLength((technicianId ?? string.Empty).Trim(), 20),
+                    TechnicianName = displayName,
+                    SchDate = (schDate ?? string.Empty).Trim(),
+                    TotalUnitSelesai = 0,
+                    TotalUnitBelumSelesai = 0,
+                    Rows = new List<ScheduleReportRowItem>()
+                };
+            }
+
+            DateTime schDateValue;
+            if (DateTime.TryParse(schDate, out schDateValue))
+            {
+                if (response.Rows == null || response.Rows.Count == 0)
+                {
+                    response.Rows = LoadItsAssignRowsForDay(resolvedItId, technicianId, schDateValue);
+                    if (response.Rows.Count > 0)
+                    {
+                        response.Result = "SUCCESS";
+                        response.Message = "OK";
+                    }
+                }
+
+                EnrichItsScheduleReportRows(response, resolvedItId, schDateValue);
+            }
+
+            response.TechnicianID = TrimToLength((technicianId ?? string.Empty).Trim(), 20);
+            if (string.IsNullOrWhiteSpace(response.TechnicianName))
+            {
+                response.TechnicianName = displayName;
+            }
+
+            if (response.Rows == null)
+            {
+                response.Rows = new List<ScheduleReportRowItem>();
+            }
+
+            response.TotalUnitSelesai = response.Rows.Count(r =>
+                string.Equals((r.StatusCode ?? string.Empty).Trim(), "CL", StringComparison.OrdinalIgnoreCase)
+                || string.Equals((r.StatusText ?? string.Empty).Trim(), "Selesai", StringComparison.OrdinalIgnoreCase));
+            response.TotalUnitBelumSelesai = Math.Max(0, response.Rows.Count - response.TotalUnitSelesai);
+            return response;
+        }
+
+        protected static RefreshAvailabilityResponse BuildItsRefreshAvailability(string technicianId, string schDate)
+        {
+            RefreshAvailabilityResponse response = new RefreshAvailabilityResponse
+            {
+                Result = "ERROR",
+                DisplayValue = "AV",
+                CanAssign = true,
+                Message = string.Empty
+            };
+
+            DateTime schDateValue;
+            if (string.IsNullOrWhiteSpace(technicianId) || !DateTime.TryParse(schDate, out schDateValue))
+            {
+                response.Message = "Parameter refresh tidak valid.";
+                return response;
+            }
+
+            string resolvedItId;
+            string itIdMessage;
+            if (!TryResolveItsAssignTechnicianId(technicianId, out resolvedItId, out itIdMessage))
+            {
+                response.Message = string.IsNullOrWhiteSpace(itIdMessage) ? "ITID not exist" : itIdMessage;
+                return response;
+            }
+
+            int totalAssign;
+            int openAssign;
+            CountItsAssignsForDay(resolvedItId, technicianId, schDateValue, out totalAssign, out openAssign);
+
+            HttpContext context = HttpContext.Current;
+            bool isTechnicianUser = context != null
+                && context.Session != null
+                && Convert.ToString(context.Session[SessionUserIsTechnician]).Trim() == "1";
+
+            response.Result = "SUCCESS";
+            response.DisplayValue = totalAssign > 0 ? totalAssign.ToString(CultureInfo.InvariantCulture) : "AV";
+            response.HasRemainingJo = true;
+            response.RemainingJo = openAssign;
+            response.CanAssign = schDateValue.Date >= DateTime.Today && !isTechnicianUser;
+            response.Message = "OK";
+            return response;
+        }
+
+        private static void CountItsAssignsForDay(
+            string itId,
+            string originalTechnicianId,
+            DateTime schDate,
+            out int totalAssign,
+            out int openAssign)
+        {
+            totalAssign = 0;
+            openAssign = 0;
+            List<ScheduleReportRowItem> rows = LoadItsAssignRowsForDay(itId, originalTechnicianId, schDate);
+            if (rows == null || rows.Count == 0)
+            {
+                return;
+            }
+
+            totalAssign = rows.Count;
+            openAssign = rows.Count(r =>
+                !string.Equals((r.StatusCode ?? string.Empty).Trim(), "CL", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals((r.StatusText ?? string.Empty).Trim(), "Selesai", StringComparison.OrdinalIgnoreCase));
+        }
+
+        protected static int CountItsMonthlyAssigns(string itId, string originalTechnicianId, DateTime schDate)
+        {
+            DateTime monthStart = new DateTime(schDate.Year, schDate.Month, 1);
+            DataTable details = LoadTrxJobAssignDetailRows(monthStart, monthStart.AddMonths(1));
+            if (details == null || details.Rows.Count == 0)
+            {
+                return 0;
+            }
+
+            HashSet<string> wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(itId))
+            {
+                wanted.Add(itId.Trim());
+            }
+            if (!string.IsNullOrWhiteSpace(originalTechnicianId))
+            {
+                wanted.Add(originalTechnicianId.Trim());
+            }
+            if (wanted.Count == 0)
+            {
+                return 0;
+            }
+
+            HashSet<string> jobs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow row in details.Rows)
+            {
+                string technicianId = FirstNonEmptyStatic(
+                    GetValue(row, "TechnicianID"),
+                    GetValue(row, "TechnicianId"),
+                    GetValue(row, "ITID")).Trim();
+                if (!wanted.Contains(technicianId))
+                {
+                    continue;
+                }
+
+                string jobId = FirstNonEmptyStatic(GetValue(row, "JobID"), GetValue(row, "AssignID")).Trim();
+                jobs.Add(string.IsNullOrWhiteSpace(jobId) ? ("__ROW__" + jobs.Count.ToString(CultureInfo.InvariantCulture)) : jobId);
+            }
+
+            return jobs.Count;
+        }
+
+        protected static bool TryLoadActiveItsAssignSnapshot(string jobId, out string technicianId, out string schDateText)
+        {
+            technicianId = string.Empty;
+            schDateText = string.Empty;
+            string safeJobId = TrimToLength((jobId ?? string.Empty).Trim(), 10);
+            if (string.IsNullOrWhiteSpace(safeJobId))
+            {
+                return false;
+            }
+
+            DataTable table = ExecuteJobTrainingQuery(
+                "SELECT TOP 1 TechnicianID, SchDate "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(JobID, ''))) = '" + EscapeSqlLiteral(safeJobId) + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "ORDER BY DtmUpd DESC, SchDate DESC, Seq DESC");
+            return ReadItsAssignSnapshotRow(table, out technicianId, out schDateText);
+        }
+
+        protected static bool TryLoadItsAssignSnapshotById(string assignId, int seq, out string technicianId, out string schDateText)
+        {
+            technicianId = string.Empty;
+            schDateText = string.Empty;
+            string safeAssignId = TrimToLength((assignId ?? string.Empty).Trim(), 50);
+            if (string.IsNullOrWhiteSpace(safeAssignId) || seq < 0)
+            {
+                return false;
+            }
+
+            DataTable table = ExecuteJobTrainingQuery(
+                "SELECT TOP 1 TechnicianID, SchDate "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(AssignID, ''))) = '" + EscapeSqlLiteral(safeAssignId) + "' "
+                    + "AND Seq = " + seq.ToString(CultureInfo.InvariantCulture));
+            return ReadItsAssignSnapshotRow(table, out technicianId, out schDateText);
+        }
+
+        private static bool ReadItsAssignSnapshotRow(DataTable table, out string technicianId, out string schDateText)
+        {
+            technicianId = string.Empty;
+            schDateText = string.Empty;
+            if (table == null || table.Rows.Count == 0)
+            {
+                return false;
+            }
+
+            DataRow row = table.Rows[0];
+            technicianId = FirstNonEmptyStatic(
+                GetValue(row, "TechnicianID"),
+                GetValue(row, "TechnicianId"),
+                GetValue(row, "ITID")).Trim();
+            string rawDate = FirstNonEmptyStatic(GetValue(row, "SchDate"), GetValue(row, "ScheduleDate"));
+            DateTime schDate;
+            if (TryParseTrainingDate(rawDate, out schDate))
+            {
+                schDateText = schDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                schDateText = (rawDate ?? string.Empty).Trim();
+                if (schDateText.Length > 10)
+                {
+                    schDateText = schDateText.Substring(0, 10);
                 }
             }
 
-            return response;
+            return !string.IsNullOrWhiteSpace(technicianId) || !string.IsNullOrWhiteSpace(schDateText);
+        }
+
+        private static List<ScheduleReportRowItem> LoadItsAssignRowsForDay(
+            string itId,
+            string originalTechnicianId,
+            DateTime schDate)
+        {
+            List<ScheduleReportRowItem> rows = new List<ScheduleReportRowItem>();
+            string dateText = schDate.ToString("yyyy-MM-dd");
+            string safeItId = EscapeSqlLiteral((itId ?? string.Empty).Trim());
+            string safeOriginal = EscapeSqlLiteral((originalTechnicianId ?? string.Empty).Trim());
+            string technicianFilter = "LTRIM(RTRIM(ISNULL(TechnicianID, ''))) = '" + safeItId + "'";
+            if (!string.IsNullOrWhiteSpace(safeOriginal)
+                && !safeOriginal.Equals(safeItId, StringComparison.OrdinalIgnoreCase))
+            {
+                technicianFilter = "(" + technicianFilter
+                    + " OR LTRIM(RTRIM(ISNULL(TechnicianID, ''))) = '" + safeOriginal + "')";
+            }
+
+            string[] queries =
+            {
+                "SELECT AssignID, Seq, JobID, TechnicianID, SchDate, Status, Remark, DtmUpd "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE " + technicianFilter + " "
+                    + "AND CONVERT(varchar(10), SchDate, 120) = '" + dateText + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "ORDER BY Seq, JobID",
+                "SELECT AssignID, Seq, JobID, TechnicianID, SchDate, Status, Remark "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE " + technicianFilter + " "
+                    + "AND CONVERT(varchar(10), SchDate, 120) = '" + dateText + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "ORDER BY Seq, JobID"
+            };
+
+            DataTable table = null;
+            foreach (string sql in queries)
+            {
+                table = ExecuteJobTrainingQuery(sql);
+                if (table != null && table.Rows.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            if (table == null || table.Rows.Count == 0)
+            {
+                return rows;
+            }
+
+            foreach (DataRow row in table.Rows)
+            {
+                string statusCode = FirstNonEmptyStatic(GetValue(row, "Status"), GetValue(row, "StatusCode"));
+                bool isCompleted = IsClosedAssignDetailStatus(statusCode);
+                int seq = ParseIntFromColumns(row, "Seq", "SEQ");
+                rows.Add(new ScheduleReportRowItem
+                {
+                    AssignID = FirstNonEmptyStatic(GetValue(row, "AssignID"), GetValue(row, "AssignId")),
+                    Seq = seq,
+                    JobID = GetValue(row, "JobID"),
+                    JobType = FirstNonEmptyStatic(GetValue(row, "JobType"), "Training"),
+                    CustID = GetValue(row, "CustID"),
+                    SchDate = dateText,
+                    AssignDate = FormatDateForDisplay(GetValue(row, "DtmUpd")),
+                    TechnicianName = FirstNonEmptyStatic(GetValue(row, "TechnicianName"), GetValue(row, "TechnicianID")),
+                    StatusCode = statusCode,
+                    StatusText = isCompleted ? "Selesai" : "Belum Selesai",
+                    Remark = FirstNonEmptyStatic(GetValue(row, "Remark"), GetValue(row, "Remarks")),
+                    CanDelete = !isCompleted && !string.IsNullOrWhiteSpace(GetValue(row, "AssignID"))
+                });
+            }
+
+            return rows;
+        }
+
+        private static void EnrichItsScheduleReportRows(ScheduleReportResponse response, string itId, DateTime schDate)
+        {
+            if (response == null || response.Rows == null || response.Rows.Count == 0)
+            {
+                return;
+            }
+
+            string connString = string.Empty;
+            HttpContext context = HttpContext.Current;
+            if (context != null && context.Session != null)
+            {
+                connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            }
+
+            foreach (ScheduleReportRowItem row in response.Rows)
+            {
+                if (row == null)
+                {
+                    continue;
+                }
+
+                ItsSupportAssignData.CustomerContact contact = ItsSupportAssignData.LoadCustomerContact(
+                    row.CustID,
+                    row.JobID,
+                    connString);
+                if (contact != null)
+                {
+                    row.CustID = FirstNonEmptyStatic(row.CustID, contact.CustId);
+                    string fullName = FirstNonEmptyStatic(contact.FullName, row.FullName, row.CustomerName);
+                    row.FullName = fullName;
+                    row.CustomerName = FirstNonEmptyStatic(fullName, row.CustomerName);
+                    if (string.IsNullOrWhiteSpace(row.Customer)
+                        || row.Customer == "-"
+                        || row.Customer.Equals(row.CustID, StringComparison.OrdinalIgnoreCase))
+                    {
+                        row.Customer = FirstNonEmptyStatic(fullName, row.Customer, "-");
+                    }
+
+                    row.Address = FirstNonEmptyStatic(contact.Address, row.Address);
+                    row.PicName = FirstNonEmptyStatic(contact.PicName, row.PicName);
+                }
+
+                if (string.IsNullOrWhiteSpace(row.AssignDate) || row.AssignDate == "-")
+                {
+                    row.AssignDate = FormatDateForDisplay(
+                        ItsSupportAssignData.ResolveItSupportAssignDate(
+                            connString,
+                            row.AssignID,
+                            row.Seq,
+                            row.JobID));
+                }
+
+                ApplyTrainingOrderRemarkToScheduleRow(row);
+            }
+        }
+
+        private static void ApplyTrainingOrderRemarkToScheduleRow(ScheduleReportRowItem row)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.JobID))
+            {
+                return;
+            }
+
+            string safeJobId = EscapeSqlLiteral(row.JobID.Trim());
+            string[] queries =
+            {
+                "SELECT TOP 1 Remark, RemarkTraining, TrainCategoryID, TrainCategoryName, TrainingCategoryName, CategoryName "
+                    + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'",
+                "SELECT TOP 1 Remark, RemarkTraining, TrainCategoryID "
+                    + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'",
+                "SELECT TOP 1 Remark, RemarkTraining "
+                    + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteJobTrainingQuery(sql);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                DataRow orderRow = table.Rows[0];
+                string categoryName = FirstNonEmptyStatic(
+                    GetValue(orderRow, "TrainCategoryName"),
+                    GetValue(orderRow, "TrainingCategoryName"),
+                    GetValue(orderRow, "CategoryName"));
+                string categoryId = FirstNonEmptyStatic(
+                    GetValue(orderRow, "TrainCategoryID"),
+                    GetValue(orderRow, "TrainingCategoryID"));
+                bool isVisit = IsVisitCategory(categoryName, categoryId);
+                row.JobType = isVisit ? "Visit" : "Training";
+                if (isVisit)
+                {
+                    row.Remark = FirstNonEmptyStatic(GetValue(orderRow, "Remark"), row.Remark);
+                }
+                else
+                {
+                    row.Remark = FirstNonEmptyStatic(
+                        GetValue(orderRow, "RemarkTraining"),
+                        GetValue(orderRow, "Remark"),
+                        row.Remark);
+                }
+                break;
+            }
         }
     }
 }

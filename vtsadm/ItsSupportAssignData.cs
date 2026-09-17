@@ -1416,6 +1416,138 @@ namespace vtsadm
             return string.Empty;
         }
 
+        public sealed class CustomerContact
+        {
+            public string CustId { get; set; }
+            public string FullName { get; set; }
+            public string Address { get; set; }
+            public string PicName { get; set; }
+            public string BranchName { get; set; }
+            public string MarketingName { get; set; }
+        }
+
+        public static CustomerContact LoadCustomerContact(string custId, string jobId, string connString)
+        {
+            string trimmedCustId = (custId ?? string.Empty).Trim();
+            string trimmedJobId = (jobId ?? string.Empty).Trim();
+            List<string> queries = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(trimmedCustId))
+            {
+                string safeCustId = EscapeSqlLiteral(trimmedCustId);
+                queries.Add(
+                    "SELECT TOP 1 "
+                    + "LTRIM(RTRIM(ISNULL(CustID, ''))) AS CustID, "
+                    + "LTRIM(RTRIM(ISNULL(FullName, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(Address, ''))) AS Address, "
+                    + "LTRIM(RTRIM(ISNULL(PICName1, ''))) AS PICName1, "
+                    + "LTRIM(RTRIM(ISNULL(PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(BranchName, ''))) AS BranchName "
+                    + "FROM mst_customer WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "'");
+                queries.Add(
+                    "SELECT TOP 1 * "
+                    + "FROM mst_customer WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "'");
+            }
+
+            if (!string.IsNullOrWhiteSpace(trimmedJobId))
+            {
+                string safeJobId = EscapeSqlLiteral(trimmedJobId);
+                queries.Add(
+                    "SELECT TOP 1 "
+                    + "LTRIM(RTRIM(ISNULL(c.CustID, ''))) AS CustID, "
+                    + "LTRIM(RTRIM(ISNULL(c.FullName, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
+                    + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
+                    + "LTRIM(RTRIM(ISNULL(c.PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName "
+                    + "FROM trx_training_order t WITH (NOLOCK) "
+                    + "INNER JOIN mst_customer c WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(c.CustID, ''))) = LTRIM(RTRIM(ISNULL(t.CustID, ''))) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = '" + safeJobId + "' "
+                    + "AND ISNULL(t.Status, '') NOT IN ('DE')");
+                queries.Add(
+                    "SELECT TOP 1 c.* "
+                    + "FROM trx_training_order t WITH (NOLOCK) "
+                    + "INNER JOIN mst_customer c WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(c.CustID, ''))) = LTRIM(RTRIM(ISNULL(t.CustID, ''))) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = '" + safeJobId + "' "
+                    + "AND ISNULL(t.Status, '') NOT IN ('DE')");
+            }
+
+            foreach (string sql in queries)
+            {
+                DataTable table = QueryDataTable(sql, connString);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                CustomerContact contact = MapCustomerContact(table.Rows[0]);
+                if (contact != null
+                    && (!string.IsNullOrWhiteSpace(contact.Address)
+                        || !string.IsNullOrWhiteSpace(contact.PicName)
+                        || !string.IsNullOrWhiteSpace(contact.FullName)
+                        || !string.IsNullOrWhiteSpace(contact.CustId)))
+                {
+                    return contact;
+                }
+            }
+
+            return null;
+        }
+
+        private static CustomerContact MapCustomerContact(DataRow row)
+        {
+            if (row == null)
+            {
+                return null;
+            }
+
+            return new CustomerContact
+            {
+                CustId = FirstNonEmpty(
+                    GetRowString(row, "CustID"),
+                    GetRowString(row, "CustomerID")),
+                FullName = CleanCustomerField(FirstNonEmpty(
+                    GetRowString(row, "FullName"),
+                    GetRowString(row, "CustomerName"),
+                    GetRowString(row, "CustName"))),
+                Address = CleanCustomerField(FirstNonEmpty(
+                    GetRowString(row, "Address"),
+                    GetRowString(row, "CustAddress"),
+                    GetRowString(row, "BillingAddr"),
+                    GetRowString(row, "BillingAddress"),
+                    GetRowString(row, "TaxAddr"),
+                    GetRowString(row, "ShippingAddr"),
+                    GetRowString(row, "BranchAddress"))),
+                PicName = CleanCustomerField(FirstNonEmpty(
+                    GetRowString(row, "PICName1"),
+                    GetRowString(row, "PicName"),
+                    GetRowString(row, "PICName"),
+                    GetRowString(row, "PICName2"))),
+                BranchName = CleanCustomerField(GetRowString(row, "BranchName")),
+                MarketingName = CleanCustomerField(GetRowString(row, "MarketingName"))
+            };
+        }
+
+        private static string CleanCustomerField(string value)
+        {
+            string cleaned = (value ?? string.Empty)
+                .Replace("&nbsp;", " ")
+                .Replace("&NBSP;", " ")
+                .Trim();
+            if (string.IsNullOrWhiteSpace(cleaned)
+                || cleaned == "-"
+                || cleaned.Equals("NULL", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+
+            return cleaned;
+        }
+
         public static string ResolveItSupportAssignDate(
             string connString,
             string assignId,

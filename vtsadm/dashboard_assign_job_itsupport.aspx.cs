@@ -18,6 +18,23 @@ namespace vtsadm
       public int AssignAcs { get; set; }
       public string TechnicianId { get; set; }
       public string TechnicianName { get; set; }
+      public string SchDate { get; set; }
+    }
+
+    public class RefreshScheduleDayStateCell
+    {
+      public string TechnicianId { get; set; }
+      public string DisplayValue { get; set; }
+      public bool CanAssign { get; set; }
+      public int TotalJoAssign { get; set; }
+    }
+
+    public class RefreshScheduleDayStateResponse
+    {
+      public string Result { get; set; }
+      public string Message { get; set; }
+      public int DayTotalJo { get; set; }
+      public List<RefreshScheduleDayStateCell> Cells { get; set; }
     }
 
     protected override string FixedActiveTab
@@ -94,8 +111,7 @@ namespace vtsadm
           deviceGroupId,
           areaId,
           targetStatus,
-          insDeviceTypeId,
-          assignRemark);
+          insDeviceTypeId);
     }
 
     [WebMethod(EnableSession = true)]
@@ -163,14 +179,66 @@ namespace vtsadm
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
     public new static RefreshAvailabilityResponse RefreshAvailability(string technicianId, string schDate)
     {
-      return dashboard_assign_job.RefreshAvailability(technicianId, schDate);
+      return BuildItsRefreshAvailability(technicianId, schDate);
     }
 
     [WebMethod(EnableSession = true)]
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-    public new static RefreshScheduleDayStateResponse RefreshScheduleDayState(string schDate, string[] technicianIds)
+    public static RefreshScheduleDayStateResponse RefreshScheduleDayState(string schDate, string[] technicianIds)
     {
-      return dashboard_assign_job.RefreshScheduleDayState(schDate, technicianIds);
+      RefreshScheduleDayStateResponse response = new RefreshScheduleDayStateResponse
+      {
+        Result = "ERROR",
+        Message = string.Empty,
+        Cells = new List<RefreshScheduleDayStateCell>()
+      };
+
+      if (string.IsNullOrWhiteSpace(schDate))
+      {
+        response.Message = "Tanggal tidak valid.";
+        return response;
+      }
+
+      DayTotalJoModalResponse dayTotal = GetDayTotalJoList(schDate);
+      if (dayTotal != null
+          && string.Equals(dayTotal.Result, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+      {
+        response.DayTotalJo = dayTotal.TotalJO;
+      }
+
+      DateTime schDateValue;
+      if (!DateTime.TryParse(schDate, out schDateValue))
+      {
+        schDateValue = DateTime.Today;
+      }
+
+      if (technicianIds != null)
+      {
+        foreach (string technicianId in technicianIds)
+        {
+          string id = (technicianId ?? string.Empty).Trim();
+          if (string.IsNullOrWhiteSpace(id))
+          {
+            continue;
+          }
+
+          RefreshAvailabilityResponse cell = BuildItsRefreshAvailability(id, schDate);
+          int totalJoAssign = CountItsMonthlyAssigns(id, id, schDateValue);
+
+          response.Cells.Add(new RefreshScheduleDayStateCell
+          {
+            TechnicianId = id,
+            DisplayValue = cell != null && !string.IsNullOrWhiteSpace(cell.DisplayValue)
+              ? cell.DisplayValue
+              : "AV",
+            CanAssign = cell != null && cell.CanAssign,
+            TotalJoAssign = totalJoAssign
+          });
+        }
+      }
+
+      response.Result = "SUCCESS";
+      return response;
     }
 
     [WebMethod(EnableSession = true)]
@@ -178,6 +246,46 @@ namespace vtsadm
     public new static DayTotalJoModalResponse GetDayTotalJoList(string scheduleDate)
     {
       return dashboard_assign_job.GetDayTotalJoList(scheduleDate);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static JobOrderAssignContextResponse GetJobOrderAssignContext(string jobId, string technicianId)
+    {
+      JobOrderAssignContextResponse response = new JobOrderAssignContextResponse
+      {
+        Result = "SUCCESS",
+        Message = "OK"
+      };
+
+      string assignedTechnicianId;
+      string assignedSchDate;
+      if (!TryLoadActiveItsAssignSnapshot(jobId, out assignedTechnicianId, out assignedSchDate)
+          || (string.IsNullOrWhiteSpace(assignedTechnicianId) && string.IsNullOrWhiteSpace(assignedSchDate)))
+      {
+        return response;
+      }
+
+      Dictionary<string, string> names = ItsSupportAssignData.LoadItSupportNameMap();
+      response.IsAlreadyAssigned = true;
+      response.AssignedTechnicianId = assignedTechnicianId;
+      response.AssignedTechnicianName = ItsSupportAssignData.ResolveItSupportName(assignedTechnicianId, names);
+      response.AssignedSchDate = assignedSchDate;
+
+      string targetId = (technicianId ?? string.Empty).Trim();
+      string resolvedTargetId;
+      string itIdMessage;
+      if (!string.IsNullOrWhiteSpace(targetId)
+          && TryResolveItsAssignTechnicianId(targetId, out resolvedTargetId, out itIdMessage)
+          && !string.IsNullOrWhiteSpace(resolvedTargetId))
+      {
+        targetId = resolvedTargetId;
+      }
+
+      response.RequiresTransferNote = !string.IsNullOrWhiteSpace(assignedTechnicianId)
+          && !string.IsNullOrWhiteSpace(targetId)
+          && !string.Equals(assignedTechnicianId, targetId, StringComparison.OrdinalIgnoreCase);
+      return response;
     }
 
     [WebMethod(EnableSession = true)]
@@ -347,6 +455,12 @@ namespace vtsadm
           string technicianId = FirstNonEmptyStatic(GetValue(row, "TechnicianID")).Trim();
           stats.TechnicianId = technicianId;
           stats.TechnicianName = ItsSupportAssignData.ResolveItSupportName(technicianId, itSupportNames);
+          string assignedSchDate = GetValue(row, "SchDate").Trim();
+          if (assignedSchDate.Length > 10)
+          {
+            assignedSchDate = assignedSchDate.Substring(0, 10);
+          }
+          stats.SchDate = assignedSchDate;
         }
 
         string deviceGroup = NormalizeDeviceGroupId(
@@ -605,6 +719,7 @@ namespace vtsadm
         mapped.Columns.Add("IsTransfer", typeof(bool));
         mapped.Columns.Add("AssignedTechnicianId");
         mapped.Columns.Add("AssignedTechnicianName");
+        mapped.Columns.Add("AssignedSchDate");
 
         if (raw != null)
         {
@@ -661,13 +776,17 @@ namespace vtsadm
                 GetValue(row, "sReqDate"),
                 GetValue(row, "ReqDate"));
             int slaDays = CalculateJobOrderSlaDays(assignDate);
-            // JO header remark from trx_training_order (same as sp_list_header_job_training).
-            string remark = FirstNonEmptyStatic(
-                GetValue(row, "Remark"),
-                GetValue(row, "Remarks"));
-
             // IT Support Training/Visit: assign slot is per trx_job_assign_detail, not installation GPS units.
             // Training JO close status (CL) must not block IT Support scheduling.
+            // Visit Catatan uses trx_training_order.Remark; Training uses RemarkTraining then Remark.
+            string remark = isVisit
+                ? FirstNonEmptyStatic(
+                    GetValue(row, "Remark"),
+                    GetValue(row, "Remarks"))
+                : FirstNonEmptyStatic(
+                    GetValue(row, "RemarkTraining"),
+                    GetValue(row, "Remark"),
+                    GetValue(row, "Remarks"));
             int totalUnit = 1;
             int remaining = Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
 
@@ -745,6 +864,7 @@ namespace vtsadm
             target["IsTransfer"] = isTransfer;
             target["AssignedTechnicianId"] = assignedTechnicianId;
             target["AssignedTechnicianName"] = assignedTechnicianName;
+            target["AssignedSchDate"] = trxStat != null ? FirstNonEmptyStatic(trxStat.SchDate) : string.Empty;
             mapped.Rows.Add(target);
           }
         }
@@ -798,7 +918,8 @@ namespace vtsadm
             CustomerAcsCount = 0,
             IsTransfer = ParseBoolFromDataRow(row, "IsTransfer"),
             AssignedTechnicianId = GetValue(row, "AssignedTechnicianId"),
-            AssignedTechnicianName = GetValue(row, "AssignedTechnicianName")
+            AssignedTechnicianName = GetValue(row, "AssignedTechnicianName"),
+            AssignedSchDate = GetValue(row, "AssignedSchDate")
           });
         }
       }

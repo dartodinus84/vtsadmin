@@ -768,41 +768,31 @@ namespace vtsadm
 
         private static void EnrichFromCustomer(string connString, AssignDetail detail)
         {
-            if (string.IsNullOrWhiteSpace(detail.CustId))
+            if (detail == null)
             {
                 return;
             }
 
-            string custId = EscapeSqlLiteral(detail.CustId.Trim());
-            string sql = "SELECT TOP 1 c.CustID, c.FullName, c.BranchName, c.MarketingID, "
-                + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
-                + "LTRIM(RTRIM(ISNULL(c.BranchAddress, ''))) AS BranchAddress, "
-                + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
-                + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
-                + "FROM mst_customer c WITH (NOLOCK) "
-                + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
-                + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) "
-                + "WHERE c.CustID = '" + custId + "'";
-
-            DataTable table = ExecuteBotQuery(connString, sql);
-            if (table == null || table.Rows.Count == 0)
+            ItsSupportAssignData.CustomerContact contact = ItsSupportAssignData.LoadCustomerContact(
+                detail.CustId,
+                detail.JobId,
+                connString);
+            if (contact == null)
             {
                 return;
             }
 
-            DataRow row = table.Rows[0];
-            string fullName = GetRowString(row, "FullName");
-            string custCode = GetRowString(row, "CustID");
-            if (!string.IsNullOrWhiteSpace(fullName))
+            detail.CustId = FirstNonEmpty(detail.CustId, contact.CustId);
+            if (!string.IsNullOrWhiteSpace(contact.FullName))
             {
-                detail.CustomerName = fullName;
-                detail.CompanyLine = fullName + "(" + custCode + ")";
+                detail.CustomerName = contact.FullName;
+                detail.CompanyLine = contact.FullName + "(" + FirstNonEmpty(contact.CustId, detail.CustId) + ")";
             }
 
-            detail.BranchName = FirstNonEmpty(GetRowString(row, "BranchName"), detail.BranchName);
-            detail.MarketingName = FirstNonEmpty(GetRowString(row, "MarketingName"), detail.MarketingName);
-            detail.Address = FirstNonEmpty(GetRowString(row, "Address"), detail.Address);
-            detail.PicName = FirstNonEmpty(GetRowString(row, "PICName1"), detail.PicName);
+            detail.BranchName = FirstNonEmpty(contact.BranchName, detail.BranchName);
+            detail.MarketingName = FirstNonEmpty(contact.MarketingName, detail.MarketingName);
+            detail.Address = FirstNonEmpty(contact.Address, detail.Address);
+            detail.PicName = FirstNonEmpty(contact.PicName, detail.PicName);
         }
 
         private static AssignDetail BuildFallbackAssignDetail(
@@ -945,7 +935,9 @@ namespace vtsadm
             string[] queries = new string[]
             {
                 "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName, "
-                    + "TrainingCategoryName, TrainCategoryName, CategoryName "
+                    + "TrainCategoryID, TrainingCategoryName, TrainCategoryName, CategoryName "
+                    + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'",
+                "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName, TrainCategoryID "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'",
                 "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'"
@@ -962,11 +954,12 @@ namespace vtsadm
                 DataRow row = table.Rows[0];
                 detail.CustId = FirstNonEmpty(GetRowString(row, "CustID"), detail.CustId);
                 detail.TrainingScheduleDate = ParseDate(GetRowString(row, "ScheduleDate"));
-                string remarkTraining = FirstNonEmpty(GetRowString(row, "RemarkTraining"), GetRowString(row, "Remark"));
-                if (!string.IsNullOrWhiteSpace(remarkTraining))
-                {
-                    detail.RemarkTraining = remarkTraining;
-                }
+                detail.RemarkOrder = FirstNonEmpty(GetRowString(row, "Remark"), detail.RemarkOrder);
+                detail.RemarkTraining = FirstNonEmpty(GetRowString(row, "RemarkTraining"), detail.RemarkTraining);
+                detail.TrainCategoryId = FirstNonEmpty(
+                    GetRowString(row, "TrainCategoryID"),
+                    GetRowString(row, "TrainingCategoryID"),
+                    detail.TrainCategoryId);
 
                 string category = FirstNonEmpty(
                     GetRowString(row, "TrainingCategoryName"),
@@ -1083,7 +1076,7 @@ namespace vtsadm
             StringBuilder sb = new StringBuilder();
             string customerName = ResolveBotCustomerDisplayName(detail);
             string itSupportName = FirstNonEmpty(detail.TechnicianName, "-");
-            string remark = FirstNonEmpty(detail.RemarkTraining, detail.Remark, "-");
+            string remark = ResolveJobOrderCatatan(detail);
 
             sb.AppendLine("🛠 <b>NOTIFIKASI PENUGASAN PEKERJAAN</b>");
             sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
@@ -1167,7 +1160,7 @@ namespace vtsadm
         private static string ResolveCategoryLabel(AssignDetail detail)
         {
             string category = FirstNonEmpty(detail.CategoryLabel, detail.JobType, "Training/Visit");
-            if (category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (IsVisitAssign(detail) || category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return "Visit";
             }
@@ -1178,6 +1171,38 @@ namespace vtsadm
             }
 
             return category;
+        }
+
+        private static bool IsVisitAssign(AssignDetail detail)
+        {
+            if (detail == null)
+            {
+                return false;
+            }
+
+            string categoryId = FirstNonEmpty(detail.TrainCategoryId);
+            if (categoryId.Equals("TRC0000002", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string category = FirstNonEmpty(detail.CategoryLabel, detail.JobType);
+            return category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string ResolveJobOrderCatatan(AssignDetail detail)
+        {
+            if (detail == null)
+            {
+                return "-";
+            }
+
+            if (IsVisitAssign(detail))
+            {
+                return FirstNonEmpty(detail.RemarkOrder, detail.Remark, "-");
+            }
+
+            return FirstNonEmpty(detail.RemarkTraining, detail.RemarkOrder, detail.Remark, "-");
         }
 
         private static string ResolveActionNoteForMessage(AssignDetail detail)
@@ -2156,6 +2181,7 @@ namespace vtsadm
             public string PreviousTechnicianName { get; set; }
             public string MarketingName { get; set; }
             public string Remark { get; set; }
+            public string RemarkOrder { get; set; }
             public string RemarkTraining { get; set; }
             public string ActionNote { get; set; }
             public string PoId { get; set; }
@@ -2164,6 +2190,7 @@ namespace vtsadm
             public string GsmNo { get; set; }
             public string JobType { get; set; }
             public string CategoryLabel { get; set; }
+            public string TrainCategoryId { get; set; }
             public string CompanyLine { get; set; }
             public string BranchName { get; set; }
             public string AreaName { get; set; }
