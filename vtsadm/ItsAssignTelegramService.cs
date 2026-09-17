@@ -955,7 +955,6 @@ namespace vtsadm
                 detail.CustId = FirstNonEmpty(GetRowString(row, "CustID"), detail.CustId);
                 detail.TrainingScheduleDate = ParseDate(GetRowString(row, "ScheduleDate"));
                 detail.RemarkOrder = FirstNonEmpty(GetRowString(row, "Remark"), detail.RemarkOrder);
-                detail.RemarkTraining = FirstNonEmpty(GetRowString(row, "RemarkTraining"), detail.RemarkTraining);
                 detail.TrainCategoryId = FirstNonEmpty(
                     GetRowString(row, "TrainCategoryID"),
                     GetRowString(row, "TrainingCategoryID"),
@@ -1197,12 +1196,7 @@ namespace vtsadm
                 return "-";
             }
 
-            if (IsVisitAssign(detail))
-            {
-                return FirstNonEmpty(detail.RemarkOrder, detail.Remark, "-");
-            }
-
-            return FirstNonEmpty(detail.RemarkTraining, detail.RemarkOrder, detail.Remark, "-");
+            return FirstNonEmpty(detail.RemarkOrder, "-");
         }
 
         private static string ResolveActionNoteForMessage(AssignDetail detail)

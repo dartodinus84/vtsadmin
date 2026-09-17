@@ -111,7 +111,8 @@ namespace vtsadm
           deviceGroupId,
           areaId,
           targetStatus,
-          insDeviceTypeId);
+          insDeviceTypeId,
+          assignRemark);
     }
 
     [WebMethod(EnableSession = true)]
@@ -776,17 +777,10 @@ namespace vtsadm
                 GetValue(row, "sReqDate"),
                 GetValue(row, "ReqDate"));
             int slaDays = CalculateJobOrderSlaDays(assignDate);
-            // IT Support Training/Visit: assign slot is per trx_job_assign_detail, not installation GPS units.
-            // Training JO close status (CL) must not block IT Support scheduling.
-            // Visit Catatan uses trx_training_order.Remark; Training uses RemarkTraining then Remark.
-            string remark = isVisit
-                ? FirstNonEmptyStatic(
-                    GetValue(row, "Remark"),
-                    GetValue(row, "Remarks"))
-                : FirstNonEmptyStatic(
-                    GetValue(row, "RemarkTraining"),
-                    GetValue(row, "Remark"),
-                    GetValue(row, "Remarks"));
+            // JO header remark from trx_training_order.Remark for both Training and Visit.
+            string remark = FirstNonEmptyStatic(
+                GetValue(row, "Remark"),
+                GetValue(row, "Remarks"));
             int totalUnit = 1;
             int remaining = Math.Max(0, totalUnit - Math.Max(assignedTotal, 0));
 

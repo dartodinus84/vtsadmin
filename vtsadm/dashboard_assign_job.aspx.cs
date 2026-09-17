@@ -894,7 +894,8 @@ namespace vtsadm
                     GetPayloadString(args, "deviceGroupId"),
                     GetPayloadString(args, "areaId"),
                     GetPayloadString(args, "targetStatus"),
-                    GetPayloadString(args, "insDeviceTypeId"));
+                    GetPayloadString(args, "insDeviceTypeId"),
+                    GetPayloadString(args, "assignRemark"));
             }
 
             if (method.Equals("DeleteScheduleAssign", StringComparison.OrdinalIgnoreCase))
@@ -8520,7 +8521,7 @@ ORDER BY
 
         [WebMethod(EnableSession = true)]
         [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public static SaveAssignResponse SaveAssignJob(string assignId, string jobId, string custId, string technicianId, string schDate, int qtyAssign, string deviceGroupId, string areaId, string targetStatus, string insDeviceTypeId)
+        public static SaveAssignResponse SaveAssignJob(string assignId, string jobId, string custId, string technicianId, string schDate, int qtyAssign, string deviceGroupId, string areaId, string targetStatus, string insDeviceTypeId, string assignRemark = "")
         {
             SaveAssignResponse response = new SaveAssignResponse
             {
@@ -8676,6 +8677,14 @@ ORDER BY
                 if (requiresJobAssignment && IsJobTrainingAssignRequestContext())
                 {
                     TryLoadActiveItsAssignSnapshot(jobId, out previousTechnicianId, out previousSchDate);
+                    string resolvedPreviousItId;
+                    string previousItIdMessage;
+                    if (!string.IsNullOrWhiteSpace(previousTechnicianId)
+                        && TryResolveItsAssignTechnicianId(previousTechnicianId, out resolvedPreviousItId, out previousItIdMessage)
+                        && !string.IsNullOrWhiteSpace(resolvedPreviousItId))
+                    {
+                        previousTechnicianId = resolvedPreviousItId;
+                    }
                 }
 
                 SaveAssignResponse saveOnce = ExecuteSaveAssignOnce(
@@ -8717,12 +8726,28 @@ ORDER BY
                 {
                     try
                     {
-                        ItsAssignTelegramService.NotifyAfterAssign(
-                            connString,
-                            jobId,
-                            custId,
-                            technicianId,
-                            schDateValue);
+                        bool isTransfer = !string.IsNullOrWhiteSpace(previousTechnicianId)
+                            && !string.Equals(previousTechnicianId, technicianId, StringComparison.OrdinalIgnoreCase);
+                        if (isTransfer)
+                        {
+                            ItsAssignTelegramService.NotifyAfterTransfer(
+                                connString,
+                                jobId,
+                                custId,
+                                previousTechnicianId,
+                                technicianId,
+                                schDateValue,
+                                assignRemark);
+                        }
+                        else
+                        {
+                            ItsAssignTelegramService.NotifyAfterAssign(
+                                connString,
+                                jobId,
+                                custId,
+                                technicianId,
+                                schDateValue);
+                        }
                     }
                     catch
                     {
@@ -11745,17 +11770,7 @@ ORDER BY
                     GetValue(orderRow, "TrainingCategoryID"));
                 bool isVisit = IsVisitCategory(categoryName, categoryId);
                 row.JobType = isVisit ? "Visit" : "Training";
-                if (isVisit)
-                {
-                    row.Remark = FirstNonEmptyStatic(GetValue(orderRow, "Remark"), row.Remark);
-                }
-                else
-                {
-                    row.Remark = FirstNonEmptyStatic(
-                        GetValue(orderRow, "RemarkTraining"),
-                        GetValue(orderRow, "Remark"),
-                        row.Remark);
-                }
+                row.Remark = FirstNonEmptyStatic(GetValue(orderRow, "Remark"), row.Remark);
                 break;
             }
         }
