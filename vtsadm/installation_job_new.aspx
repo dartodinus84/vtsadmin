@@ -1264,8 +1264,7 @@
                 var totals = getJobQtyRequestTotals();
                 if (totals.gps <= 0) return 0;
                 if (totals.acc <= 0) return 0;
-                var ratio = totals.acc / totals.gps;
-                return Math.round(totals.gps * ratio);
+                return Math.round(totals.acc / totals.gps);
             }
             function getSelectedAccessoriesCount() {
                 return $('.ijm-acc-chk:checked').length;

@@ -175,7 +175,7 @@ namespace vtsadm
             if (gpsQty <= 0) return "";
             if (accQty <= 0) return "";
 
-            int required = (int)Math.Round(gpsQty * ((double)accQty / gpsQty));
+            int required = (int)Math.Round((double)accQty / gpsQty);
             if (selectedCount >= required) return "";
 
             int remaining = required - selectedCount;
