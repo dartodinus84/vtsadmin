@@ -92,7 +92,18 @@
         #pnlChannelSetting { margin-bottom: 16px; }
         #pnlChannelSetting .table { background: #fff; }
         .ijm-channel-wrap { margin-bottom: 8px; }
-        .ijm-tech-pick-row { margin-top: 2px; }
+        .ijm-tech-pick-row { margin-top: 0; margin-left: -8px; margin-right: -8px; display: flex; flex-wrap: wrap; align-items: flex-end; }
+        .ijm-tech-pick-row > [class*="col-"] { padding-left: 8px; padding-right: 8px; }
+        .ijm-tech-pick-row .form-group-sm { margin-bottom: 0; }
+        .ijm-tech-pick-row .form-group-sm > label { min-height: 16px; }
+        .ijm-tech-pick-row .ijm-search-group { width: 100%; }
+        .ijm-tech-pick-row .ijm-ro {
+            display: flex;
+            align-items: center;
+            min-height: 30px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+        }
 
         @media (min-width: 992px) {
             .ijm-detail-cards .ijm-info-group { min-height: 160px; margin-bottom: 0; }
@@ -344,24 +355,26 @@
                         <div class="row ijm-install-row">
                             <div class="col-md-12 col-xs-12">
                                 <div class="ijm-maint-input">
-                                    <label><i class="fa fa-user-md"></i> Technician ID <span class="ijm-req">*</span></label>
                                     <div class="row ijm-tech-pick-row">
-                                        <div class="col-md-6 col-xs-12">
-                                            <div class="input-group input-group-sm ijm-search-group">
-                                                <input type="text" id="txtTechnicianID" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
-                                                <span class="input-group-btn">
-                                                    <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="tech" title="Cari Technician"><i class="fa fa-search"></i></button>
-                                                </span>
+                                        <div class="col-md-6 col-sm-12 col-xs-12">
+                                            <div class="form-group form-group-sm">
+                                                <label><i class="fa fa-user-md"></i> Technician ID <span class="ijm-req">*</span></label>
+                                                <div class="input-group input-group-sm ijm-search-group">
+                                                    <input type="text" id="txtTechnicianID" class="form-control ijm-pick-input" placeholder="Klik cari..." readonly="readonly" />
+                                                    <span class="input-group-btn">
+                                                        <button type="button" class="btn btn-primary btn-sm btn-ijn-open" data-picker="tech" title="Cari Technician"><i class="fa fa-search"></i></button>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="col-md-3 col-sm-6 col-xs-12">
-                                            <div class="ijm-info-row">
+                                            <div class="form-group form-group-sm">
                                                 <label>Name</label>
                                                 <div class="ijm-ro form-control input-sm" data-field="TechnicianName">-</div>
                                             </div>
                                         </div>
                                         <div class="col-md-3 col-sm-6 col-xs-12">
-                                            <div class="ijm-info-row">
+                                            <div class="form-group form-group-sm">
                                                 <label>Branch Name</label>
                                                 <div class="ijm-ro form-control input-sm" data-field="TechBranchName">-</div>
                                             </div>

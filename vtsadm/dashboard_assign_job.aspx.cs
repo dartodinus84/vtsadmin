@@ -397,6 +397,7 @@ namespace vtsadm
         private static readonly string[] KnownWestSupAreaIds = { "SUP0000001" };
         private static readonly string[] KnownEastSupAreaIds = { "SUP0000010", "SUP0000011", "SUP0000013" };
         private const string DefaultTab = "teknisi";
+        protected const string ItsViewOnlyMutationMessage = "Hanya admin yang dapat assign, edit, atau hapus Job Order.";
 
         protected virtual string FixedActiveTab
         {
@@ -517,7 +518,7 @@ namespace vtsadm
 
                 EnsureUserProfileLoaded();
                 EnforceFixedActiveTab();
-                hfIsTechnician.Value = IsCurrentUserTechnician() ? "1" : "0";
+                hfIsTechnician.Value = IsAssignRestrictedUser() ? "1" : "0";
                 if (HandleDetailExportRequest() || HandleClosedJobExportRequest())
                 {
                     return;
@@ -1280,7 +1281,7 @@ namespace vtsadm
 
             txtPeriode.Text = FormatPeriodeDisplay(periode);
             hfActiveTab.Value = activeTab;
-            hfIsTechnician.Value = IsCurrentUserTechnician() ? "1" : "0";
+            hfIsTechnician.Value = IsAssignRestrictedUser() ? "1" : "0";
             Session[SessionPeriode] = periode;
             Session[SessionActiveTab] = activeTab;
             if (Session[RegionalGroupTabSessionKey] == null)
@@ -1357,6 +1358,99 @@ namespace vtsadm
         private bool IsCurrentUserTechnician()
         {
             return ParseBooleanFlag(Convert.ToString(Session[SessionUserIsTechnician]));
+        }
+
+        private bool IsAssignRestrictedUser()
+        {
+            if (UseJobTrainingDataSource)
+            {
+                return !IsAssignAdminSession();
+            }
+
+            return IsCurrentUserTechnician();
+        }
+
+        private static string GetSessionLoginUserId()
+        {
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return string.Empty;
+            }
+
+            return Convert.ToString(context.Session["ClsTypeUserID"]).Trim();
+        }
+
+        protected static bool IsAssignAdminSession()
+        {
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return false;
+            }
+
+            string groupId = Convert.ToString(context.Session["ClsTypeUserGroupID"]).Trim().ToUpperInvariant();
+            return groupId == "ADMINISTRATORS" || groupId == "ADMINISTRATOR";
+        }
+
+        protected static bool IsItsViewOnlySession()
+        {
+            return IsJobTrainingAssignRequestContext() && !IsAssignAdminSession();
+        }
+
+        private static HashSet<string> GetItsSelfIdentityKeys()
+        {
+            HashSet<string> keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string userId = GetSessionLoginUserId();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return keys;
+            }
+
+            keys.Add(userId);
+            keys.Add(TrimToLength(userId, 20));
+
+            string itId = NormalizeItId(LookupItIdByUserId(userId));
+            if (!string.IsNullOrWhiteSpace(itId))
+            {
+                keys.Add(itId);
+            }
+
+            return keys;
+        }
+
+        private static bool ItsIdentityMatchesSelf(string userId, string itId, HashSet<string> selfKeys)
+        {
+            if (selfKeys == null || selfKeys.Count == 0)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                string trimmed = userId.Trim();
+                if (selfKeys.Contains(trimmed) || selfKeys.Contains(TrimToLength(trimmed, 20)))
+                {
+                    return true;
+                }
+            }
+
+            string normalizedItId = NormalizeItId(itId);
+            return !string.IsNullOrWhiteSpace(normalizedItId) && selfKeys.Contains(normalizedItId);
+        }
+
+        protected static bool ItsTechnicianIdMatchesCurrentUser(string technicianId)
+        {
+            HashSet<string> selfKeys = GetItsSelfIdentityKeys();
+            if (ItsIdentityMatchesSelf(technicianId, technicianId, selfKeys))
+            {
+                return true;
+            }
+
+            string resolved;
+            string message;
+            return TryResolveItsAssignTechnicianId(technicianId, out resolved, out message)
+                && ItsIdentityMatchesSelf(resolved, resolved, selfKeys);
         }
 
         private string GetCurrentUserAreaGroupId()
@@ -3236,6 +3330,8 @@ namespace vtsadm
             }
 
             Dictionary<string, string> supAreaToGroup = LoadSupAreaAreaGroupMap();
+            bool selfOnly = IsItsViewOnlySession();
+            HashSet<string> selfKeys = selfOnly ? GetItsSelfIdentityKeys() : null;
 
             foreach (DataRow row in users.Rows)
             {
@@ -3258,6 +3354,11 @@ namespace vtsadm
                 if (!IsValidItId(itId))
                 {
                     itId = NormalizeItId(LookupItIdByUserId(userId));
+                }
+
+                if (selfOnly && !ItsIdentityMatchesSelf(userId, itId, selfKeys))
+                {
+                    continue;
                 }
 
                 string trainerKey = IsValidItId(itId) ? itId : TrimToLength(userId, 20);
@@ -6495,7 +6596,7 @@ ORDER BY
                     bool canAssign = isAssignableStatus
                         && isFutureOrToday
                         && !availabilityBlocksAssign
-                        && !IsCurrentUserTechnician();
+                        && !IsAssignRestrictedUser();
                     string itIdForCell = string.Empty;
                     if (dayRow != null && dayRow.Table != null && dayRow.Table.Columns.Contains("ITID"))
                     {
@@ -8670,6 +8771,12 @@ ORDER BY
                 return response;
             }
 
+            if (IsItsViewOnlySession())
+            {
+                response.Message = ItsViewOnlyMutationMessage;
+                return response;
+            }
+
             try
             {
                 string previousTechnicianId = string.Empty;
@@ -8832,6 +8939,12 @@ ORDER BY
             if (string.IsNullOrWhiteSpace(usrUpd))
             {
                 response.Message = "User login tidak ditemukan.";
+                return response;
+            }
+
+            if (IsItsViewOnlySession())
+            {
+                response.Message = ItsViewOnlyMutationMessage;
                 return response;
             }
 
@@ -9254,6 +9367,12 @@ ORDER BY
             if (string.IsNullOrWhiteSpace(connString))
             {
                 response.Message = "Koneksi database tidak tersedia.";
+                return response;
+            }
+
+            if (IsItsViewOnlySession())
+            {
+                response.Message = ItsViewOnlyMutationMessage;
                 return response;
             }
 
@@ -11246,6 +11365,12 @@ ORDER BY
                 return response;
             }
 
+            if (IsItsViewOnlySession())
+            {
+                response.Message = ItsViewOnlyMutationMessage;
+                return response;
+            }
+
             if (string.IsNullOrWhiteSpace(custId))
             {
                 response.Message = "Customer wajib dipilih.";
@@ -11274,12 +11399,6 @@ ORDER BY
             if (scheduleDateValue.Date < DateTime.Today)
             {
                 response.Message = "Training/Visit hanya bisa ditambahkan untuk tanggal hari ini atau setelahnya.";
-                return response;
-            }
-
-            if (string.IsNullOrWhiteSpace(itUserId) && string.IsNullOrWhiteSpace(itUserName))
-            {
-                response.Message = "IT Support wajib dipilih.";
                 return response;
             }
 
@@ -11362,6 +11481,20 @@ ORDER BY
         protected static ScheduleReportResponse BuildItsScheduleDayReport(string technicianId, string schDate, string technicianName)
         {
             string displayName = FirstNonEmptyStatic(technicianName, technicianId, "-");
+            if (IsItsViewOnlySession() && !ItsTechnicianIdMatchesCurrentUser(technicianId))
+            {
+                return new ScheduleReportResponse
+                {
+                    Result = "SUCCESS",
+                    Message = "Jadwal hanya tersedia untuk user login.",
+                    TechnicianID = TrimToLength((technicianId ?? string.Empty).Trim(), 20),
+                    TechnicianName = displayName,
+                    SchDate = (schDate ?? string.Empty).Trim(),
+                    TotalUnitSelesai = 0,
+                    TotalUnitBelumSelesai = 0,
+                    Rows = new List<ScheduleReportRowItem>()
+                };
+            }
             string resolvedItId;
             string itIdMessage;
             if (!TryResolveItsAssignTechnicianId(technicianId, out resolvedItId, out itIdMessage))
@@ -11423,6 +11556,17 @@ ORDER BY
                 response.Rows = new List<ScheduleReportRowItem>();
             }
 
+            if (IsItsViewOnlySession())
+            {
+                foreach (ScheduleReportRowItem row in response.Rows)
+                {
+                    if (row != null)
+                    {
+                        row.CanDelete = false;
+                    }
+                }
+            }
+
             response.TotalUnitSelesai = response.Rows.Count(r =>
                 string.Equals((r.StatusCode ?? string.Empty).Trim(), "CL", StringComparison.OrdinalIgnoreCase)
                 || string.Equals((r.StatusText ?? string.Empty).Trim(), "Selesai", StringComparison.OrdinalIgnoreCase));
@@ -11460,15 +11604,20 @@ ORDER BY
             CountItsAssignsForDay(resolvedItId, technicianId, schDateValue, out totalAssign, out openAssign);
 
             HttpContext context = HttpContext.Current;
-            bool isTechnicianUser = context != null
+            bool canAssign = schDateValue.Date >= DateTime.Today && !IsItsViewOnlySession();
+            if (canAssign
+                && context != null
                 && context.Session != null
-                && Convert.ToString(context.Session[SessionUserIsTechnician]).Trim() == "1";
+                && Convert.ToString(context.Session[SessionUserIsTechnician]).Trim() == "1")
+            {
+                canAssign = false;
+            }
 
             response.Result = "SUCCESS";
             response.DisplayValue = totalAssign > 0 ? totalAssign.ToString(CultureInfo.InvariantCulture) : "AV";
             response.HasRemainingJo = true;
             response.RemainingJo = openAssign;
-            response.CanAssign = schDateValue.Date >= DateTime.Today && !isTechnicianUser;
+            response.CanAssign = canAssign;
             response.Message = "OK";
             return response;
         }
@@ -11671,7 +11820,9 @@ ORDER BY
                     StatusCode = statusCode,
                     StatusText = isCompleted ? "Selesai" : "Belum Selesai",
                     Remark = FirstNonEmptyStatic(GetValue(row, "Remark"), GetValue(row, "Remarks")),
-                    CanDelete = !isCompleted && !string.IsNullOrWhiteSpace(GetValue(row, "AssignID"))
+                    CanDelete = !isCompleted
+                        && !string.IsNullOrWhiteSpace(GetValue(row, "AssignID"))
+                        && !IsItsViewOnlySession()
                 });
             }
 

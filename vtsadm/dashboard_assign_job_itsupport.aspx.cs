@@ -259,6 +259,13 @@ namespace vtsadm
         Message = "OK"
       };
 
+      if (IsItsViewOnlySession())
+      {
+        response.Result = "ERROR";
+        response.Message = ItsViewOnlyMutationMessage;
+        return response;
+      }
+
       string assignedTechnicianId;
       string assignedSchDate;
       if (!TryLoadActiveItsAssignSnapshot(jobId, out assignedTechnicianId, out assignedSchDate)
@@ -661,6 +668,12 @@ namespace vtsadm
         TotalPages = 1,
         ErrorMessage = string.Empty
       };
+
+      if (IsItsViewOnlySession())
+      {
+        response.ErrorMessage = "Hanya admin yang dapat memilih Job Order.";
+        return response;
+      }
 
       try
       {

@@ -96,6 +96,57 @@
             font-weight: 600;
         }
 
+        .assign-create-jo-btn {
+            min-width: 0;
+            white-space: nowrap;
+            background: #0a5c48;
+            border-color: #0a5c48;
+            color: #fff;
+        }
+
+        .assign-create-jo-btn:hover,
+        .assign-create-jo-btn:focus {
+            background: #084c3b;
+            border-color: #084c3b;
+            color: #fff;
+        }
+
+        .assign-create-jo-modal {
+            max-width: 860px;
+        }
+
+        #assignCreateJoBackdrop {
+            z-index: 1200;
+        }
+
+        .assign-create-jo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .assign-create-jo-col {
+            min-width: 0;
+        }
+
+        .assign-create-jo-col .assign-field {
+            margin-bottom: 10px;
+        }
+
+        body.assign-create-jo-open .modal-backdrop {
+            z-index: 1350;
+        }
+
+        body.assign-create-jo-open #modal-training-customer {
+            z-index: 1400;
+        }
+
+        @media (max-width: 768px) {
+            .assign-create-jo-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .assign-tabs {
             display: inline-flex;
             background: #f8f7f5;
@@ -3750,6 +3801,7 @@
             </div>
 
             <div class="assign-topbar-right">
+                <button type="button" class="btn btn-primary assign-btn assign-create-jo-btn" id="assignCreateJoBtn">Buat JO Training/Visit</button>
                 <asp:TextBox ID="txtPeriode" runat="server" CssClass="form-control assign-period js-periode-picker" placeholder="yyyy-MM" autocomplete="off"></asp:TextBox>
                 <asp:Button ID="btnApply" runat="server" CssClass="btn btn-primary assign-btn" Text="Apply" OnClick="btnApply_Click" OnClientClick="showOverlay();" />
                 <asp:Button ID="btnReset" runat="server" CssClass="btn btn-default assign-btn" Text="Reset" OnClick="btnReset_Click" />
@@ -4160,6 +4212,89 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default pull-left" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="assign-job-backdrop" id="assignCreateJoBackdrop">
+        <div class="assign-job-modal assign-create-jo-modal" role="dialog" aria-modal="true" aria-labelledby="assignCreateJoTitle">
+            <div class="assign-job-modal-header">
+                <div class="assign-job-title-wrap">
+                    <h4 id="assignCreateJoTitle">Buat Job Training / Visit</h4>
+                    <p>Input dan submit JO baru, sama seperti menu Job Training</p>
+                </div>
+                <button type="button" class="assign-job-close" id="assignCreateJoCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="assign-job-body">
+                <div class="assign-create-jo-grid">
+                    <div class="assign-create-jo-col">
+                        <p class="assign-section-label">Customer Information</p>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingCustId">Customer ID</label>
+                            <input type="hidden" id="assignTrainingCustId" value="" />
+                            <button type="button" class="assign-pick-btn" id="assignCreateJoPickCustomerBtn">Pilih Customer</button>
+                            <div class="assign-picked-jo" id="assignPickedCustomerText">Belum ada Customer dipilih</div>
+                        </div>
+                        <div class="assign-info-item">
+                            <span class="assign-info-label">Full Name</span>
+                            <span class="assign-info-value" id="assignTrainingCustName">-</span>
+                        </div>
+                        <div class="assign-info-item" style="margin-top:8px;">
+                            <span class="assign-info-label">Customer Type</span>
+                            <span class="assign-info-value" id="assignTrainingCustType">-</span>
+                        </div>
+                        <div class="assign-info-item" style="margin-top:8px;">
+                            <span class="assign-info-label">Branch Name</span>
+                            <span class="assign-info-value" id="assignTrainingCustBranch">-</span>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingPicName">PIC Name</label>
+                            <input type="text" id="assignTrainingPicName" readonly="readonly" placeholder="PIC Name" />
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingPicPhone">PIC Phone</label>
+                            <input type="text" id="assignTrainingPicPhone" readonly="readonly" placeholder="PIC Phone" />
+                        </div>
+                    </div>
+                    <div class="assign-create-jo-col">
+                        <p class="assign-section-label">Training Information</p>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingReqDate">Request Date</label>
+                            <input type="date" id="assignTrainingReqDate" />
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingBillable">Billable</label>
+                            <select id="assignTrainingBillable">
+                                <option value="">[Select]</option>
+                            </select>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingCategory">Category</label>
+                            <select id="assignTrainingCategory">
+                                <option value="">[Select]</option>
+                            </select>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingSchDateInput">Schedule Date</label>
+                            <input type="hidden" id="assignTrainingSchDate" value="" />
+                            <input type="date" id="assignTrainingSchDateInput" />
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingRemark">Remark</label>
+                            <textarea id="assignTrainingRemark" class="assign-dashboard-note-textarea" rows="3" placeholder="Remark ..."></textarea>
+                        </div>
+                        <input type="hidden" id="assignTrainingItUserId" value="" />
+                        <input type="hidden" id="assignTrainingItUserName" value="" />
+                    </div>
+                </div>
+                <div class="assign-feedback" id="assignCreateJoFeedback"></div>
+            </div>
+            <div class="assign-job-footer">
+                <div class="assign-footer-left-actions"></div>
+                <div class="assign-actions">
+                    <button type="button" class="assign-action-btn cancel" id="assignCreateJoCancelBtn">Cancel</button>
+                    <button type="button" class="assign-action-btn submit" id="assignCreateJoSubmitBtn">Submit</button>
                 </div>
             </div>
         </div>
@@ -7698,6 +7833,75 @@
                 });
             }
 
+            function setCreateJoFeedback(message, isError, isSuccess) {
+                var box = document.getElementById("assignCreateJoFeedback");
+                if (!box) {
+                    return;
+                }
+                box.classList.remove("error");
+                box.classList.remove("success");
+                box.classList.remove("is-visible");
+                box.textContent = message || "";
+                if (isError) {
+                    box.classList.add("error");
+                }
+                if (isSuccess) {
+                    box.classList.add("success");
+                }
+                if (message) {
+                    box.classList.add("is-visible");
+                }
+            }
+
+            function getCreateJoBackdrop() {
+                return document.getElementById("assignCreateJoBackdrop");
+            }
+
+            function isCreateJoModalOpen() {
+                var backdrop = getCreateJoBackdrop();
+                return !!(backdrop && backdrop.classList.contains("open"));
+            }
+
+            function closeCreateJoModal() {
+                var backdrop = getCreateJoBackdrop();
+                if (backdrop) {
+                    backdrop.classList.remove("open");
+                }
+                document.body.classList.remove("assign-create-jo-open");
+                if (window.jQuery) {
+                    $("#modal-training-customer").modal("hide");
+                }
+                setCreateJoFeedback("", false, false);
+            }
+
+            function openCreateJoModal() {
+                if (getIsTechnicianUser()) {
+                    showAssignToast("User IT Support tidak dapat membuat Job Training/Visit.", true);
+                    return;
+                }
+
+                resetTrainingAssignForm("", "", formatIsoDateInput(new Date()));
+                setCreateJoFeedback("", false, false);
+                var backdrop = getCreateJoBackdrop();
+                if (backdrop) {
+                    backdrop.classList.add("open");
+                }
+                document.body.classList.add("assign-create-jo-open");
+                ensureTrainingLookupsLoaded(function () {
+                    if (!trainingLookupState.loaded) {
+                        setCreateJoFeedback("Gagal memuat category / billable.", true, false);
+                    }
+                });
+            }
+
+            function syncCreateJoButtonVisibility() {
+                var btn = document.getElementById("assignCreateJoBtn");
+                if (!btn) {
+                    return;
+                }
+                btn.style.display = getIsTechnicianUser() ? "none" : "";
+            }
+
             function resetTrainingAssignForm(techId, techName, schDate) {
                 var custId = document.getElementById("assignTrainingCustId");
                 var itUserId = document.getElementById("assignTrainingItUserId");
@@ -7746,8 +7950,17 @@
                 loaded: false,
                 loading: false
             };
+            var createJoSaving = false;
 
             function ensureTrainingLookupsLoaded(done) {
+                function lookupFeedback(message, isError, isSuccess) {
+                    if (isCreateJoModalOpen()) {
+                        setCreateJoFeedback(message, isError, isSuccess);
+                    } else {
+                        setFeedback(message, isError, isSuccess);
+                    }
+                }
+
                 if (trainingLookupState.loaded) {
                     if (typeof done === "function") done();
                     return;
@@ -7757,22 +7970,23 @@
                     return;
                 }
                 trainingLookupState.loading = true;
-                setFeedback("Memuat category / billable...", false, false);
+                lookupFeedback("Memuat category / billable...", false, false);
                 callAssignPageMethod("LoadTrainingLookups", {}, function (result) {
                     trainingLookupState.loading = false;
                     var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
                     if (!isSuccess) {
-                        setFeedback((result && result.Message) || "Gagal memuat lookup Training/Visit.", true, false);
+                        lookupFeedback((result && result.Message) || "Gagal memuat lookup Training/Visit.", true, false);
                         if (typeof done === "function") done();
                         return;
                     }
                     fillTrainingSelect("assignTrainingCategory", result.Categories || []);
                     fillTrainingSelect("assignTrainingBillable", result.Billables || []);
                     trainingLookupState.loaded = true;
+                    lookupFeedback("", false, false);
                     if (typeof done === "function") done();
                 }, function (errorMessage) {
                     trainingLookupState.loading = false;
-                    setFeedback("Gagal memuat lookup. " + (errorMessage || ""), true, false);
+                    lookupFeedback("Gagal memuat lookup. " + (errorMessage || ""), true, false);
                     if (typeof done === "function") done();
                 });
             }
@@ -7796,12 +8010,7 @@
             }
 
             function submitTrainingAssignFromModal() {
-                if (assignModalState.isSaving) {
-                    return true;
-                }
-
-                if (!isAssignableCell(assignModalState.activeCell)) {
-                    setFeedback("Hanya status Available (AV) yang dapat menambah/mengubah Training/Visit.", true, false);
+                if (createJoSaving) {
                     return true;
                 }
 
@@ -7815,26 +8024,30 @@
                 var remark = (document.getElementById("assignTrainingRemark") || {}).value || "";
                 var itUserId = (document.getElementById("assignTrainingItUserId") || {}).value || "";
                 var itUserName = (document.getElementById("assignTrainingItUserName") || {}).value || "";
+                var submitBtn = document.getElementById("assignCreateJoSubmitBtn");
 
                 if (!custId) {
-                    setFeedback("Customer wajib dipilih.", true, false);
+                    setCreateJoFeedback("Customer wajib dipilih.", true, false);
                     return true;
                 }
-                if (!categoryId) {
-                    setFeedback("Category Training/Visit wajib dipilih.", true, false);
+                if (!categoryId || categoryId === "[Select]") {
+                    setCreateJoFeedback("Category Training/Visit wajib dipilih.", true, false);
                     return true;
                 }
-                if (!billableId) {
-                    setFeedback("Billable wajib dipilih.", true, false);
+                if (!billableId || billableId === "[Select]") {
+                    setCreateJoFeedback("Billable wajib dipilih.", true, false);
                     return true;
                 }
                 if (!schDate) {
-                    setFeedback("Schedule Date wajib diisi.", true, false);
+                    setCreateJoFeedback("Schedule Date wajib diisi.", true, false);
                     return true;
                 }
 
-                setAssignSubmitLoading(true);
-                setFeedback("Menyimpan job training/visit...", false, false);
+                createJoSaving = true;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                }
+                setCreateJoFeedback("Menyimpan job training/visit...", false, false);
                 callAssignPageMethod(
                     "SaveJobTrainingAssign",
                     {
@@ -7848,25 +8061,29 @@
                         itUserName: itUserName
                     },
                     function (result) {
+                        createJoSaving = false;
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                        }
                         var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
                         if (!isSuccess) {
-                            setAssignSubmitLoading(false);
                             var failedMessage = (result && result.Message) || "Gagal submit job training.";
-                            setFeedback(failedMessage, true, false);
+                            setCreateJoFeedback(failedMessage, true, false);
                             showAssignToast(failedMessage, true);
                             return;
                         }
 
                         var successMessage = (result && result.Message) || "Job Training/Visit berhasil dibuat.";
-                        setFeedback(successMessage, false, true);
+                        setCreateJoFeedback(successMessage, false, true);
                         showAssignToast(successMessage, false);
-                        setAssignSubmitLoading(false);
-                        closeAssignModal();
-                        window.location.reload();
+                        closeCreateJoModal();
                     },
                     function (errorMessage) {
-                        setAssignSubmitLoading(false);
-                        setFeedback("Gagal submit job training. " + (errorMessage || ""), true, false);
+                        createJoSaving = false;
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                        }
+                        setCreateJoFeedback("Gagal submit job training. " + (errorMessage || ""), true, false);
                         showAssignToast("Gagal submit job training.", true);
                     });
                 return true;
@@ -7893,7 +8110,11 @@
                 if (window.jQuery) {
                     $("#modal-training-customer").modal("hide");
                 }
-                setFeedback("", false, false);
+                if (isCreateJoModalOpen()) {
+                    setCreateJoFeedback("", false, false);
+                } else {
+                    setFeedback("", false, false);
+                }
             };
 
             function decorateAssignCells() {
@@ -8158,6 +8379,8 @@
                             closeJoInfoModal();
                         } else if (closeButton.id === "assignStatusCloseBtn") {
                             closeStatusOnlyModal();
+                        } else if (closeButton.id === "assignCreateJoCloseBtn") {
+                            closeCreateJoModal();
                         } else {
                             closeAssignModal();
                         }
@@ -8264,6 +8487,10 @@
                             closeJoInfoModal();
                             return;
                         }
+                        if (isCreateJoModalOpen()) {
+                            closeCreateJoModal();
+                            return;
+                        }
                         closeAssignModal();
                     }
                 });
@@ -8324,6 +8551,50 @@
                 if (cancelBtn) {
                     cancelBtn.addEventListener("click", closeAssignModal);
                 }
+
+                var createJoBtn = document.getElementById("assignCreateJoBtn");
+                var createJoCloseBtn = document.getElementById("assignCreateJoCloseBtn");
+                var createJoCancelBtn = document.getElementById("assignCreateJoCancelBtn");
+                var createJoSubmitBtn = document.getElementById("assignCreateJoSubmitBtn");
+                var createJoPickCustomerBtn = document.getElementById("assignCreateJoPickCustomerBtn");
+                if (createJoBtn && !createJoBtn.getAttribute("data-bound")) {
+                    createJoBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        openCreateJoModal();
+                    });
+                    createJoBtn.setAttribute("data-bound", "1");
+                }
+                if (createJoCloseBtn && !createJoCloseBtn.getAttribute("data-bound")) {
+                    createJoCloseBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        closeCreateJoModal();
+                    });
+                    createJoCloseBtn.setAttribute("data-bound", "1");
+                }
+                if (createJoCancelBtn && !createJoCancelBtn.getAttribute("data-bound")) {
+                    createJoCancelBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        closeCreateJoModal();
+                    });
+                    createJoCancelBtn.setAttribute("data-bound", "1");
+                }
+                if (createJoSubmitBtn && !createJoSubmitBtn.getAttribute("data-bound")) {
+                    createJoSubmitBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        submitTrainingAssignFromModal();
+                    });
+                    createJoSubmitBtn.setAttribute("data-bound", "1");
+                }
+                if (createJoPickCustomerBtn && !createJoPickCustomerBtn.getAttribute("data-bound")) {
+                    createJoPickCustomerBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        if (window.jQuery) {
+                            $("#modal-training-customer").modal("show");
+                        }
+                    });
+                    createJoPickCustomerBtn.setAttribute("data-bound", "1");
+                }
+                syncCreateJoButtonVisibility();
                 if (statusOnlyCloseBtn) {
                     statusOnlyCloseBtn.addEventListener("click", closeStatusOnlyModal);
                 }
@@ -8937,12 +9208,14 @@
                 assignModalState.activeCell = null;
                 reportModalState.activeCell = null;
                 closeAssignModal();
+                closeCreateJoModal();
                 closeStatusOnlyModal();
                 closeCompletedReportModal();
                 closeJoInfoModal();
                 closeTechStockModal();
                 closeTechDeviceDetailModal();
                 syncDayTotalButtonLabels();
+                syncCreateJoButtonVisibility();
                 if (typeof $ !== "undefined") {
                     $("#overlay").stop(true, true).hide();
                 }
