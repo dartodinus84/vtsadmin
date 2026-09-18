@@ -171,6 +171,20 @@ namespace vtsadm
 
     [WebMethod(EnableSession = true)]
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static TrainingCloseSearchResponse LoadOpenTrainingJobs(string searchKeyword)
+    {
+      return BuildOpenTrainingJobsResponse(searchKeyword);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static TrainingFunctionListResponse LoadTrainingFunctions()
+    {
+      return BuildTrainingFunctionsResponse();
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
     public new static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq, string actionRemark = "")
     {
       return dashboard_assign_job.DeleteScheduleAssign(assignId, seq, actionRemark);

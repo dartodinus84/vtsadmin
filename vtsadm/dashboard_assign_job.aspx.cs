@@ -91,6 +91,41 @@ namespace vtsadm
             public List<TrainingLookupItem> Billables { get; set; }
         }
 
+        public class TrainingCloseJobItem
+        {
+            public string TrainingID { get; set; }
+            public string ReqDate { get; set; }
+            public string CustomerName { get; set; }
+            public string SchDate { get; set; }
+            public string CustID { get; set; }
+            public string BranchName { get; set; }
+            public string BusinessFieldID { get; set; }
+            public string CategoryID { get; set; }
+            public string CategoryDesc { get; set; }
+            public string AssignDate { get; set; }
+            public string AssignTrainer { get; set; }
+        }
+
+        public class TrainingCloseSearchResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public List<TrainingCloseJobItem> Rows { get; set; }
+        }
+
+        public class TrainingFunctionItem
+        {
+            public string FunctionID { get; set; }
+            public string FunctionName { get; set; }
+        }
+
+        public class TrainingFunctionListResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public List<TrainingFunctionItem> Rows { get; set; }
+        }
+
         public class AreaOptionItem
         {
             public string AreaID { get; set; }
@@ -397,6 +432,7 @@ namespace vtsadm
         private static readonly string[] KnownWestSupAreaIds = { "SUP0000001" };
         private static readonly string[] KnownEastSupAreaIds = { "SUP0000010", "SUP0000011", "SUP0000013" };
         private const string DefaultTab = "teknisi";
+        private const string ItsSupportPageContextKey = "AssignJobItsSupportPage";
         protected const string ItsViewOnlyMutationMessage = "Hanya admin yang dapat assign, edit, atau hapus Job Order.";
 
         protected virtual string FixedActiveTab
@@ -415,7 +451,17 @@ namespace vtsadm
         private static bool IsJobTrainingAssignRequestContext()
         {
             HttpContext context = HttpContext.Current;
-            if (context == null || context.Request == null)
+            if (context == null)
+            {
+                return false;
+            }
+
+            if (context.Items[ItsSupportPageContextKey] is bool && (bool)context.Items[ItsSupportPageContextKey])
+            {
+                return true;
+            }
+
+            if (context.Request == null)
             {
                 return false;
             }
@@ -487,6 +533,7 @@ namespace vtsadm
 
         protected override void OnPreInit(EventArgs e)
         {
+            MarkItsSupportRequestContext();
             // Must run before Site.Master Page_Load, which redirects to login.aspx HTML on errors.
             if (HandleJobOrderInformationRequest()
                 || HandleDayTotalJoListRequest()
@@ -497,6 +544,16 @@ namespace vtsadm
             }
 
             base.OnPreInit(e);
+        }
+
+        private void MarkItsSupportRequestContext()
+        {
+            if (!UseJobTrainingDataSource || HttpContext.Current == null)
+            {
+                return;
+            }
+
+            HttpContext.Current.Items[ItsSupportPageContextKey] = true;
         }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -1012,6 +1069,29 @@ namespace vtsadm
                     GetPayloadString(args, "categoryId"),
                     GetPayloadString(args, "itUserId"),
                     GetPayloadString(args, "itUserName"));
+            }
+
+            if (method.Equals("LoadOpenTrainingJobs", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildOpenTrainingJobsResponse(GetPayloadString(args, "searchKeyword"));
+            }
+
+            if (method.Equals("LoadTrainingFunctions", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildTrainingFunctionsResponse();
+            }
+
+            if (method.Equals("CloseJobTraining", StringComparison.OrdinalIgnoreCase))
+            {
+                return ExecuteCloseJobTraining(
+                    GetPayloadString(args, "trainingId"),
+                    GetPayloadString(args, "trainingDate"),
+                    GetPayloadString(args, "trainers"),
+                    GetPayloadString(args, "attendances"),
+                    GetPayloadString(args, "categoryId"),
+                    GetPayloadString(args, "remark"),
+                    GetPayloadString(args, "businessFieldId"),
+                    args);
             }
 
             if (method.Equals("LoadJobOrderInformation", StringComparison.OrdinalIgnoreCase))
@@ -2605,7 +2685,11 @@ namespace vtsadm
             string filterSupArea = ResolveSupAreaParameter(selectedRegional);
             string filterAreaGroup = ResolveItsScheduleAreaGroupFilter(selectedAreaGroup);
             Dictionary<string, JobTrainingTrainerSchedule> trainers = BuildItsUserScheduleMap(totalDays, filterAreaGroup, periode);
-            if (trainers.Count == 0 && string.IsNullOrWhiteSpace(ResolveItsAreaFilterToken(filterAreaGroup)))
+            if (IsAssignRestrictedUser())
+            {
+                trainers = FilterItsTrainersToCurrentUser(trainers);
+            }
+            if (trainers.Count == 0 && !IsAssignRestrictedUser() && string.IsNullOrWhiteSpace(ResolveItsAreaFilterToken(filterAreaGroup)))
             {
                 EnsureUnassignedScheduleUser(trainers, totalDays);
             }
@@ -3415,6 +3499,35 @@ namespace vtsadm
             }
 
             return trainers;
+        }
+
+        private Dictionary<string, JobTrainingTrainerSchedule> FilterItsTrainersToCurrentUser(
+            Dictionary<string, JobTrainingTrainerSchedule> trainers)
+        {
+            Dictionary<string, JobTrainingTrainerSchedule> filtered =
+                new Dictionary<string, JobTrainingTrainerSchedule>(StringComparer.OrdinalIgnoreCase);
+            if (trainers == null || trainers.Count == 0)
+            {
+                return filtered;
+            }
+
+            HashSet<string> selfKeys = GetItsSelfIdentityKeys();
+            foreach (KeyValuePair<string, JobTrainingTrainerSchedule> pair in trainers)
+            {
+                JobTrainingTrainerSchedule trainer = pair.Value;
+                if (trainer == null)
+                {
+                    continue;
+                }
+
+                if (ItsIdentityMatchesSelf(pair.Key, trainer.ItId, selfKeys)
+                    || ItsIdentityMatchesSelf(trainer.TrainerId, trainer.ItId, selfKeys))
+                {
+                    filtered[pair.Key] = trainer;
+                }
+            }
+
+            return filtered;
         }
 
         private static void EnsureUnassignedScheduleUser(
@@ -11253,7 +11366,7 @@ ORDER BY
 
             try
             {
-                response.Categories = LoadLookupItemsFromSp("sp_list_training_category ''", true);
+                response.Categories = LoadLookupItemsFromSp("sp_list_training_category ''", false);
                 response.Billables = LoadLookupItemsFromSp("sp_list_billable_type ''", false);
                 response.Result = "SUCCESS";
                 response.Message = "OK";
@@ -11276,25 +11389,32 @@ ORDER BY
                 return items;
             }
 
-            string valueCol = ResolveFirstAvailableLookupColumn(source, "Value", "ID", "Code", "TrainCategoryID", "BillAbleID", "BillableID");
-            string textCol = ResolveFirstAvailableLookupColumn(source, "Text", "Name", "Desc", "TrainingCategoryName", "TrainCategoryName", "BillAbleDesc", "BillableDesc");
-            if (string.IsNullOrWhiteSpace(valueCol))
-            {
-                // Common combo SP shape: first column = id, second = description.
-                if (source.Columns.Count >= 1)
-                {
-                    valueCol = source.Columns[0].ColumnName;
-                }
-                if (source.Columns.Count >= 2)
-                {
-                    textCol = source.Columns[1].ColumnName;
-                }
-            }
-
+            // Same mapping as ClsType.Open_Combos on job_training.aspx:
+            // Fields(0) = value (ID), Fields(1) = text (name).
             foreach (DataRow row in source.Rows)
             {
-                string value = GetValue(row, valueCol);
-                string text = string.IsNullOrWhiteSpace(textCol) ? value : GetValue(row, textCol);
+                string value = GetLookupCell(row, 0);
+                string text = source.Columns.Count > 1 ? GetLookupCell(row, 1) : value;
+                if (string.IsNullOrWhiteSpace(text) || text.Equals(value, StringComparison.OrdinalIgnoreCase))
+                {
+                    string namedText = GetValue(row, ResolveFirstAvailableLookupColumn(
+                        source,
+                        "Text",
+                        "Name",
+                        "Desc",
+                        "TrainingCategoryName",
+                        "TrainCategoryName",
+                        "TrainCategoryDesc",
+                        "CategoryName",
+                        "CategoryDesc",
+                        "BillAbleDesc",
+                        "BillableDesc"));
+                    if (!string.IsNullOrWhiteSpace(namedText))
+                    {
+                        text = namedText;
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(value) || value.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -11315,6 +11435,22 @@ ORDER BY
             return items;
         }
 
+        private static string GetLookupCell(DataRow row, int index)
+        {
+            if (row == null || row.Table == null || index < 0 || index >= row.Table.Columns.Count)
+            {
+                return string.Empty;
+            }
+
+            object raw = row[index];
+            if (raw == null || raw == DBNull.Value)
+            {
+                return string.Empty;
+            }
+
+            return Convert.ToString(raw).Trim();
+        }
+
         private static string ResolveFirstAvailableLookupColumn(DataTable source, params string[] candidates)
         {
             if (source == null || candidates == null)
@@ -11331,6 +11467,520 @@ ORDER BY
             }
 
             return string.Empty;
+        }
+
+        protected static TrainingCloseSearchResponse BuildOpenTrainingJobsResponse(string searchKeyword)
+        {
+            TrainingCloseSearchResponse response = new TrainingCloseSearchResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                Rows = new List<TrainingCloseJobItem>()
+            };
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                response.Message = "Session tidak ditemukan.";
+                return response;
+            }
+
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]).Trim();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                response.Message = "User login tidak ditemukan.";
+                return response;
+            }
+
+            bool isAdmin = IsAssignAdminSession();
+            HashSet<string> selfKeys = isAdmin ? null : GetItsSelfIdentityKeys();
+            if (!isAdmin && (selfKeys == null || selfKeys.Count == 0))
+            {
+                response.Message = "ITID / UserID login tidak ditemukan.";
+                return response;
+            }
+
+            try
+            {
+                string keyword = (searchKeyword ?? string.Empty).Trim();
+                DataTable source = LoadAssignedTrainingJobsForClose();
+                if (source == null || source.Rows.Count == 0)
+                {
+                    source = ExecuteJobTrainingQuery(
+                        "sp_list_trainig_customer_job_training_search '"
+                        + EscapeSqlLiteral(keyword) + "','"
+                        + EscapeSqlLiteral(isAdmin ? string.Empty : userId) + "'");
+                }
+
+                Dictionary<string, string> assignedTechByJob = LoadActiveTrainingAssignTechnicianMap();
+                HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (source != null)
+                {
+                    foreach (DataRow row in source.Rows)
+                    {
+                        string trainingId = FirstNonEmptyStatic(
+                            GetValue(row, "TrainingID"),
+                            GetValue(row, "JobID"));
+                        if (string.IsNullOrWhiteSpace(trainingId) || !seen.Add(trainingId))
+                        {
+                            continue;
+                        }
+
+                        string technicianId = GetValue(row, "TechnicianID").Trim();
+                        string assignUserId = GetValue(row, "AssignUserID").Trim();
+                        if (string.IsNullOrWhiteSpace(technicianId) && string.IsNullOrWhiteSpace(assignUserId))
+                        {
+                            assignedTechByJob.TryGetValue(trainingId, out technicianId);
+                        }
+
+                        if (string.IsNullOrWhiteSpace(technicianId) && string.IsNullOrWhiteSpace(assignUserId))
+                        {
+                            continue;
+                        }
+
+                        if (!isAdmin && !ItsIdentityMatchesSelf(assignUserId, technicianId, selfKeys))
+                        {
+                            continue;
+                        }
+
+                        TrainingCloseJobItem item = new TrainingCloseJobItem
+                        {
+                            TrainingID = trainingId,
+                            ReqDate = FirstNonEmptyStatic(GetValue(row, "sReqDate"), GetValue(row, "ReqDate")),
+                            CustomerName = FirstNonEmptyStatic(GetValue(row, "FullName"), GetValue(row, "CustomerName")),
+                            SchDate = FirstNonEmptyStatic(GetValue(row, "sSchDate"), GetValue(row, "SchDate"), GetValue(row, "ScheduleDate")),
+                            CustID = GetValue(row, "CustID"),
+                            BranchName = FirstNonEmptyStatic(GetValue(row, "CustBranchName"), GetValue(row, "BranchName")),
+                            BusinessFieldID = GetValue(row, "BusinessFieldID"),
+                            CategoryID = FirstNonEmptyStatic(GetValue(row, "TrainCategoryID"), GetValue(row, "AssignCategoryID"), GetValue(row, "CategoryID")),
+                            CategoryDesc = FirstNonEmptyStatic(GetValue(row, "TrainCategoryDesc"), GetValue(row, "AssignCategoryDesc"), GetValue(row, "CategoryDesc")),
+                            AssignDate = FirstNonEmptyStatic(GetValue(row, "sAssignDate"), GetValue(row, "AssignDate")),
+                            AssignTrainer = FirstNonEmptyStatic(GetValue(row, "AssignTrainer"), GetValue(row, "Trainers"))
+                        };
+
+                        if (!CloseTrainingJobMatchesKeyword(item, keyword))
+                        {
+                            continue;
+                        }
+
+                        response.Rows.Add(item);
+                    }
+                }
+
+                response.Result = "SUCCESS";
+                response.Message = response.Rows.Count > 0
+                    ? "OK"
+                    : (isAdmin
+                        ? "Tidak ada JO Training/Visit assigned yang bisa di-close."
+                        : "Tidak ada JO Training/Visit assigned ke user login yang bisa di-close.");
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal memuat JO Training: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        private static DataTable LoadAssignedTrainingJobsForClose()
+        {
+            return ExecuteJobTrainingQuery(
+                "SELECT "
+                + "LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) AS TrainingID, "
+                + "CONVERT(varchar(10), t.ReqDate, 120) AS sReqDate, "
+                + "LTRIM(RTRIM(ISNULL(c.FullName, ''))) AS FullName, "
+                + "CONVERT(varchar(10), t.ScheduleDate, 120) AS sSchDate, "
+                + "LTRIM(RTRIM(ISNULL(t.CustID, ''))) AS CustID, "
+                + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS CustBranchName, "
+                + "LTRIM(RTRIM(ISNULL(c.BusinessFieldID, ''))) AS BusinessFieldID, "
+                + "LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(t.TrainCategoryID)), ''), ja.DeviceTypeID))) AS TrainCategoryID, "
+                + "LTRIM(RTRIM(ISNULL(cat.TrainCategoryDesc, catAssign.TrainCategoryDesc))) AS TrainCategoryDesc, "
+                + "CONVERT(varchar(10), ja.SchDate, 120) AS sAssignDate, "
+                + "LTRIM(RTRIM(ISNULL(it.Name, ISNULL(it.UserID, ja.TechnicianID)))) AS AssignTrainer, "
+                + "LTRIM(RTRIM(ISNULL(ja.TechnicianID, ''))) AS TechnicianID, "
+                + "LTRIM(RTRIM(ISNULL(it.UserID, ''))) AS AssignUserID "
+                + "FROM trx_training_order t WITH (NOLOCK) "
+                + "CROSS APPLY ( "
+                + "  SELECT TOP 1 d.SchDate, d.TechnicianID, d.DeviceTypeID "
+                + "  FROM trx_job_assign_detail d WITH (NOLOCK) "
+                + "  WHERE LTRIM(RTRIM(ISNULL(d.JobID, ''))) = LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) "
+                + "    AND ISNULL(d.Status, '') NOT IN ('DE') "
+                + "    AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) = 'RG' "
+                + "  ORDER BY d.DtmUpd DESC, d.SchDate DESC, d.Seq DESC "
+                + ") ja "
+                + "LEFT JOIN mst_itsupport it WITH (NOLOCK) ON ("
+                + "LTRIM(RTRIM(ISNULL(it.ITID, ''))) = LTRIM(RTRIM(ISNULL(ja.TechnicianID, ''))) "
+                + "OR LTRIM(RTRIM(ISNULL(it.UserID, ''))) = LTRIM(RTRIM(ISNULL(ja.TechnicianID, '')))"
+                + ") AND ISNULL(it.Status, '') NOT IN ('DE','BL') "
+                + "LEFT JOIN mst_customer c WITH (NOLOCK) ON LTRIM(RTRIM(ISNULL(c.CustID, ''))) = LTRIM(RTRIM(ISNULL(t.CustID, ''))) "
+                + "LEFT JOIN ref_train_category cat WITH (NOLOCK) ON cat.TrainCategoryID = t.TrainCategoryID "
+                + "LEFT JOIN ref_train_category catAssign WITH (NOLOCK) ON catAssign.TrainCategoryID = ja.DeviceTypeID "
+                + "WHERE ISNULL(t.Status, '') NOT IN ('DE','CL') "
+                + "AND UPPER(LTRIM(RTRIM(ISNULL(t.Status, '')))) NOT IN ('CLOSE','CLOSED') "
+                + "ORDER BY ja.SchDate DESC, t.TrainingID ASC");
+        }
+
+        private static Dictionary<string, string> LoadActiveTrainingAssignTechnicianMap()
+        {
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            DataTable table = ExecuteJobTrainingQuery(
+                "SELECT LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID, "
+                + "LTRIM(RTRIM(ISNULL(TechnicianID, ''))) AS TechnicianID "
+                + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                + "WHERE ISNULL(Status, '') NOT IN ('DE') "
+                + "AND UPPER(LTRIM(RTRIM(ISNULL(Status, '')))) = 'RG' "
+                + "AND LTRIM(RTRIM(ISNULL(JobID, ''))) <> '' "
+                + "ORDER BY DtmUpd ASC, SchDate ASC, Seq ASC");
+            if (table == null)
+            {
+                return map;
+            }
+
+            foreach (DataRow row in table.Rows)
+            {
+                string jobId = GetValue(row, "JobID").Trim();
+                string technicianId = GetValue(row, "TechnicianID").Trim();
+                if (string.IsNullOrWhiteSpace(jobId) || string.IsNullOrWhiteSpace(technicianId))
+                {
+                    continue;
+                }
+
+                map[jobId] = technicianId;
+            }
+
+            return map;
+        }
+
+        private static bool CloseTrainingJobMatchesKeyword(TrainingCloseJobItem item, string keyword)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(keyword))
+            {
+                return true;
+            }
+
+            string needle = keyword.Trim();
+            return ContainsIgnoreCase(item.TrainingID, needle)
+                || ContainsIgnoreCase(item.CustomerName, needle)
+                || ContainsIgnoreCase(item.BranchName, needle)
+                || ContainsIgnoreCase(item.AssignTrainer, needle)
+                || ContainsIgnoreCase(item.CustID, needle);
+        }
+
+        private static bool ContainsIgnoreCase(string source, string keyword)
+        {
+            return !string.IsNullOrWhiteSpace(source)
+                && source.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        protected static TrainingFunctionListResponse BuildTrainingFunctionsResponse()
+        {
+            TrainingFunctionListResponse response = new TrainingFunctionListResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                Rows = new List<TrainingFunctionItem>()
+            };
+
+            try
+            {
+                DataTable source = ExecuteJobTrainingQuery("sp_list_training_function");
+                if (source != null)
+                {
+                    foreach (DataRow row in source.Rows)
+                    {
+                        string functionId = FirstNonEmptyStatic(GetValue(row, "FunctionID"), GetLookupCell(row, 0));
+                        string functionName = FirstNonEmptyStatic(GetValue(row, "FunctionName"), GetLookupCell(row, 1), functionId);
+                        if (string.IsNullOrWhiteSpace(functionId))
+                        {
+                            continue;
+                        }
+
+                        response.Rows.Add(new TrainingFunctionItem
+                        {
+                            FunctionID = functionId,
+                            FunctionName = string.IsNullOrWhiteSpace(functionName) ? functionId : functionName
+                        });
+                    }
+                }
+
+                response.Result = "SUCCESS";
+                response.Message = "OK";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal memuat function menu: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        protected static SaveAssignResponse ExecuteCloseJobTraining(
+            string trainingId,
+            string trainingDate,
+            string trainers,
+            string attendances,
+            string categoryId,
+            string remark,
+            string businessFieldId,
+            Dictionary<string, object> payload)
+        {
+            SaveAssignResponse response = new SaveAssignResponse
+            {
+                Result = "ERROR",
+                AssignID = string.Empty,
+                Message = string.Empty
+            };
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                response.Message = "Session tidak ditemukan.";
+                return response;
+            }
+
+            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]);
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                response.Message = "Koneksi database tidak tersedia.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                response.Message = "User login tidak ditemukan.";
+                return response;
+            }
+
+            string safeTrainingId = (trainingId ?? string.Empty).Trim();
+            string safeTrainers = (trainers ?? string.Empty).Trim();
+            string safeAttendances = (attendances ?? string.Empty).Trim();
+            string safeCategoryId = (categoryId ?? string.Empty).Trim();
+            string safeRemark = (remark ?? string.Empty).Trim();
+            string safeBusinessFieldId = (businessFieldId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(safeBusinessFieldId))
+            {
+                safeBusinessFieldId = "[Select]";
+            }
+
+            if (string.IsNullOrWhiteSpace(safeTrainingId) || string.IsNullOrWhiteSpace(safeTrainers) || string.IsNullOrWhiteSpace(safeAttendances))
+            {
+                response.Message = "Training ID, Trainers, dan Attendances wajib diisi.";
+                return response;
+            }
+
+            DateTime trainingDateValue;
+            if (!DateTime.TryParse(trainingDate, out trainingDateValue))
+            {
+                response.Message = "Training Date wajib diisi.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(safeCategoryId) || safeCategoryId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                response.Message = "Category wajib dipilih.";
+                return response;
+            }
+
+            if (!IsAssignAdminSession())
+            {
+                string assignedTechnicianId;
+                string assignedSchDate;
+                if (!TryLoadActiveItsAssignSnapshot(safeTrainingId, out assignedTechnicianId, out assignedSchDate)
+                    || !ItsTechnicianIdMatchesCurrentUser(assignedTechnicianId))
+                {
+                    response.Message = "JO ini tidak di-assign ke user login.";
+                    return response;
+                }
+            }
+
+            List<Dictionary<string, object>> functions = GetPayloadObjectList(payload, "functions");
+            bool anyFunctionAnswered = false;
+            foreach (Dictionary<string, object> fn in functions)
+            {
+                bool yes = GetDictBool(fn, "yes");
+                bool no = GetDictBool(fn, "no");
+                if (yes || no)
+                {
+                    anyFunctionAnswered = true;
+                    break;
+                }
+            }
+
+            if (functions.Count > 0 && !anyFunctionAnswered)
+            {
+                response.Message = "Function menu wajib diisi.";
+                return response;
+            }
+
+            try
+            {
+                string sql = "sp_submit_training_customer '"
+                    + EscapeSqlLiteral(safeTrainingId) + "','"
+                    + EscapeSqlLiteral(trainingDateValue.ToString("yyyy-MM-dd")) + "','',0,'"
+                    + EscapeSqlLiteral(safeTrainers) + "','"
+                    + EscapeSqlLiteral(safeAttendances) + "','"
+                    + EscapeSqlLiteral(safeCategoryId) + "','"
+                    + EscapeSqlLiteral(safeRemark) + "','','"
+                    + EscapeSqlLiteral(safeBusinessFieldId) + "','"
+                    + EscapeSqlLiteral(userId.Trim()) + "'";
+
+                ExecCommand ec = new ExecCommand();
+                int affected = 0;
+                string error = string.Empty;
+                bool execOk = ec.Execute(sql, connString.Trim(), ref affected, ref error);
+                string trhId = ExtractTrainingHeaderId(error);
+                if (!execOk && string.IsNullOrWhiteSpace(trhId))
+                {
+                    response.Message = string.IsNullOrWhiteSpace(error) ? "Close job training gagal." : error;
+                    return response;
+                }
+
+                if (string.IsNullOrWhiteSpace(trhId))
+                {
+                    trhId = safeTrainingId;
+                }
+
+                foreach (Dictionary<string, object> fn in functions)
+                {
+                    string functionId = GetDictString(fn, "id", "functionId", "FunctionID");
+                    if (string.IsNullOrWhiteSpace(functionId))
+                    {
+                        continue;
+                    }
+
+                    bool yes = GetDictBool(fn, "yes");
+                    bool no = GetDictBool(fn, "no");
+                    string fnRemark = GetDictString(fn, "remark");
+                    string fnSql = "sp_insert_training_customer_function '"
+                        + EscapeSqlLiteral(trhId) + "','"
+                        + EscapeSqlLiteral(functionId) + "','"
+                        + EscapeSqlLiteral(yes.ToString()) + "','"
+                        + EscapeSqlLiteral(no.ToString()) + "','"
+                        + EscapeSqlLiteral(fnRemark) + "','"
+                        + EscapeSqlLiteral(userId.Trim()) + "'";
+                    int fnAffected = 0;
+                    string fnError = string.Empty;
+                    ec.Execute(fnSql, connString.Trim(), ref fnAffected, ref fnError);
+                }
+
+                response.Result = "SUCCESS";
+                response.AssignID = trhId;
+                response.Message = "Job Training/Visit berhasil di-close.";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal close job training: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        private static string ExtractTrainingHeaderId(string errorText)
+        {
+            if (string.IsNullOrWhiteSpace(errorText))
+            {
+                return string.Empty;
+            }
+
+            System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(
+                errorText,
+                @"TRH[0-9A-Za-z]+",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success ? match.Value : string.Empty;
+        }
+
+        private static List<Dictionary<string, object>> GetPayloadObjectList(Dictionary<string, object> payload, string key)
+        {
+            List<Dictionary<string, object>> rows = new List<Dictionary<string, object>>();
+            if (payload == null || string.IsNullOrWhiteSpace(key) || !payload.ContainsKey(key) || payload[key] == null)
+            {
+                return rows;
+            }
+
+            System.Collections.IEnumerable enumerable = payload[key] as System.Collections.IEnumerable;
+            string asString = payload[key] as string;
+            if (asString != null)
+            {
+                return rows;
+            }
+
+            if (enumerable == null || payload[key] is string)
+            {
+                return rows;
+            }
+
+            foreach (object item in enumerable)
+            {
+                Dictionary<string, object> dict = item as Dictionary<string, object>;
+                if (dict != null)
+                {
+                    rows.Add(new Dictionary<string, object>(dict, StringComparer.OrdinalIgnoreCase));
+                    continue;
+                }
+
+                System.Collections.IDictionary map = item as System.Collections.IDictionary;
+                if (map == null)
+                {
+                    continue;
+                }
+
+                Dictionary<string, object> converted = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                foreach (System.Collections.DictionaryEntry entry in map)
+                {
+                    string entryKey = Convert.ToString(entry.Key);
+                    if (!string.IsNullOrWhiteSpace(entryKey))
+                    {
+                        converted[entryKey] = entry.Value;
+                    }
+                }
+                rows.Add(converted);
+            }
+
+            return rows;
+        }
+
+        private static string GetDictString(Dictionary<string, object> source, params string[] keys)
+        {
+            if (source == null || keys == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (string key in keys)
+            {
+                if (string.IsNullOrWhiteSpace(key) || !source.ContainsKey(key) || source[key] == null)
+                {
+                    continue;
+                }
+
+                string value = Convert.ToString(source[key], CultureInfo.InvariantCulture);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static bool GetDictBool(Dictionary<string, object> source, string key)
+        {
+            if (source == null || string.IsNullOrWhiteSpace(key) || !source.ContainsKey(key) || source[key] == null)
+            {
+                return false;
+            }
+
+            object raw = source[key];
+            if (raw is bool)
+            {
+                return (bool)raw;
+            }
+
+            string text = Convert.ToString(raw, CultureInfo.InvariantCulture).Trim();
+            return text.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || text.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || text.Equals("yes", StringComparison.OrdinalIgnoreCase);
         }
 
         protected static SaveAssignResponse ExecuteSaveJobTrainingAssign(
@@ -11362,12 +12012,6 @@ ORDER BY
             if (string.IsNullOrWhiteSpace(connString))
             {
                 response.Message = "Koneksi database tidak tersedia.";
-                return response;
-            }
-
-            if (IsItsViewOnlySession())
-            {
-                response.Message = ItsViewOnlyMutationMessage;
                 return response;
             }
 

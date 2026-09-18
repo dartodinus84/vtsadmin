@@ -147,6 +147,77 @@
             }
         }
 
+        .assign-close-jo-btn {
+            min-width: 0;
+            white-space: nowrap;
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+            color: #fff;
+        }
+
+        .assign-close-jo-btn:hover,
+        .assign-close-jo-btn:focus {
+            background: #1e40af;
+            border-color: #1e40af;
+            color: #fff;
+        }
+
+        .assign-close-jo-modal {
+            max-width: 920px;
+        }
+
+        #assignCloseJoPickerBackdrop {
+            z-index: 1400;
+        }
+
+        #assignCloseJoPickerBackdrop .assign-jo-table {
+            min-width: 980px;
+        }
+
+        .assign-close-fn-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: auto;
+            max-height: 180px;
+            background: #fff;
+        }
+
+        .assign-close-fn-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .assign-close-fn-table th {
+            background: #f3f4f6;
+            color: #1f4b99;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: left;
+            padding: 7px 8px;
+            white-space: nowrap;
+        }
+
+        .assign-close-fn-table td {
+            font-size: 12px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: middle;
+        }
+
+        .assign-close-fn-table input[type="text"] {
+            width: 100%;
+            min-height: 30px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 4px 8px;
+        }
+
+        .assign-close-fn-empty {
+            text-align: center;
+            color: #6b7280;
+            padding: 10px;
+        }
+
         .assign-tabs {
             display: inline-flex;
             background: #f8f7f5;
@@ -3802,6 +3873,7 @@
 
             <div class="assign-topbar-right">
                 <button type="button" class="btn btn-primary assign-btn assign-create-jo-btn" id="assignCreateJoBtn">Buat JO Training/Visit</button>
+                <button type="button" class="btn btn-primary assign-btn assign-close-jo-btn" id="assignCloseJoBtn">Close JO Training/Visit</button>
                 <asp:TextBox ID="txtPeriode" runat="server" CssClass="form-control assign-period js-periode-picker" placeholder="yyyy-MM" autocomplete="off"></asp:TextBox>
                 <asp:Button ID="btnApply" runat="server" CssClass="btn btn-primary assign-btn" Text="Apply" OnClick="btnApply_Click" OnClientClick="showOverlay();" />
                 <asp:Button ID="btnReset" runat="server" CssClass="btn btn-default assign-btn" Text="Reset" OnClick="btnReset_Click" />
@@ -4295,6 +4367,132 @@
                 <div class="assign-actions">
                     <button type="button" class="assign-action-btn cancel" id="assignCreateJoCancelBtn">Cancel</button>
                     <button type="button" class="assign-action-btn submit" id="assignCreateJoSubmitBtn">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="assign-job-backdrop" id="assignCloseJoBackdrop">
+        <div class="assign-job-modal assign-close-jo-modal" role="dialog" aria-modal="true" aria-labelledby="assignCloseJoTitle">
+            <div class="assign-job-modal-header">
+                <div class="assign-job-title-wrap">
+                    <h4 id="assignCloseJoTitle">Close Job Training / Visit</h4>
+                    <p>Close JO yang sudah assigned, sama seperti menu Training Customer</p>
+                </div>
+                <button type="button" class="assign-job-close" id="assignCloseJoCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="assign-job-body">
+                <div class="assign-create-jo-grid">
+                    <div class="assign-create-jo-col">
+                        <p class="assign-section-label">Job Training Information</p>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoTrainingId">Training ID</label>
+                            <input type="hidden" id="assignCloseJoTrainingId" value="" />
+                            <input type="hidden" id="assignCloseJoCustId" value="" />
+                            <input type="hidden" id="assignCloseJoBusinessFieldId" value="" />
+                            <button type="button" class="assign-pick-btn" id="assignCloseJoPickBtn">Pilih Training ID</button>
+                            <div class="assign-picked-jo" id="assignCloseJoPickedText">Belum ada Training ID dipilih</div>
+                        </div>
+                        <div class="assign-info-item">
+                            <span class="assign-info-label">Request Date</span>
+                            <span class="assign-info-value" id="assignCloseJoReqDate">-</span>
+                        </div>
+                        <div class="assign-info-item" style="margin-top:8px;">
+                            <span class="assign-info-label">Customer Name</span>
+                            <span class="assign-info-value" id="assignCloseJoCustName">-</span>
+                        </div>
+                        <div class="assign-info-item" style="margin-top:8px;">
+                            <span class="assign-info-label">Schedule Date</span>
+                            <span class="assign-info-value" id="assignCloseJoSchDate">-</span>
+                        </div>
+                        <div class="assign-info-item" style="margin-top:8px;">
+                            <span class="assign-info-label">Branch Name</span>
+                            <span class="assign-info-value" id="assignCloseJoBranch">-</span>
+                        </div>
+                    </div>
+                    <div class="assign-create-jo-col">
+                        <p class="assign-section-label">Training Information</p>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoTrainingDate">Training Date</label>
+                            <input type="date" id="assignCloseJoTrainingDate" />
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoTrainers">Trainers</label>
+                            <textarea id="assignCloseJoTrainers" class="assign-dashboard-note-textarea" rows="2" placeholder="Trainers ..."></textarea>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoAttendances">Attendances</label>
+                            <textarea id="assignCloseJoAttendances" class="assign-dashboard-note-textarea" rows="2" placeholder="Attendances ..."></textarea>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoCategory">Category</label>
+                            <select id="assignCloseJoCategory">
+                                <option value="">[Select]</option>
+                            </select>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoRemark">Remark</label>
+                            <textarea id="assignCloseJoRemark" class="assign-dashboard-note-textarea" rows="2" placeholder="Remark ..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <p class="assign-section-label" style="margin-top:12px;">Function Menu</p>
+                <div class="assign-close-fn-wrap">
+                    <table class="assign-close-fn-table">
+                        <thead>
+                            <tr>
+                                <th>Function Name</th>
+                                <th>Yes</th>
+                                <th>No</th>
+                                <th>Remark</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assignCloseJoFunctionBody"></tbody>
+                    </table>
+                </div>
+                <div class="assign-feedback" id="assignCloseJoFeedback"></div>
+            </div>
+            <div class="assign-job-footer">
+                <div class="assign-footer-left-actions"></div>
+                <div class="assign-actions">
+                    <button type="button" class="assign-action-btn cancel" id="assignCloseJoCancelBtn">Cancel</button>
+                    <button type="button" class="assign-action-btn submit" id="assignCloseJoSubmitBtn">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="assign-job-backdrop assign-jo-info-backdrop" id="assignCloseJoPickerBackdrop">
+        <div class="assign-jo-info-modal" role="dialog" aria-modal="true" aria-labelledby="assignCloseJoPickerTitle">
+            <div class="assign-job-modal-header">
+                <div class="assign-job-title-wrap">
+                    <h4 id="assignCloseJoPickerTitle">Pilih Job Training</h4>
+                    <p>Cari JO Training/Visit yang belum di-close</p>
+                </div>
+                <button type="button" class="assign-job-close" id="assignCloseJoPickerCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="assign-job-body">
+                <div class="assign-jo-search-wrap">
+                    <input type="text" id="assignCloseJoSearchInput" placeholder="Cari Training ID / Customer / Branch..." />
+                    <button type="button" id="assignCloseJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
+                </div>
+                <p class="assign-jo-search-hint">Non-admin hanya melihat JO yang di-assign ke UserID/ITID login. Admin melihat semua JO assigned yang belum close.</p>
+                <div class="assign-jo-table-wrap">
+                    <table class="assign-jo-table">
+                        <thead>
+                            <tr>
+                                <th>Training ID</th>
+                                <th>Customer</th>
+                                <th>Request Date</th>
+                                <th>Schedule Date</th>
+                                <th>Branch</th>
+                                <th>Category</th>
+                                <th>Trainer</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assignCloseJoPickerBody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -7875,11 +8073,6 @@
             }
 
             function openCreateJoModal() {
-                if (getIsTechnicianUser()) {
-                    showAssignToast("User IT Support tidak dapat membuat Job Training/Visit.", true);
-                    return;
-                }
-
                 resetTrainingAssignForm("", "", formatIsoDateInput(new Date()));
                 setCreateJoFeedback("", false, false);
                 var backdrop = getCreateJoBackdrop();
@@ -7899,7 +8092,7 @@
                 if (!btn) {
                     return;
                 }
-                btn.style.display = getIsTechnicianUser() ? "none" : "";
+                btn.style.display = "";
             }
 
             function resetTrainingAssignForm(techId, techName, schDate) {
@@ -7954,7 +8147,9 @@
 
             function ensureTrainingLookupsLoaded(done) {
                 function lookupFeedback(message, isError, isSuccess) {
-                    if (isCreateJoModalOpen()) {
+                    if (isCloseJoModalOpen()) {
+                        setCloseJoFeedback(message, isError, isSuccess);
+                    } else if (isCreateJoModalOpen()) {
                         setCreateJoFeedback(message, isError, isSuccess);
                     } else {
                         setFeedback(message, isError, isSuccess);
@@ -7981,6 +8176,7 @@
                     }
                     fillTrainingSelect("assignTrainingCategory", result.Categories || []);
                     fillTrainingSelect("assignTrainingBillable", result.Billables || []);
+                    fillTrainingSelect("assignCloseJoCategory", result.Categories || []);
                     trainingLookupState.loaded = true;
                     lookupFeedback("", false, false);
                     if (typeof done === "function") done();
@@ -8116,6 +8312,425 @@
                     setFeedback("", false, false);
                 }
             };
+
+            var closeJoSaving = false;
+            var closeJoFunctionsLoaded = false;
+            var closeJoPickerRows = [];
+
+            function setCloseJoFeedback(message, isError, isSuccess) {
+                var box = document.getElementById("assignCloseJoFeedback");
+                if (!box) {
+                    return;
+                }
+                box.classList.remove("error");
+                box.classList.remove("success");
+                box.classList.remove("is-visible");
+                box.textContent = message || "";
+                if (isError) {
+                    box.classList.add("error");
+                }
+                if (isSuccess) {
+                    box.classList.add("success");
+                }
+                if (message) {
+                    box.classList.add("is-visible");
+                }
+            }
+
+            function getCloseJoBackdrop() {
+                return document.getElementById("assignCloseJoBackdrop");
+            }
+
+            function getCloseJoPickerBackdrop() {
+                return document.getElementById("assignCloseJoPickerBackdrop");
+            }
+
+            function isCloseJoModalOpen() {
+                var backdrop = getCloseJoBackdrop();
+                return !!(backdrop && backdrop.classList.contains("open"));
+            }
+
+            function isCloseJoPickerOpen() {
+                var backdrop = getCloseJoPickerBackdrop();
+                return !!(backdrop && backdrop.classList.contains("open"));
+            }
+
+            function hideCloseJoPicker() {
+                var backdrop = getCloseJoPickerBackdrop();
+                if (backdrop) {
+                    backdrop.classList.remove("open");
+                }
+            }
+
+            function hideCloseJoModal() {
+                hideCloseJoPicker();
+                var backdrop = getCloseJoBackdrop();
+                if (backdrop) {
+                    backdrop.classList.remove("open");
+                }
+                setCloseJoFeedback("", false, false);
+            }
+
+            function resetCloseJoForm() {
+                var trainingId = document.getElementById("assignCloseJoTrainingId");
+                var custId = document.getElementById("assignCloseJoCustId");
+                var businessFieldId = document.getElementById("assignCloseJoBusinessFieldId");
+                var picked = document.getElementById("assignCloseJoPickedText");
+                var reqDate = document.getElementById("assignCloseJoReqDate");
+                var custName = document.getElementById("assignCloseJoCustName");
+                var schDate = document.getElementById("assignCloseJoSchDate");
+                var branch = document.getElementById("assignCloseJoBranch");
+                var trainingDate = document.getElementById("assignCloseJoTrainingDate");
+                var trainers = document.getElementById("assignCloseJoTrainers");
+                var attendances = document.getElementById("assignCloseJoAttendances");
+                var category = document.getElementById("assignCloseJoCategory");
+                var remark = document.getElementById("assignCloseJoRemark");
+                if (trainingId) trainingId.value = "";
+                if (custId) custId.value = "";
+                if (businessFieldId) businessFieldId.value = "";
+                if (picked) picked.textContent = "Belum ada Training ID dipilih";
+                if (reqDate) reqDate.textContent = "-";
+                if (custName) custName.textContent = "-";
+                if (schDate) schDate.textContent = "-";
+                if (branch) branch.textContent = "-";
+                if (trainingDate) trainingDate.value = formatIsoDateInput(new Date());
+                if (trainers) trainers.value = "";
+                if (attendances) attendances.value = "";
+                if (category) category.value = "";
+                if (remark) remark.value = "";
+                renderCloseJoFunctions([]);
+            }
+
+            function openCloseJoModal() {
+                resetCloseJoForm();
+                setCloseJoFeedback("", false, false);
+                var backdrop = getCloseJoBackdrop();
+                if (backdrop) {
+                    backdrop.classList.add("open");
+                }
+                ensureTrainingLookupsLoaded(function () {
+                    if (!trainingLookupState.loaded) {
+                        setCloseJoFeedback("Gagal memuat category.", true, false);
+                    }
+                });
+                loadCloseJoFunctions();
+            }
+
+            function parseCloseJoDateToIso(value) {
+                value = String(value == null ? "" : value).replace(/&nbsp;/gi, " ").trim();
+                if (!value) {
+                    return "";
+                }
+                if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+                    return value.substring(0, 10);
+                }
+                var parts = value.split(/[\/\-]/);
+                if (parts.length === 3) {
+                    var a = parseInt(parts[0], 10);
+                    var b = parseInt(parts[1], 10);
+                    var year = parts[2].length === 2 ? ("20" + parts[2]) : parts[2];
+                    if (!isNaN(a) && !isNaN(b) && year.length === 4) {
+                        if (a > 12) {
+                            return year + "-" + ("0" + b).slice(-2) + "-" + ("0" + a).slice(-2);
+                        }
+                        return year + "-" + ("0" + a).slice(-2) + "-" + ("0" + b).slice(-2);
+                    }
+                }
+                var parsed = new Date(value);
+                return formatIsoDateInput(parsed);
+            }
+
+            function setSelectByIdOrText(selectId, value, text) {
+                var select = document.getElementById(selectId);
+                if (!select) {
+                    return;
+                }
+                value = String(value == null ? "" : value).trim();
+                text = String(text == null ? "" : text).trim();
+                var i;
+                if (value) {
+                    for (i = 0; i < select.options.length; i++) {
+                        if ((select.options[i].value || "").trim() === value) {
+                            select.selectedIndex = i;
+                            return;
+                        }
+                    }
+                }
+                if (text) {
+                    var want = text.toLowerCase();
+                    for (i = 0; i < select.options.length; i++) {
+                        if ((select.options[i].text || "").trim().toLowerCase() === want) {
+                            select.selectedIndex = i;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            function loadCloseJoFunctions() {
+                callAssignPageMethod("LoadTrainingFunctions", {}, function (result) {
+                    var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                    var rows = isSuccess ? (result.Rows || result.rows || []) : [];
+                    closeJoFunctionsLoaded = isSuccess;
+                    renderCloseJoFunctions(rows);
+                    if (!isSuccess && isCloseJoModalOpen()) {
+                        setCloseJoFeedback((result && result.Message) || "Gagal memuat function menu.", true, false);
+                    }
+                }, function (errorMessage) {
+                    closeJoFunctionsLoaded = false;
+                    renderCloseJoFunctions([]);
+                    if (isCloseJoModalOpen()) {
+                        setCloseJoFeedback("Gagal memuat function menu. " + (errorMessage || ""), true, false);
+                    }
+                });
+            }
+
+            function renderCloseJoFunctions(rows) {
+                var body = document.getElementById("assignCloseJoFunctionBody");
+                if (!body) {
+                    return;
+                }
+                rows = rows || [];
+                if (!rows.length) {
+                    body.innerHTML = "<tr><td colspan=\"4\" class=\"assign-close-fn-empty\">Tidak ada function menu.</td></tr>";
+                    return;
+                }
+                var html = "";
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var functionId = row.FunctionID || row.functionId || row.id || "";
+                    var functionName = row.FunctionName || row.functionName || functionId;
+                    if (!functionId) {
+                        continue;
+                    }
+                    html += "<tr data-function-id=\"" + escapeHtml(functionId) + "\">"
+                        + "<td>" + escapeHtml(functionName) + "</td>"
+                        + "<td><input type=\"radio\" name=\"closeFn_" + i + "\" class=\"js-close-fn-yes\" /></td>"
+                        + "<td><input type=\"radio\" name=\"closeFn_" + i + "\" class=\"js-close-fn-no\" /></td>"
+                        + "<td><input type=\"text\" class=\"js-close-fn-remark\" placeholder=\"Remark ...\" /></td>"
+                        + "</tr>";
+                }
+                body.innerHTML = html || "<tr><td colspan=\"4\" class=\"assign-close-fn-empty\">Tidak ada function menu.</td></tr>";
+            }
+
+            function collectCloseJoFunctions() {
+                var rows = [];
+                var body = document.getElementById("assignCloseJoFunctionBody");
+                if (!body) {
+                    return rows;
+                }
+                var trs = body.querySelectorAll("tr[data-function-id]");
+                for (var i = 0; i < trs.length; i++) {
+                    var tr = trs[i];
+                    var yesEl = tr.querySelector(".js-close-fn-yes");
+                    var noEl = tr.querySelector(".js-close-fn-no");
+                    var remarkEl = tr.querySelector(".js-close-fn-remark");
+                    rows.push({
+                        id: tr.getAttribute("data-function-id") || "",
+                        yes: !!(yesEl && yesEl.checked),
+                        no: !!(noEl && noEl.checked),
+                        remark: remarkEl ? (remarkEl.value || "") : ""
+                    });
+                }
+                return rows;
+            }
+
+            function openCloseJoPicker() {
+                var backdrop = getCloseJoPickerBackdrop();
+                if (backdrop) {
+                    backdrop.classList.add("open");
+                }
+                var input = document.getElementById("assignCloseJoSearchInput");
+                if (input) {
+                    input.value = "";
+                    try { input.focus(); } catch (e) { }
+                }
+                searchCloseJoJobs();
+            }
+
+            function searchCloseJoJobs() {
+                var body = document.getElementById("assignCloseJoPickerBody");
+                var keyword = ((document.getElementById("assignCloseJoSearchInput") || {}).value || "").trim();
+                if (body) {
+                    body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Memuat JO Training...</td></tr>";
+                }
+                callAssignPageMethod("LoadOpenTrainingJobs", { searchKeyword: keyword }, function (result) {
+                    var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                    if (!isSuccess) {
+                        if (body) {
+                            body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">"
+                                + escapeHtml((result && result.Message) || "Gagal memuat JO Training.")
+                                + "</td></tr>";
+                        }
+                        return;
+                    }
+                    renderCloseJoPickerRows(result.Rows || result.rows || []);
+                }, function (errorMessage) {
+                    if (body) {
+                        body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Gagal memuat JO Training. "
+                            + escapeHtml(errorMessage || "")
+                            + "</td></tr>";
+                    }
+                });
+            }
+
+            function renderCloseJoPickerRows(rows) {
+                var body = document.getElementById("assignCloseJoPickerBody");
+                if (!body) {
+                    return;
+                }
+                closeJoPickerRows = rows || [];
+                if (!closeJoPickerRows.length) {
+                    body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Tidak ada JO Training/Visit yang bisa di-close.</td></tr>";
+                    return;
+                }
+                var html = "";
+                for (var i = 0; i < closeJoPickerRows.length; i++) {
+                    var row = closeJoPickerRows[i] || {};
+                    html += "<tr>"
+                        + "<td>" + escapeHtml(row.TrainingID || row.trainingId || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.CustomerName || row.customerName || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.ReqDate || row.reqDate || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.SchDate || row.schDate || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.BranchName || row.branchName || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.CategoryDesc || row.categoryDesc || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.AssignTrainer || row.assignTrainer || "-") + "</td>"
+                        + "<td><button type=\"button\" class=\"assign-jo-pick-btn js-close-jo-pick\" data-index=\"" + i + "\">Pilih</button></td>"
+                        + "</tr>";
+                }
+                body.innerHTML = html;
+            }
+
+            function applyCloseJoPick(row) {
+                if (!row) {
+                    return;
+                }
+                var trainingId = row.TrainingID || row.trainingId || "";
+                var customerName = row.CustomerName || row.customerName || "";
+                var reqDate = row.ReqDate || row.reqDate || "";
+                var schDate = row.SchDate || row.schDate || "";
+                var branch = row.BranchName || row.branchName || "";
+                var custId = row.CustID || row.custId || "";
+                var businessFieldId = row.BusinessFieldID || row.businessFieldId || "";
+                var categoryId = row.CategoryID || row.categoryId || "";
+                var categoryDesc = row.CategoryDesc || row.categoryDesc || "";
+                var assignDate = row.AssignDate || row.assignDate || "";
+                var trainer = row.AssignTrainer || row.assignTrainer || "";
+
+                var trainingIdEl = document.getElementById("assignCloseJoTrainingId");
+                var custIdEl = document.getElementById("assignCloseJoCustId");
+                var businessFieldEl = document.getElementById("assignCloseJoBusinessFieldId");
+                var picked = document.getElementById("assignCloseJoPickedText");
+                var reqDateEl = document.getElementById("assignCloseJoReqDate");
+                var custNameEl = document.getElementById("assignCloseJoCustName");
+                var schDateEl = document.getElementById("assignCloseJoSchDate");
+                var branchEl = document.getElementById("assignCloseJoBranch");
+                var trainingDateEl = document.getElementById("assignCloseJoTrainingDate");
+                var trainersEl = document.getElementById("assignCloseJoTrainers");
+
+                if (trainingIdEl) trainingIdEl.value = trainingId;
+                if (custIdEl) custIdEl.value = custId;
+                if (businessFieldEl) businessFieldEl.value = businessFieldId;
+                if (picked) picked.textContent = trainingId ? (trainingId + " - " + customerName) : "Belum ada Training ID dipilih";
+                if (reqDateEl) reqDateEl.textContent = reqDate || "-";
+                if (custNameEl) custNameEl.textContent = customerName || "-";
+                if (schDateEl) schDateEl.textContent = schDate || "-";
+                if (branchEl) branchEl.textContent = branch || "-";
+                if (trainingDateEl) trainingDateEl.value = parseCloseJoDateToIso(assignDate || schDate) || formatIsoDateInput(new Date());
+                if (trainersEl) trainersEl.value = trainer || "";
+                setSelectByIdOrText("assignCloseJoCategory", categoryId, categoryDesc);
+                hideCloseJoPicker();
+                setCloseJoFeedback("", false, false);
+            }
+
+            function submitCloseJoFromModal() {
+                if (closeJoSaving) {
+                    return true;
+                }
+
+                var trainingId = ((document.getElementById("assignCloseJoTrainingId") || {}).value || "").trim();
+                var trainingDate = ((document.getElementById("assignCloseJoTrainingDate") || {}).value || "").trim();
+                var trainers = ((document.getElementById("assignCloseJoTrainers") || {}).value || "").trim();
+                var attendances = ((document.getElementById("assignCloseJoAttendances") || {}).value || "").trim();
+                var categoryId = ((document.getElementById("assignCloseJoCategory") || {}).value || "").trim();
+                var remark = ((document.getElementById("assignCloseJoRemark") || {}).value || "").trim();
+                var businessFieldId = ((document.getElementById("assignCloseJoBusinessFieldId") || {}).value || "").trim();
+                var functions = collectCloseJoFunctions();
+                var submitBtn = document.getElementById("assignCloseJoSubmitBtn");
+
+                if (!trainingId) {
+                    setCloseJoFeedback("Training ID wajib dipilih.", true, false);
+                    return true;
+                }
+                if (!trainers || !attendances) {
+                    setCloseJoFeedback("Trainers dan Attendances wajib diisi.", true, false);
+                    return true;
+                }
+                if (!trainingDate) {
+                    setCloseJoFeedback("Training Date wajib diisi.", true, false);
+                    return true;
+                }
+                if (!categoryId || categoryId === "[Select]") {
+                    setCloseJoFeedback("Category wajib dipilih.", true, false);
+                    return true;
+                }
+
+                var anyFunctionAnswered = false;
+                for (var i = 0; i < functions.length; i++) {
+                    if (functions[i].yes || functions[i].no) {
+                        anyFunctionAnswered = true;
+                        break;
+                    }
+                }
+                if (functions.length > 0 && !anyFunctionAnswered) {
+                    setCloseJoFeedback("Function menu wajib diisi.", true, false);
+                    return true;
+                }
+
+                closeJoSaving = true;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                }
+                setCloseJoFeedback("Menyimpan close job training...", false, false);
+                callAssignPageMethod(
+                    "CloseJobTraining",
+                    {
+                        trainingId: trainingId,
+                        trainingDate: trainingDate,
+                        trainers: trainers,
+                        attendances: attendances,
+                        categoryId: categoryId,
+                        remark: remark,
+                        businessFieldId: businessFieldId,
+                        functions: functions
+                    },
+                    function (result) {
+                        closeJoSaving = false;
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                        }
+                        var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                        if (!isSuccess) {
+                            var failedMessage = (result && result.Message) || "Gagal close job training.";
+                            setCloseJoFeedback(failedMessage, true, false);
+                            showAssignToast(failedMessage, true);
+                            return;
+                        }
+                        var successMessage = (result && result.Message) || "Job Training/Visit berhasil di-close.";
+                        setCloseJoFeedback(successMessage, false, true);
+                        showAssignToast(successMessage, false);
+                        hideCloseJoModal();
+                    },
+                    function (errorMessage) {
+                        closeJoSaving = false;
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                        }
+                        setCloseJoFeedback("Gagal close job training. " + (errorMessage || ""), true, false);
+                        showAssignToast("Gagal close job training.", true);
+                    });
+                return true;
+            }
 
             function decorateAssignCells() {
                 var cells = document.querySelectorAll(".assign-cell-trigger");
@@ -8381,6 +8996,10 @@
                             closeStatusOnlyModal();
                         } else if (closeButton.id === "assignCreateJoCloseBtn") {
                             closeCreateJoModal();
+                        } else if (closeButton.id === "assignCloseJoPickerCloseBtn") {
+                            hideCloseJoPicker();
+                        } else if (closeButton.id === "assignCloseJoCloseBtn") {
+                            hideCloseJoModal();
                         } else {
                             closeAssignModal();
                         }
@@ -8485,6 +9104,14 @@
                         var joBackdrop = getJoInfoBackdrop();
                         if (joBackdrop && joBackdrop.classList.contains("open")) {
                             closeJoInfoModal();
+                            return;
+                        }
+                        if (isCloseJoPickerOpen()) {
+                            hideCloseJoPicker();
+                            return;
+                        }
+                        if (isCloseJoModalOpen()) {
+                            hideCloseJoModal();
                             return;
                         }
                         if (isCreateJoModalOpen()) {
@@ -8594,6 +9221,91 @@
                     });
                     createJoPickCustomerBtn.setAttribute("data-bound", "1");
                 }
+
+                var closeJoBtn = document.getElementById("assignCloseJoBtn");
+                var closeJoCloseBtn = document.getElementById("assignCloseJoCloseBtn");
+                var closeJoCancelBtn = document.getElementById("assignCloseJoCancelBtn");
+                var closeJoSubmitBtn = document.getElementById("assignCloseJoSubmitBtn");
+                var closeJoPickBtn = document.getElementById("assignCloseJoPickBtn");
+                var closeJoSearchBtn = document.getElementById("assignCloseJoSearchBtn");
+                var closeJoSearchInput = document.getElementById("assignCloseJoSearchInput");
+                var closeJoPickerBody = document.getElementById("assignCloseJoPickerBody");
+                var closeJoPickerCloseBtn = document.getElementById("assignCloseJoPickerCloseBtn");
+                if (closeJoBtn && !closeJoBtn.getAttribute("data-bound")) {
+                    closeJoBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        openCloseJoModal();
+                    });
+                    closeJoBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoCloseBtn && !closeJoCloseBtn.getAttribute("data-bound")) {
+                    closeJoCloseBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        hideCloseJoModal();
+                    });
+                    closeJoCloseBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoCancelBtn && !closeJoCancelBtn.getAttribute("data-bound")) {
+                    closeJoCancelBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        hideCloseJoModal();
+                    });
+                    closeJoCancelBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoSubmitBtn && !closeJoSubmitBtn.getAttribute("data-bound")) {
+                    closeJoSubmitBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        submitCloseJoFromModal();
+                    });
+                    closeJoSubmitBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoPickBtn && !closeJoPickBtn.getAttribute("data-bound")) {
+                    closeJoPickBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        openCloseJoPicker();
+                    });
+                    closeJoPickBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoPickerCloseBtn && !closeJoPickerCloseBtn.getAttribute("data-bound")) {
+                    closeJoPickerCloseBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        hideCloseJoPicker();
+                    });
+                    closeJoPickerCloseBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoSearchBtn && !closeJoSearchBtn.getAttribute("data-bound")) {
+                    closeJoSearchBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        searchCloseJoJobs();
+                    });
+                    closeJoSearchBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoSearchInput && !closeJoSearchInput.getAttribute("data-bound")) {
+                    closeJoSearchInput.addEventListener("keydown", function (event) {
+                        if (event.key === "Enter") {
+                            event.preventDefault();
+                            searchCloseJoJobs();
+                        }
+                    });
+                    closeJoSearchInput.setAttribute("data-bound", "1");
+                }
+                if (closeJoPickerBody && !closeJoPickerBody.getAttribute("data-bound")) {
+                    closeJoPickerBody.addEventListener("click", function (event) {
+                        var pickBtn = closestByClass(event.target, "js-close-jo-pick");
+                        if (!pickBtn) {
+                            return;
+                        }
+                        event.preventDefault();
+                        var idx = parseInt(pickBtn.getAttribute("data-index"), 10);
+                        if (isNaN(idx) || !closeJoPickerRows[idx]) {
+                            setCloseJoFeedback("Gagal memilih Training ID.", true, false);
+                            return;
+                        }
+                        applyCloseJoPick(closeJoPickerRows[idx]);
+                    });
+                    closeJoPickerBody.setAttribute("data-bound", "1");
+                }
+
                 syncCreateJoButtonVisibility();
                 if (statusOnlyCloseBtn) {
                     statusOnlyCloseBtn.addEventListener("click", closeStatusOnlyModal);
@@ -9209,6 +9921,7 @@
                 reportModalState.activeCell = null;
                 closeAssignModal();
                 closeCreateJoModal();
+                hideCloseJoModal();
                 closeStatusOnlyModal();
                 closeCompletedReportModal();
                 closeJoInfoModal();
