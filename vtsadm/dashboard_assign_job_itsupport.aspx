@@ -8074,16 +8074,22 @@
 
             function openCreateJoModal() {
                 resetTrainingAssignForm("", "", formatIsoDateInput(new Date()));
-                setCreateJoFeedback("", false, false);
+                setCreateJoFeedback("Memuat category / billable...", false, false);
                 var backdrop = getCreateJoBackdrop();
                 if (backdrop) {
                     backdrop.classList.add("open");
                 }
                 document.body.classList.add("assign-create-jo-open");
-                ensureTrainingLookupsLoaded(function () {
-                    if (!trainingLookupState.loaded) {
-                        setCreateJoFeedback("Gagal memuat category / billable.", true, false);
+                ensureTrainingLookupsLoaded(function (ok) {
+                    if (!ok) {
+                        setCreateJoFeedback(trainingLookupState.lastError || "Gagal memuat category / billable.", true, false);
+                        return;
                     }
+                    if (!trainingLookupState.hasBillable) {
+                        setCreateJoFeedback(trainingLookupState.lastError || "Category berhasil dimuat. Billable tidak ditemukan.", true, false);
+                        return;
+                    }
+                    setCreateJoFeedback("", false, false);
                 });
             }
 
@@ -8141,9 +8147,35 @@
 
             var trainingLookupState = {
                 loaded: false,
-                loading: false
+                loading: false,
+                hasCategory: false,
+                hasBillable: false,
+                lastError: "",
+                waiters: []
             };
             var createJoSaving = false;
+
+            function readLookupFlag(result) {
+                return String((result && (result.Result || result.result)) || "").toUpperCase();
+            }
+
+            function readLookupList(result, pascalName, camelName) {
+                if (!result) {
+                    return [];
+                }
+                var rows = result[pascalName] || result[camelName] || [];
+                return Object.prototype.toString.call(rows) === "[object Array]" ? rows : [];
+            }
+
+            function finishTrainingLookupWaiters(ok) {
+                var waiters = trainingLookupState.waiters.splice(0, trainingLookupState.waiters.length);
+                for (var i = 0; i < waiters.length; i++) {
+                    try {
+                        waiters[i](ok);
+                    } catch (ex) {
+                    }
+                }
+            }
 
             function ensureTrainingLookupsLoaded(done) {
                 function lookupFeedback(message, isError, isSuccess) {
@@ -8156,43 +8188,59 @@
                     }
                 }
 
+                if (typeof done === "function") {
+                    trainingLookupState.waiters.push(done);
+                }
                 if (trainingLookupState.loaded) {
-                    if (typeof done === "function") done();
+                    finishTrainingLookupWaiters(true);
                     return;
                 }
                 if (trainingLookupState.loading) {
-                    if (typeof done === "function") done();
                     return;
                 }
                 trainingLookupState.loading = true;
+                trainingLookupState.lastError = "";
                 lookupFeedback("Memuat category / billable...", false, false);
                 callAssignPageMethod("LoadTrainingLookups", {}, function (result) {
                     trainingLookupState.loading = false;
-                    var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
-                    if (!isSuccess) {
-                        lookupFeedback((result && result.Message) || "Gagal memuat lookup Training/Visit.", true, false);
-                        if (typeof done === "function") done();
+                    var isSuccess = readLookupFlag(result) === "SUCCESS";
+                    var categories = readLookupList(result, "Categories", "categories");
+                    var billables = readLookupList(result, "Billables", "billables");
+                    var categoryCount = fillTrainingSelect("assignTrainingCategory", categories);
+                    fillTrainingSelect("assignCloseJoCategory", categories);
+                    var billableCount = fillTrainingSelect("assignTrainingBillable", billables);
+                    trainingLookupState.hasCategory = categoryCount > 0;
+                    trainingLookupState.hasBillable = billableCount > 0;
+                    if (!isSuccess || categoryCount <= 0) {
+                        trainingLookupState.loaded = false;
+                        trainingLookupState.lastError = (result && (result.Message || result.message))
+                            || "Gagal memuat lookup Training/Visit.";
+                        lookupFeedback(trainingLookupState.lastError, true, false);
+                        finishTrainingLookupWaiters(false);
                         return;
                     }
-                    fillTrainingSelect("assignTrainingCategory", result.Categories || []);
-                    fillTrainingSelect("assignTrainingBillable", result.Billables || []);
-                    fillTrainingSelect("assignCloseJoCategory", result.Categories || []);
                     trainingLookupState.loaded = true;
-                    lookupFeedback("", false, false);
-                    if (typeof done === "function") done();
+                    trainingLookupState.lastError = billableCount > 0
+                        ? ""
+                        : ((result && (result.Message || result.message)) || "Billable tidak ditemukan.");
+                    finishTrainingLookupWaiters(true);
                 }, function (errorMessage) {
                     trainingLookupState.loading = false;
-                    lookupFeedback("Gagal memuat lookup. " + (errorMessage || ""), true, false);
-                    if (typeof done === "function") done();
+                    trainingLookupState.loaded = false;
+                    trainingLookupState.lastError = "Gagal memuat lookup. " + (errorMessage || "");
+                    lookupFeedback(trainingLookupState.lastError, true, false);
+                    finishTrainingLookupWaiters(false);
                 });
             }
 
             function fillTrainingSelect(selectId, items) {
                 var select = document.getElementById(selectId);
                 if (!select) {
-                    return;
+                    return 0;
                 }
+                items = Object.prototype.toString.call(items) === "[object Array]" ? items : [];
                 var html = '<option value="">[Select]</option>';
+                var count = 0;
                 for (var i = 0; i < items.length; i++) {
                     var item = items[i] || {};
                     var value = item.Value || item.value || "";
@@ -8201,8 +8249,10 @@
                         continue;
                     }
                     html += '<option value="' + escapeHtml(value) + '">' + escapeHtml(text) + '</option>';
+                    count += 1;
                 }
                 select.innerHTML = html;
+                return count;
             }
 
             function submitTrainingAssignFromModal() {
@@ -8403,15 +8453,17 @@
 
             function openCloseJoModal() {
                 resetCloseJoForm();
-                setCloseJoFeedback("", false, false);
+                setCloseJoFeedback("Memuat category...", false, false);
                 var backdrop = getCloseJoBackdrop();
                 if (backdrop) {
                     backdrop.classList.add("open");
                 }
-                ensureTrainingLookupsLoaded(function () {
-                    if (!trainingLookupState.loaded) {
-                        setCloseJoFeedback("Gagal memuat category.", true, false);
+                ensureTrainingLookupsLoaded(function (ok) {
+                    if (!ok) {
+                        setCloseJoFeedback(trainingLookupState.lastError || "Gagal memuat category.", true, false);
+                        return;
                     }
+                    setCloseJoFeedback("", false, false);
                 });
                 loadCloseJoFunctions();
             }
@@ -10019,6 +10071,34 @@
                 setActiveTabUI(normalizeTab(tabField ? tabField.value : "teknisi"));
             }
 
+            function scrollScheduleToCurrentDate() {
+                var wrap = document.querySelector(".assign-table-wrap");
+                if (!wrap) {
+                    return;
+                }
+
+                var todayHeader = wrap.querySelector("th.day-today-th");
+                if (!todayHeader) {
+                    return;
+                }
+
+                var stickyName = wrap.querySelector("th.sticky-name");
+                var stickyWidth = 0;
+                if (stickyName) {
+                    var wrapRect = wrap.getBoundingClientRect();
+                    stickyWidth = Math.max(0, stickyName.getBoundingClientRect().right - wrapRect.left);
+                }
+
+                var targetLeft = Math.max(0, todayHeader.offsetLeft - stickyWidth - 12);
+                wrap.scrollLeft = targetLeft;
+
+                var headerRect = todayHeader.getBoundingClientRect();
+                var needsVertical = headerRect.top < 80 || headerRect.bottom > window.innerHeight - 24;
+                if (needsVertical) {
+                    wrap.scrollIntoView({ block: "nearest", inline: "nearest" });
+                }
+            }
+
             var assignPerfChartState = {
                 dailyInstance: null,
                 monthlyInstance: null,
@@ -10799,6 +10879,7 @@
                 if (fromPostBack) {
                     resetAssignInteractionAfterPostback();
                 }
+                window.setTimeout(scrollScheduleToCurrentDate, fromPostBack ? 80 : 50);
             }
 
             document.addEventListener("DOMContentLoaded", function () {

@@ -11366,10 +11366,18 @@ ORDER BY
 
             try
             {
-                response.Categories = LoadLookupItemsFromSp("sp_list_training_category ''", false);
-                response.Billables = LoadLookupItemsFromSp("sp_list_billable_type ''", false);
+                response.Categories = LoadTrainingCategoryLookups();
+                response.Billables = LoadBillableLookups();
+                if (response.Categories == null || response.Categories.Count == 0)
+                {
+                    response.Message = "Category Training/Visit tidak ditemukan.";
+                    return response;
+                }
+
                 response.Result = "SUCCESS";
-                response.Message = "OK";
+                response.Message = (response.Billables == null || response.Billables.Count == 0)
+                    ? "Category berhasil dimuat. Billable tidak ditemukan."
+                    : "OK";
             }
             catch (Exception ex)
             {
@@ -11380,10 +11388,109 @@ ORDER BY
             return response;
         }
 
+        private static List<TrainingLookupItem> LoadTrainingCategoryLookups()
+        {
+            List<TrainingLookupItem> items = MapLookupTable(TryLoadLookupTable(
+                "SELECT TrainCategoryID, TrainCategoryDesc FROM ref_train_category WITH (NOLOCK) WHERE ISNULL(Status, 'RG') IN ('RG', 'OP', 'AC') ORDER BY TrainCategoryDesc",
+                "SELECT TrainCategoryID, TrainCategoryDesc FROM ref_train_category WITH (NOLOCK) ORDER BY TrainCategoryDesc",
+                "EXEC dbo.sp_list_training_category ''",
+                "EXEC dbo.sp_list_training_category"));
+
+            if (items.Count == 0)
+            {
+                items = LoadLookupItemsFromSp("sp_list_training_category ''", false);
+            }
+
+            if (items.Count == 0)
+            {
+                Dictionary<string, string> map = GetTrainCategoryMap();
+                foreach (KeyValuePair<string, string> pair in map)
+                {
+                    if (string.IsNullOrWhiteSpace(pair.Key))
+                    {
+                        continue;
+                    }
+
+                    items.Add(new TrainingLookupItem
+                    {
+                        Value = pair.Key,
+                        Text = string.IsNullOrWhiteSpace(pair.Value) ? pair.Key : pair.Value
+                    });
+                }
+            }
+
+            return items;
+        }
+
+        private static List<TrainingLookupItem> LoadBillableLookups()
+        {
+            List<TrainingLookupItem> items = MapLookupTable(TryLoadLookupTable(
+                "EXEC dbo.sp_list_billable_type ''",
+                "EXEC dbo.sp_list_billable_type",
+                "SELECT BillAbleID, BillAbleDesc FROM ref_billable_type WITH (NOLOCK) WHERE ISNULL(Status, 'RG') IN ('RG', 'OP', 'AC') ORDER BY BillAbleDesc",
+                "SELECT BillAbleID, BillAbleDesc FROM ref_billable_type WITH (NOLOCK) ORDER BY BillAbleDesc",
+                "SELECT BillAbleID, BillAbleDesc FROM ref_billable WITH (NOLOCK) WHERE ISNULL(Status, 'RG') IN ('RG', 'OP', 'AC') ORDER BY BillAbleDesc",
+                "SELECT BillAbleID, BillAbleDesc FROM ref_billable WITH (NOLOCK) ORDER BY BillAbleDesc",
+                "SELECT DISTINCT BillAbleID, BillAbleID AS BillAbleDesc FROM trx_training_order WITH (NOLOCK) WHERE LTRIM(RTRIM(ISNULL(BillAbleID, ''))) <> ''"));
+
+            if (items.Count == 0)
+            {
+                items = LoadLookupItemsFromSp("sp_list_billable_type ''", false);
+            }
+
+            return items;
+        }
+
+        private static DataTable TryLoadLookupTable(params string[] sqlCandidates)
+        {
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null || context.Session["ClsTypeDBConnStringSQL"] == null)
+            {
+                return new DataTable();
+            }
+
+            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            if (sqlCandidates == null || sqlCandidates.Length == 0 || string.IsNullOrWhiteSpace(connString))
+            {
+                return new DataTable();
+            }
+
+            foreach (string sql in sqlCandidates)
+            {
+                if (string.IsNullOrWhiteSpace(sql))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    DataTable table = ExecuteAdHocSqlQuery(sql, connString);
+                    if (table != null && table.Rows.Count > 0)
+                    {
+                        return table;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return new DataTable();
+        }
+
+        private static List<TrainingLookupItem> MapLookupTable(DataTable source)
+        {
+            return LoadLookupItemsFromTable(source, false);
+        }
+
         private static List<TrainingLookupItem> LoadLookupItemsFromSp(string storedProcedureName, bool trainingOrVisitOnly)
         {
+            return LoadLookupItemsFromTable(ExecuteJobTrainingQuery(storedProcedureName), trainingOrVisitOnly);
+        }
+
+        private static List<TrainingLookupItem> LoadLookupItemsFromTable(DataTable source, bool trainingOrVisitOnly)
+        {
             List<TrainingLookupItem> items = new List<TrainingLookupItem>();
-            DataTable source = ExecuteJobTrainingQuery(storedProcedureName);
             if (source == null || source.Rows.Count == 0)
             {
                 return items;
@@ -11413,6 +11520,18 @@ ORDER BY
                     {
                         text = namedText;
                     }
+                }
+
+                string namedValue = GetValue(row, ResolveFirstAvailableLookupColumn(
+                    source,
+                    "TrainCategoryID",
+                    "CategoryID",
+                    "BillAbleID",
+                    "BillableID",
+                    "Value"));
+                if (!string.IsNullOrWhiteSpace(namedValue))
+                {
+                    value = namedValue;
                 }
 
                 if (string.IsNullOrWhiteSpace(value) || value.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
@@ -11828,17 +11947,16 @@ ORDER BY
                 ExecCommand ec = new ExecCommand();
                 int affected = 0;
                 string error = string.Empty;
-                bool execOk = ec.Execute(sql, connString.Trim(), ref affected, ref error);
+                ec.Execute(sql, connString.Trim(), ref affected, ref error);
                 string trhId = ExtractTrainingHeaderId(error);
-                if (!execOk && string.IsNullOrWhiteSpace(trhId))
-                {
-                    response.Message = string.IsNullOrWhiteSpace(error) ? "Close job training gagal." : error;
-                    return response;
-                }
-
+                // training_cust.aspx: SP signals success by raiserror(@trhid,16,1).
+                // Function rows must be saved against the new TRH id, not the original TRO id.
                 if (string.IsNullOrWhiteSpace(trhId))
                 {
-                    trhId = safeTrainingId;
+                    response.Message = string.IsNullOrWhiteSpace(error)
+                        ? "Close job training gagal."
+                        : error;
+                    return response;
                 }
 
                 foreach (Dictionary<string, object> fn in functions)
