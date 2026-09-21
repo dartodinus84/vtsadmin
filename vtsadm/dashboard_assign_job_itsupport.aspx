@@ -218,6 +218,114 @@
             padding: 10px;
         }
 
+        .assign-close-pic-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .assign-close-pic-row input[type="file"] {
+            max-width: 100%;
+            font-size: 12px;
+        }
+
+        .assign-close-pic-msg {
+            margin-top: 6px;
+            font-size: 12px;
+            min-height: 16px;
+        }
+
+        .assign-close-pic-preview {
+            height: 195px;
+            text-align: center;
+            margin-top: 10px;
+            overflow: hidden;
+            background: #f7f7f7;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .assign-close-pic-preview.is-visible {
+            display: block;
+        }
+
+        .assign-close-pic-preview img {
+            max-height: 100%;
+            max-width: 100%;
+        }
+
+        .assign-action-btn.note {
+            background: #d97706;
+            color: #fff;
+            border-color: #d97706;
+        }
+
+        .assign-close-notes-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: auto;
+            max-height: 180px;
+            background: #fff;
+        }
+
+        .assign-close-notes-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 760px;
+        }
+
+        .assign-close-notes-table th {
+            background: #f3f4f6;
+            color: #1f4b99;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: left;
+            padding: 7px 8px;
+            white-space: nowrap;
+        }
+
+        .assign-close-notes-table td {
+            font-size: 12px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: middle;
+        }
+
+        .assign-close-note-pic {
+            border: 0;
+            background: #f59e0b;
+            color: #fff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+
+        .assign-close-note-pic:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        #assignCloseJoNotePicBackdrop {
+            z-index: 1500;
+        }
+
+        .assign-close-note-pic-modal {
+            max-width: 640px;
+        }
+
+        .assign-close-note-pic-body {
+            height: 320px;
+            text-align: center;
+            background: #f7f7f7;
+        }
+
+        .assign-close-note-pic-body img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
         .assign-tabs {
             display: inline-flex;
             background: #f8f7f5;
@@ -4389,7 +4497,6 @@
                             <label class="assign-field-label" for="assignCloseJoTrainingId">Training ID</label>
                             <input type="hidden" id="assignCloseJoTrainingId" value="" />
                             <input type="hidden" id="assignCloseJoCustId" value="" />
-                            <input type="hidden" id="assignCloseJoBusinessFieldId" value="" />
                             <button type="button" class="assign-pick-btn" id="assignCloseJoPickBtn">Pilih Training ID</button>
                             <div class="assign-picked-jo" id="assignCloseJoPickedText">Belum ada Training ID dipilih</div>
                         </div>
@@ -4408,6 +4515,12 @@
                         <div class="assign-info-item" style="margin-top:8px;">
                             <span class="assign-info-label">Branch Name</span>
                             <span class="assign-info-value" id="assignCloseJoBranch">-</span>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoBusinessField">Business Fields</label>
+                            <select id="assignCloseJoBusinessField">
+                                <option value="">[Select]</option>
+                            </select>
                         </div>
                     </div>
                     <div class="assign-create-jo-col">
@@ -4434,6 +4547,19 @@
                             <label class="assign-field-label" for="assignCloseJoRemark">Remark</label>
                             <textarea id="assignCloseJoRemark" class="assign-dashboard-note-textarea" rows="2" placeholder="Remark ..."></textarea>
                         </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignCloseJoPictureInput">Picture Attachment</label>
+                            <div class="assign-close-pic-row">
+                                <input type="file" id="assignCloseJoPictureInput" accept="image/jpeg,image/png,.jpg,.jpeg,.png,image/*" />
+                                <button type="button" class="assign-pick-btn" id="assignCloseJoPictureUploadBtn">Upload</button>
+                                <button type="button" class="assign-pick-btn" id="assignCloseJoPictureRemoveBtn">Remove</button>
+                            </div>
+                            <input type="hidden" id="assignCloseJoPictureFileName" value="" />
+                            <div class="assign-close-pic-msg" id="assignCloseJoPictureMsg"></div>
+                            <div class="assign-close-pic-preview" id="assignCloseJoPicturePreviewWrap">
+                                <img id="assignCloseJoPicturePreview" alt="Picture preview" />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <p class="assign-section-label" style="margin-top:12px;">Function Menu</p>
@@ -4450,14 +4576,47 @@
                         <tbody id="assignCloseJoFunctionBody"></tbody>
                     </table>
                 </div>
+                <p class="assign-section-label" style="margin-top:12px;">List Remark</p>
+                <div class="assign-close-notes-wrap">
+                    <table class="assign-close-notes-table">
+                        <thead>
+                            <tr>
+                                <th>TrainingID</th>
+                                <th>Customer Name</th>
+                                <th>Category</th>
+                                <th>Remark</th>
+                                <th>UsrUpd</th>
+                                <th>DtmUpd</th>
+                                <th>Picture</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assignCloseJoNotesBody"></tbody>
+                    </table>
+                </div>
                 <div class="assign-feedback" id="assignCloseJoFeedback"></div>
             </div>
             <div class="assign-job-footer">
-                <div class="assign-footer-left-actions"></div>
+                <div class="assign-footer-left-actions">
+                    <button type="button" class="assign-action-btn note" id="assignCloseJoAddNoteBtn">Add Note</button>
+                </div>
                 <div class="assign-actions">
                     <button type="button" class="assign-action-btn cancel" id="assignCloseJoCancelBtn">Cancel</button>
                     <button type="button" class="assign-action-btn submit" id="assignCloseJoSubmitBtn">Submit</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="assign-job-backdrop" id="assignCloseJoNotePicBackdrop">
+        <div class="assign-job-modal assign-close-note-pic-modal" role="dialog" aria-modal="true" aria-labelledby="assignCloseJoNotePicTitle">
+            <div class="assign-job-modal-header">
+                <div class="assign-job-title-wrap">
+                    <h4 id="assignCloseJoNotePicTitle">Picture Attachment</h4>
+                </div>
+                <button type="button" class="assign-job-close" id="assignCloseJoNotePicCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="assign-job-body assign-close-note-pic-body">
+                <img id="assignCloseJoNotePicImg" alt="Picture attachment" />
             </div>
         </div>
     </div>
@@ -8206,8 +8365,13 @@
                     var isSuccess = readLookupFlag(result) === "SUCCESS";
                     var categories = readLookupList(result, "Categories", "categories");
                     var billables = readLookupList(result, "Billables", "billables");
+                    var businessFields = readLookupList(result, "BusinessFields", "businessFields");
                     var categoryCount = fillTrainingSelect("assignTrainingCategory", categories);
                     fillTrainingSelect("assignCloseJoCategory", categories);
+                    fillTrainingSelect("assignCloseJoBusinessField", businessFields);
+                    if (closeJoPickedBusinessFieldId) {
+                        setSelectByIdOrText("assignCloseJoBusinessField", closeJoPickedBusinessFieldId, "");
+                    }
                     var billableCount = fillTrainingSelect("assignTrainingBillable", billables);
                     trainingLookupState.hasCategory = categoryCount > 0;
                     trainingLookupState.hasBillable = billableCount > 0;
@@ -8270,6 +8434,9 @@
                 var remark = (document.getElementById("assignTrainingRemark") || {}).value || "";
                 var itUserId = (document.getElementById("assignTrainingItUserId") || {}).value || "";
                 var itUserName = (document.getElementById("assignTrainingItUserName") || {}).value || "";
+                var customerName = ((document.getElementById("assignTrainingCustName") || {}).textContent || "").trim();
+                var picName = (document.getElementById("assignTrainingPicName") || {}).value || "";
+                var picPhone = (document.getElementById("assignTrainingPicPhone") || {}).value || "";
                 var submitBtn = document.getElementById("assignCreateJoSubmitBtn");
 
                 if (!custId) {
@@ -8304,7 +8471,10 @@
                         remark: remark,
                         categoryId: categoryId,
                         itUserId: itUserId,
-                        itUserName: itUserName
+                        itUserName: itUserName,
+                        customerName: customerName === "-" ? "" : customerName,
+                        picName: picName,
+                        picPhone: picPhone
                     },
                     function (result) {
                         createJoSaving = false;
@@ -8364,8 +8534,10 @@
             };
 
             var closeJoSaving = false;
+            var closeJoNoteSaving = false;
             var closeJoFunctionsLoaded = false;
             var closeJoPickerRows = [];
+            var closeJoPickedBusinessFieldId = "";
 
             function setCloseJoFeedback(message, isError, isSuccess) {
                 var box = document.getElementById("assignCloseJoFeedback");
@@ -8414,6 +8586,7 @@
 
             function hideCloseJoModal() {
                 hideCloseJoPicker();
+                hideCloseJoNotePicture();
                 var backdrop = getCloseJoBackdrop();
                 if (backdrop) {
                     backdrop.classList.remove("open");
@@ -8424,7 +8597,7 @@
             function resetCloseJoForm() {
                 var trainingId = document.getElementById("assignCloseJoTrainingId");
                 var custId = document.getElementById("assignCloseJoCustId");
-                var businessFieldId = document.getElementById("assignCloseJoBusinessFieldId");
+                var businessField = document.getElementById("assignCloseJoBusinessField");
                 var picked = document.getElementById("assignCloseJoPickedText");
                 var reqDate = document.getElementById("assignCloseJoReqDate");
                 var custName = document.getElementById("assignCloseJoCustName");
@@ -8435,9 +8608,10 @@
                 var attendances = document.getElementById("assignCloseJoAttendances");
                 var category = document.getElementById("assignCloseJoCategory");
                 var remark = document.getElementById("assignCloseJoRemark");
+                closeJoPickedBusinessFieldId = "";
                 if (trainingId) trainingId.value = "";
                 if (custId) custId.value = "";
-                if (businessFieldId) businessFieldId.value = "";
+                if (businessField) businessField.value = "";
                 if (picked) picked.textContent = "Belum ada Training ID dipilih";
                 if (reqDate) reqDate.textContent = "-";
                 if (custName) custName.textContent = "-";
@@ -8448,7 +8622,9 @@
                 if (attendances) attendances.value = "";
                 if (category) category.value = "";
                 if (remark) remark.value = "";
+                resetCloseJoPicture();
                 renderCloseJoFunctions([]);
+                renderCloseJoNotes([]);
             }
 
             function openCloseJoModal() {
@@ -8517,6 +8693,106 @@
                         }
                     }
                 }
+                if (value && value !== "[Select]") {
+                    var option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = text || value;
+                    select.appendChild(option);
+                    select.value = value;
+                }
+            }
+
+            function setCloseJoPictureMsg(message, isError) {
+                var el = document.getElementById("assignCloseJoPictureMsg");
+                if (!el) {
+                    return;
+                }
+                el.textContent = message || "";
+                el.style.color = isError ? "#b42318" : "#0a5c48";
+            }
+
+            function applyCloseJoPictureFileName(fileName) {
+                var hidden = document.getElementById("assignCloseJoPictureFileName");
+                var preview = document.getElementById("assignCloseJoPicturePreview");
+                var wrap = document.getElementById("assignCloseJoPicturePreviewWrap");
+                fileName = String(fileName || "").trim();
+                if (hidden) {
+                    hidden.value = fileName;
+                }
+                if (preview && wrap) {
+                    if (fileName) {
+                        preview.src = "Picture/" + encodeURIComponent(fileName);
+                        wrap.classList.add("is-visible");
+                    } else {
+                        preview.removeAttribute("src");
+                        wrap.classList.remove("is-visible");
+                    }
+                }
+            }
+
+            function resetCloseJoPicture() {
+                var input = document.getElementById("assignCloseJoPictureInput");
+                if (input) {
+                    input.value = "";
+                }
+                applyCloseJoPictureFileName("");
+                setCloseJoPictureMsg("", false);
+            }
+
+            function uploadCloseJoPicture() {
+                var input = document.getElementById("assignCloseJoPictureInput");
+                var file = input && input.files && input.files[0];
+                if (!file) {
+                    setCloseJoPictureMsg("Pilih file gambar dulu.", true);
+                    return;
+                }
+                var name = String(file.name || "").toLowerCase();
+                var type = String(file.type || "").toLowerCase();
+                if (!(/\.(jpe?g|png)$/i.test(name) || /image\/(jpeg|jpg|png)/i.test(type))) {
+                    setCloseJoPictureMsg("Hanya JPG/JPEG/PNG yang diperbolehkan.", true);
+                    return;
+                }
+                if (file.size > 4 * 1024 * 1024) {
+                    setCloseJoPictureMsg("Ukuran gambar maksimal 4 MB.", true);
+                    return;
+                }
+
+                setCloseJoPictureMsg("Mengunggah gambar...", false);
+                var form = new FormData();
+                form.append("picture", file, file.name);
+                var request = new XMLHttpRequest();
+                request.open("POST", getAssignPageUrl() + "?action=uploadpic", true);
+                request.setRequestHeader("Accept", "application/json");
+                request.onreadystatechange = function () {
+                    if (request.readyState !== 4) {
+                        return;
+                    }
+                    if (request.status !== 200) {
+                        setCloseJoPictureMsg("Gagal upload gambar. HTTP " + request.status, true);
+                        return;
+                    }
+                    try {
+                        var text = String(request.responseText || "").replace(/^\uFEFF/, "").trim();
+                        if (!text || text.charAt(0) === "<") {
+                            throw new Error("Invalid response");
+                        }
+                        var response = JSON.parse(text);
+                        if (response && typeof response.d !== "undefined") {
+                            response = typeof response.d === "string" ? JSON.parse(response.d) : response.d;
+                        }
+                        var ok = ((response && response.Result) || "").toUpperCase() === "SUCCESS";
+                        var savedName = (response && (response.FileName || response.fileName)) || "";
+                        if (!ok || !savedName) {
+                            setCloseJoPictureMsg((response && response.Message) || "Gagal upload gambar.", true);
+                            return;
+                        }
+                        applyCloseJoPictureFileName(savedName);
+                        setCloseJoPictureMsg("Gambar berhasil diunggah.", false);
+                    } catch (ex) {
+                        setCloseJoPictureMsg("Gagal upload gambar. Format response tidak valid.", true);
+                    }
+                };
+                request.send(form);
             }
 
             function loadCloseJoFunctions() {
@@ -8585,6 +8861,145 @@
                     });
                 }
                 return rows;
+            }
+
+            function renderCloseJoNotes(rows) {
+                var body = document.getElementById("assignCloseJoNotesBody");
+                if (!body) {
+                    return;
+                }
+                rows = rows || [];
+                if (!rows.length) {
+                    body.innerHTML = "<tr><td colspan=\"7\" class=\"assign-close-fn-empty\">Belum ada remark.</td></tr>";
+                    return;
+                }
+                var html = "";
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var pic = row.PictureFileName || row.pictureFileName || "";
+                    html += "<tr>"
+                        + "<td>" + escapeHtml(row.TrainingID || row.trainingId || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.CustomerName || row.customerName || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.CategoryName || row.categoryName || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.Remark || row.remark || "") + "</td>"
+                        + "<td>" + escapeHtml(row.UsrUpd || row.usrUpd || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.DtmUpd || row.dtmUpd || "-") + "</td>"
+                        + "<td><button type=\"button\" class=\"assign-close-note-pic js-close-note-pic\" data-file=\""
+                        + escapeHtml(pic) + "\"" + (pic ? "" : " disabled=\"disabled\"")
+                        + "><i class=\"fa fa-file-image-o\"></i></button></td>"
+                        + "</tr>";
+                }
+                body.innerHTML = html;
+            }
+
+            function loadCloseJoNotes(trainingId) {
+                trainingId = String(trainingId || "").trim();
+                if (!trainingId) {
+                    renderCloseJoNotes([]);
+                    return;
+                }
+                callAssignPageMethod("LoadTrainingNotes", { trainingId: trainingId }, function (result) {
+                    var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                    renderCloseJoNotes(isSuccess ? (result.Rows || result.rows || []) : []);
+                    if (!isSuccess && isCloseJoModalOpen()) {
+                        setCloseJoFeedback((result && result.Message) || "Gagal memuat list remark.", true, false);
+                    }
+                }, function (errorMessage) {
+                    renderCloseJoNotes([]);
+                    if (isCloseJoModalOpen()) {
+                        setCloseJoFeedback("Gagal memuat list remark. " + (errorMessage || ""), true, false);
+                    }
+                });
+            }
+
+            function showCloseJoNotePicture(fileName) {
+                fileName = String(fileName || "").trim();
+                if (!fileName) {
+                    return;
+                }
+                var img = document.getElementById("assignCloseJoNotePicImg");
+                var backdrop = document.getElementById("assignCloseJoNotePicBackdrop");
+                if (img) {
+                    img.src = "Picture/" + encodeURIComponent(fileName);
+                }
+                if (backdrop) {
+                    backdrop.classList.add("open");
+                }
+            }
+
+            function hideCloseJoNotePicture() {
+                var backdrop = document.getElementById("assignCloseJoNotePicBackdrop");
+                var img = document.getElementById("assignCloseJoNotePicImg");
+                if (backdrop) {
+                    backdrop.classList.remove("open");
+                }
+                if (img) {
+                    img.removeAttribute("src");
+                }
+            }
+
+            function submitCloseJoAddNote() {
+                if (closeJoNoteSaving || closeJoSaving) {
+                    return;
+                }
+                var trainingId = ((document.getElementById("assignCloseJoTrainingId") || {}).value || "").trim();
+                var custId = ((document.getElementById("assignCloseJoCustId") || {}).value || "").trim();
+                var remark = ((document.getElementById("assignCloseJoRemark") || {}).value || "").trim();
+                var categoryId = ((document.getElementById("assignCloseJoCategory") || {}).value || "").trim();
+                var pictureFileName = ((document.getElementById("assignCloseJoPictureFileName") || {}).value || "").trim();
+                var noteBtn = document.getElementById("assignCloseJoAddNoteBtn");
+
+                if (!trainingId || !custId || !remark) {
+                    setCloseJoFeedback("Training ID, Customer, dan Remark wajib diisi.", true, false);
+                    return;
+                }
+                if (!categoryId || categoryId === "[Select]") {
+                    setCloseJoFeedback("Category wajib dipilih.", true, false);
+                    return;
+                }
+                if (!window.confirm("Tambah note untuk JO ini?")) {
+                    return;
+                }
+
+                closeJoNoteSaving = true;
+                if (noteBtn) {
+                    noteBtn.disabled = true;
+                }
+                setCloseJoFeedback("Menyimpan note...", false, false);
+                callAssignPageMethod(
+                    "AddTrainingNote",
+                    {
+                        trainingId: trainingId,
+                        custId: custId,
+                        categoryId: categoryId,
+                        remark: remark,
+                        pictureFileName: pictureFileName
+                    },
+                    function (result) {
+                        closeJoNoteSaving = false;
+                        if (noteBtn) {
+                            noteBtn.disabled = false;
+                        }
+                        var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                        if (!isSuccess) {
+                            var failedMessage = (result && result.Message) || "Add Notes gagal.";
+                            setCloseJoFeedback(failedMessage, true, false);
+                            showAssignToast(failedMessage, true);
+                            return;
+                        }
+                        var successMessage = (result && result.Message) || "Add Notes training has been save successfully!";
+                        setCloseJoFeedback(successMessage, false, true);
+                        showAssignToast(successMessage, false);
+                        loadCloseJoNotes(trainingId);
+                    },
+                    function (errorMessage) {
+                        closeJoNoteSaving = false;
+                        if (noteBtn) {
+                            noteBtn.disabled = false;
+                        }
+                        setCloseJoFeedback("Add Notes gagal. " + (errorMessage || ""), true, false);
+                        showAssignToast("Add Notes gagal.", true);
+                    });
             }
 
             function openCloseJoPicker() {
@@ -8671,7 +9086,6 @@
 
                 var trainingIdEl = document.getElementById("assignCloseJoTrainingId");
                 var custIdEl = document.getElementById("assignCloseJoCustId");
-                var businessFieldEl = document.getElementById("assignCloseJoBusinessFieldId");
                 var picked = document.getElementById("assignCloseJoPickedText");
                 var reqDateEl = document.getElementById("assignCloseJoReqDate");
                 var custNameEl = document.getElementById("assignCloseJoCustName");
@@ -8680,9 +9094,9 @@
                 var trainingDateEl = document.getElementById("assignCloseJoTrainingDate");
                 var trainersEl = document.getElementById("assignCloseJoTrainers");
 
+                closeJoPickedBusinessFieldId = businessFieldId;
                 if (trainingIdEl) trainingIdEl.value = trainingId;
                 if (custIdEl) custIdEl.value = custId;
-                if (businessFieldEl) businessFieldEl.value = businessFieldId;
                 if (picked) picked.textContent = trainingId ? (trainingId + " - " + customerName) : "Belum ada Training ID dipilih";
                 if (reqDateEl) reqDateEl.textContent = reqDate || "-";
                 if (custNameEl) custNameEl.textContent = customerName || "-";
@@ -8691,8 +9105,10 @@
                 if (trainingDateEl) trainingDateEl.value = parseCloseJoDateToIso(assignDate || schDate) || formatIsoDateInput(new Date());
                 if (trainersEl) trainersEl.value = trainer || "";
                 setSelectByIdOrText("assignCloseJoCategory", categoryId, categoryDesc);
+                setSelectByIdOrText("assignCloseJoBusinessField", businessFieldId, "");
                 hideCloseJoPicker();
                 setCloseJoFeedback("", false, false);
+                loadCloseJoNotes(trainingId);
             }
 
             function submitCloseJoFromModal() {
@@ -8706,7 +9122,10 @@
                 var attendances = ((document.getElementById("assignCloseJoAttendances") || {}).value || "").trim();
                 var categoryId = ((document.getElementById("assignCloseJoCategory") || {}).value || "").trim();
                 var remark = ((document.getElementById("assignCloseJoRemark") || {}).value || "").trim();
-                var businessFieldId = ((document.getElementById("assignCloseJoBusinessFieldId") || {}).value || "").trim();
+                var businessFieldId = ((document.getElementById("assignCloseJoBusinessField") || {}).value || "").trim();
+                var pictureFileName = ((document.getElementById("assignCloseJoPictureFileName") || {}).value || "").trim();
+                var customerName = ((document.getElementById("assignCloseJoCustName") || {}).textContent || "").trim();
+                var schDate = ((document.getElementById("assignCloseJoSchDate") || {}).textContent || "").trim();
                 var functions = collectCloseJoFunctions();
                 var submitBtn = document.getElementById("assignCloseJoSubmitBtn");
 
@@ -8754,6 +9173,9 @@
                         categoryId: categoryId,
                         remark: remark,
                         businessFieldId: businessFieldId,
+                        pictureFileName: pictureFileName,
+                        customerName: customerName === "-" ? "" : customerName,
+                        schDate: schDate === "-" ? "" : schDate,
                         functions: functions
                     },
                     function (result) {
@@ -9340,6 +9762,67 @@
                         }
                     });
                     closeJoSearchInput.setAttribute("data-bound", "1");
+                }
+                var closeJoPictureUploadBtn = document.getElementById("assignCloseJoPictureUploadBtn");
+                var closeJoPictureRemoveBtn = document.getElementById("assignCloseJoPictureRemoveBtn");
+                var closeJoBusinessField = document.getElementById("assignCloseJoBusinessField");
+                if (closeJoPictureUploadBtn && !closeJoPictureUploadBtn.getAttribute("data-bound")) {
+                    closeJoPictureUploadBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        uploadCloseJoPicture();
+                    });
+                    closeJoPictureUploadBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoPictureRemoveBtn && !closeJoPictureRemoveBtn.getAttribute("data-bound")) {
+                    closeJoPictureRemoveBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        resetCloseJoPicture();
+                        setCloseJoPictureMsg("Picture removed.", false);
+                    });
+                    closeJoPictureRemoveBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoBusinessField && !closeJoBusinessField.getAttribute("data-bound")) {
+                    closeJoBusinessField.addEventListener("change", function () {
+                        closeJoPickedBusinessFieldId = (closeJoBusinessField.value || "").trim();
+                    });
+                    closeJoBusinessField.setAttribute("data-bound", "1");
+                }
+                var closeJoAddNoteBtn = document.getElementById("assignCloseJoAddNoteBtn");
+                var closeJoNotesBody = document.getElementById("assignCloseJoNotesBody");
+                var closeJoNotePicCloseBtn = document.getElementById("assignCloseJoNotePicCloseBtn");
+                var closeJoNotePicBackdrop = document.getElementById("assignCloseJoNotePicBackdrop");
+                if (closeJoAddNoteBtn && !closeJoAddNoteBtn.getAttribute("data-bound")) {
+                    closeJoAddNoteBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        submitCloseJoAddNote();
+                    });
+                    closeJoAddNoteBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoNotesBody && !closeJoNotesBody.getAttribute("data-bound")) {
+                    closeJoNotesBody.addEventListener("click", function (event) {
+                        var picBtn = closestByClass(event.target, "js-close-note-pic");
+                        if (!picBtn || picBtn.disabled) {
+                            return;
+                        }
+                        event.preventDefault();
+                        showCloseJoNotePicture(picBtn.getAttribute("data-file") || "");
+                    });
+                    closeJoNotesBody.setAttribute("data-bound", "1");
+                }
+                if (closeJoNotePicCloseBtn && !closeJoNotePicCloseBtn.getAttribute("data-bound")) {
+                    closeJoNotePicCloseBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        hideCloseJoNotePicture();
+                    });
+                    closeJoNotePicCloseBtn.setAttribute("data-bound", "1");
+                }
+                if (closeJoNotePicBackdrop && !closeJoNotePicBackdrop.getAttribute("data-bound")) {
+                    closeJoNotePicBackdrop.addEventListener("click", function (event) {
+                        if (event.target === closeJoNotePicBackdrop) {
+                            hideCloseJoNotePicture();
+                        }
+                    });
+                    closeJoNotePicBackdrop.setAttribute("data-bound", "1");
                 }
                 if (closeJoPickerBody && !closeJoPickerBody.getAttribute("data-bound")) {
                     closeJoPickerBody.addEventListener("click", function (event) {

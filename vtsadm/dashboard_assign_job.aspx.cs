@@ -5,6 +5,7 @@ using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -89,6 +90,14 @@ namespace vtsadm
             public string Message { get; set; }
             public List<TrainingLookupItem> Categories { get; set; }
             public List<TrainingLookupItem> Billables { get; set; }
+            public List<TrainingLookupItem> BusinessFields { get; set; }
+        }
+
+        public class TrainingPictureUploadResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public string FileName { get; set; }
         }
 
         public class TrainingCloseJobItem
@@ -124,6 +133,24 @@ namespace vtsadm
             public string Result { get; set; }
             public string Message { get; set; }
             public List<TrainingFunctionItem> Rows { get; set; }
+        }
+
+        public class TrainingNoteItem
+        {
+            public string TrainingID { get; set; }
+            public string CustomerName { get; set; }
+            public string CategoryName { get; set; }
+            public string Remark { get; set; }
+            public string UsrUpd { get; set; }
+            public string DtmUpd { get; set; }
+            public string PictureFileName { get; set; }
+        }
+
+        public class TrainingNoteListResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public List<TrainingNoteItem> Rows { get; set; }
         }
 
         public class AreaOptionItem
@@ -538,6 +565,7 @@ namespace vtsadm
             if (HandleJobOrderInformationRequest()
                 || HandleDayTotalJoListRequest()
                 || HandleAreaOptionsRequest()
+                || HandleTrainingPictureUploadRequest()
                 || HandleWebMethodBridgeRequest())
             {
                 return;
@@ -818,6 +846,67 @@ namespace vtsadm
             return true;
         }
 
+        private bool HandleTrainingPictureUploadRequest()
+        {
+            string action = (Request.QueryString["action"] ?? string.Empty).Trim();
+            if (!action.Equals("uploadpic", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            try
+            {
+                ClsType clType = new ClsType();
+                string accessMenu = Session["ClsTypeAccessMenu"] == null
+                    ? string.Empty
+                    : Convert.ToString(Session["ClsTypeAccessMenu"]);
+                if (string.IsNullOrWhiteSpace(accessMenu) || !accessMenu.ToUpperInvariant().Contains("MNUDASHASSIGNJOB"))
+                {
+                    WriteRawJsonAndEnd(SerializeToJson(new TrainingPictureUploadResponse
+                    {
+                        Result = "ERROR",
+                        Message = "Akses menu tidak valid.",
+                        FileName = string.Empty
+                    }));
+                    return true;
+                }
+
+                if (Session["ClsTypeIsLogin"] == null || !clType.SudahLogon(Convert.ToBoolean(Session["ClsTypeIsLogin"])))
+                {
+                    WriteRawJsonAndEnd(SerializeToJson(new TrainingPictureUploadResponse
+                    {
+                        Result = "ERROR",
+                        Message = "Session login tidak valid. Silakan login ulang.",
+                        FileName = string.Empty
+                    }));
+                    return true;
+                }
+
+                HttpPostedFile posted = Request.Files["picture"];
+                if (posted == null && Request.Files.Count > 0)
+                {
+                    posted = Request.Files[0];
+                }
+
+                WriteRawJsonAndEnd(SerializeToJson(ExecuteUploadTrainingPictureFile(posted)));
+            }
+            catch (System.Threading.ThreadAbortException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                WriteRawJsonAndEnd(SerializeToJson(new TrainingPictureUploadResponse
+                {
+                    Result = "ERROR",
+                    Message = "Gagal upload gambar: " + (ex.Message ?? string.Empty),
+                    FileName = string.Empty
+                }));
+            }
+
+            return true;
+        }
+
         private bool HandleWebMethodBridgeRequest()
         {
             string action = (Request.QueryString["action"] ?? string.Empty).Trim();
@@ -1068,7 +1157,10 @@ namespace vtsadm
                     GetPayloadString(args, "remark"),
                     GetPayloadString(args, "categoryId"),
                     GetPayloadString(args, "itUserId"),
-                    GetPayloadString(args, "itUserName"));
+                    GetPayloadString(args, "itUserName"),
+                    GetPayloadString(args, "customerName"),
+                    GetPayloadString(args, "picName"),
+                    GetPayloadString(args, "picPhone"));
             }
 
             if (method.Equals("LoadOpenTrainingJobs", StringComparison.OrdinalIgnoreCase))
@@ -1091,7 +1183,30 @@ namespace vtsadm
                     GetPayloadString(args, "categoryId"),
                     GetPayloadString(args, "remark"),
                     GetPayloadString(args, "businessFieldId"),
+                    GetPayloadString(args, "pictureFileName"),
                     args);
+            }
+
+            if (method.Equals("UploadTrainingPicture", StringComparison.OrdinalIgnoreCase))
+            {
+                return ExecuteUploadTrainingPicture(
+                    GetPayloadString(args, "fileName"),
+                    GetPayloadString(args, "contentBase64"));
+            }
+
+            if (method.Equals("LoadTrainingNotes", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildTrainingNotesResponse(GetPayloadString(args, "trainingId"));
+            }
+
+            if (method.Equals("AddTrainingNote", StringComparison.OrdinalIgnoreCase))
+            {
+                return ExecuteAddTrainingNote(
+                    GetPayloadString(args, "trainingId"),
+                    GetPayloadString(args, "custId"),
+                    GetPayloadString(args, "categoryId"),
+                    GetPayloadString(args, "remark"),
+                    GetPayloadString(args, "pictureFileName"));
             }
 
             if (method.Equals("LoadJobOrderInformation", StringComparison.OrdinalIgnoreCase))
@@ -11361,13 +11476,15 @@ ORDER BY
                 Result = "ERROR",
                 Message = string.Empty,
                 Categories = new List<TrainingLookupItem>(),
-                Billables = new List<TrainingLookupItem>()
+                Billables = new List<TrainingLookupItem>(),
+                BusinessFields = new List<TrainingLookupItem>()
             };
 
             try
             {
                 response.Categories = LoadTrainingCategoryLookups();
                 response.Billables = LoadBillableLookups();
+                response.BusinessFields = LoadBusinessFieldLookups();
                 if (response.Categories == null || response.Categories.Count == 0)
                 {
                     response.Message = "Category Training/Visit tidak ditemukan.";
@@ -11436,6 +11553,23 @@ ORDER BY
             if (items.Count == 0)
             {
                 items = LoadLookupItemsFromSp("sp_list_billable_type ''", false);
+            }
+
+            return items;
+        }
+
+        private static List<TrainingLookupItem> LoadBusinessFieldLookups()
+        {
+            List<TrainingLookupItem> items = MapLookupTable(TryLoadLookupTable(
+                "EXEC dbo.sp_list_customer_business_field ''",
+                "EXEC dbo.sp_list_customer_business_field",
+                "SELECT BusinessFieldID, BusinessFieldDesc FROM ref_business_field WITH (NOLOCK) WHERE ISNULL(Status, 'RG') IN ('RG', 'OP', 'AC') ORDER BY BusinessFieldDesc",
+                "SELECT BusinessFieldID, BusinessFieldDesc FROM ref_business_field WITH (NOLOCK) ORDER BY BusinessFieldDesc",
+                "SELECT BusinessFieldID, BusinessFieldName FROM mst_business_field WITH (NOLOCK) ORDER BY BusinessFieldName"));
+
+            if (items.Count == 0)
+            {
+                items = LoadLookupItemsFromSp("sp_list_customer_business_field ''", false);
             }
 
             return items;
@@ -11515,7 +11649,9 @@ ORDER BY
                         "CategoryName",
                         "CategoryDesc",
                         "BillAbleDesc",
-                        "BillableDesc"));
+                        "BillableDesc",
+                        "BusinessFieldDesc",
+                        "BusinessFieldName"));
                     if (!string.IsNullOrWhiteSpace(namedText))
                     {
                         text = namedText;
@@ -11528,6 +11664,7 @@ ORDER BY
                     "CategoryID",
                     "BillAbleID",
                     "BillableID",
+                    "BusinessFieldID",
                     "Value"));
                 if (!string.IsNullOrWhiteSpace(namedValue))
                 {
@@ -11841,6 +11978,7 @@ ORDER BY
             string categoryId,
             string remark,
             string businessFieldId,
+            string pictureFileName,
             Dictionary<string, object> payload)
         {
             SaveAssignResponse response = new SaveAssignResponse
@@ -11877,6 +12015,7 @@ ORDER BY
             string safeCategoryId = (categoryId ?? string.Empty).Trim();
             string safeRemark = (remark ?? string.Empty).Trim();
             string safeBusinessFieldId = (businessFieldId ?? string.Empty).Trim();
+            string safePictureFileName = Path.GetFileName((pictureFileName ?? string.Empty).Trim());
             if (string.IsNullOrWhiteSpace(safeBusinessFieldId))
             {
                 safeBusinessFieldId = "[Select]";
@@ -11940,7 +12079,8 @@ ORDER BY
                     + EscapeSqlLiteral(safeTrainers) + "','"
                     + EscapeSqlLiteral(safeAttendances) + "','"
                     + EscapeSqlLiteral(safeCategoryId) + "','"
-                    + EscapeSqlLiteral(safeRemark) + "','','"
+                    + EscapeSqlLiteral(safeRemark) + "','"
+                    + EscapeSqlLiteral(safePictureFileName) + "','"
                     + EscapeSqlLiteral(safeBusinessFieldId) + "','"
                     + EscapeSqlLiteral(userId.Trim()) + "'";
 
@@ -11985,12 +12125,148 @@ ORDER BY
                 response.Result = "SUCCESS";
                 response.AssignID = trhId;
                 response.Message = "Job Training/Visit berhasil di-close.";
+
+                SendTrainingCustomerCloseTelegram(
+                    connString,
+                    safeTrainingId,
+                    GetPayloadString(payload, "schDate"),
+                    trainingDateValue,
+                    GetPayloadString(payload, "customerName"),
+                    safeRemark,
+                    safeTrainers);
             }
             catch (Exception ex)
             {
                 response.Message = "Gagal close job training: " + (ex.Message ?? string.Empty);
             }
 
+            return response;
+        }
+
+        protected static TrainingPictureUploadResponse ExecuteUploadTrainingPicture(string fileName, string contentBase64)
+        {
+            TrainingPictureUploadResponse response = new TrainingPictureUploadResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                FileName = string.Empty
+            };
+
+            try
+            {
+                string raw = contentBase64 ?? string.Empty;
+                int comma = raw.IndexOf(',');
+                if (raw.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma >= 0)
+                {
+                    raw = raw.Substring(comma + 1);
+                }
+
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    response.Message = "Please select an image file.";
+                    return response;
+                }
+
+                return SaveTrainingPictureBytes(fileName, Convert.FromBase64String(raw));
+            }
+            catch (FormatException)
+            {
+                response.Message = "Format gambar tidak valid.";
+                return response;
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal upload gambar: " + (ex.Message ?? string.Empty);
+                return response;
+            }
+        }
+
+        protected static TrainingPictureUploadResponse ExecuteUploadTrainingPictureFile(HttpPostedFile posted)
+        {
+            if (posted == null || posted.ContentLength <= 0)
+            {
+                return new TrainingPictureUploadResponse
+                {
+                    Result = "ERROR",
+                    Message = "Please select an image file.",
+                    FileName = string.Empty
+                };
+            }
+
+            byte[] bytes = new byte[posted.ContentLength];
+            int read = posted.InputStream.Read(bytes, 0, posted.ContentLength);
+            if (read > 0 && read < bytes.Length)
+            {
+                Array.Resize(ref bytes, read);
+            }
+
+            return SaveTrainingPictureBytes(posted.FileName, bytes);
+        }
+
+        private static TrainingPictureUploadResponse SaveTrainingPictureBytes(string originalFileName, byte[] bytes)
+        {
+            TrainingPictureUploadResponse response = new TrainingPictureUploadResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                FileName = string.Empty
+            };
+
+            if (bytes == null || bytes.Length == 0)
+            {
+                response.Message = "Please select an image file.";
+                return response;
+            }
+
+            const int maxBytes = 4 * 1024 * 1024;
+            if (bytes.Length > maxBytes)
+            {
+                response.Message = "Ukuran gambar maksimal 4 MB.";
+                return response;
+            }
+
+            string fileName = originalFileName ?? string.Empty;
+            string ext = Path.GetExtension(fileName).ToLowerInvariant();
+            if (ext != ".jpg" && ext != ".jpeg" && ext != ".png")
+            {
+                response.Message = "Only JPG/JPEG/PNG allowed.";
+                return response;
+            }
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Server == null)
+            {
+                response.Message = "Session tidak ditemukan.";
+                return response;
+            }
+
+            string baseName = Path.GetFileNameWithoutExtension(fileName);
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+            {
+                baseName = (baseName ?? string.Empty).Replace(invalid.ToString(), string.Empty);
+            }
+
+            if (string.IsNullOrWhiteSpace(baseName))
+            {
+                baseName = "training";
+            }
+
+            string savedName = baseName + "_" + DateTime.Now.ToString("yyyyMMddHHmmss") + ".jpg";
+            string pictureDir = context.Server.MapPath("~/Picture/");
+            if (!Directory.Exists(pictureDir))
+            {
+                Directory.CreateDirectory(pictureDir);
+            }
+
+            File.WriteAllBytes(Path.Combine(pictureDir, savedName), bytes);
+            if (context.Session != null)
+            {
+                context.Session["ClsTypeNewPictureTraining"] = savedName;
+            }
+
+            response.Result = "SUCCESS";
+            response.Message = "Success!";
+            response.FileName = savedName;
             return response;
         }
 
@@ -12109,7 +12385,10 @@ ORDER BY
             string remark,
             string categoryId,
             string itUserId,
-            string itUserName)
+            string itUserName,
+            string customerName = "",
+            string picName = "",
+            string picPhone = "")
         {
             SaveAssignResponse response = new SaveAssignResponse
             {
@@ -12231,6 +12510,13 @@ ORDER BY
                 response.Result = "SUCCESS";
                 response.AssignID = string.Empty;
                 response.Message = "Job Training/Visit berhasil dibuat.";
+                SendJobTrainingCreateTelegram(
+                    connString,
+                    scheduleDateValue,
+                    customerName,
+                    picName,
+                    picPhone,
+                    remark);
             }
             catch (Exception ex)
             {
@@ -12238,6 +12524,278 @@ ORDER BY
             }
 
             return response;
+        }
+
+        protected static TrainingNoteListResponse BuildTrainingNotesResponse(string trainingId)
+        {
+            TrainingNoteListResponse response = new TrainingNoteListResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                Rows = new List<TrainingNoteItem>()
+            };
+
+            string safeTrainingId = (trainingId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(safeTrainingId))
+            {
+                response.Result = "SUCCESS";
+                response.Message = "OK";
+                return response;
+            }
+
+            try
+            {
+                DataTable source = ExecuteJobTrainingQuery(
+                    "sp_list_trx_training_notes '" + EscapeSqlLiteral(safeTrainingId) + "'");
+                if (source == null || source.Rows.Count == 0)
+                {
+                    source = ExecuteAdHocSqlQuery(
+                        "EXEC dbo.sp_list_trx_training_notes '" + EscapeSqlLiteral(safeTrainingId) + "'",
+                        Convert.ToString(HttpContext.Current != null && HttpContext.Current.Session != null
+                            ? HttpContext.Current.Session["ClsTypeDBConnStringSQL"]
+                            : string.Empty));
+                }
+
+                if (source != null)
+                {
+                    foreach (DataRow row in source.Rows)
+                    {
+                        string noteTrainingId = FirstNonEmptyStatic(GetValue(row, "TrainingID"), GetValue(row, "TrainID"));
+                        if (string.IsNullOrWhiteSpace(noteTrainingId))
+                        {
+                            continue;
+                        }
+
+                        response.Rows.Add(new TrainingNoteItem
+                        {
+                            TrainingID = noteTrainingId,
+                            CustomerName = FirstNonEmptyStatic(GetValue(row, "CustomerName"), GetValue(row, "FullName")),
+                            CategoryName = FirstNonEmptyStatic(
+                                GetValue(row, "TrainingCategoryName"),
+                                GetValue(row, "TrainCategoryDesc"),
+                                GetValue(row, "CategoryName"),
+                                GetValue(row, "CategoryDesc")),
+                            Remark = GetValue(row, "Remark"),
+                            UsrUpd = GetValue(row, "UsrUpd"),
+                            DtmUpd = FormatTrainingNoteDate(GetValue(row, "DtmUpd")),
+                            PictureFileName = GetValue(row, "PictureFileName")
+                        });
+                    }
+                }
+
+                response.Result = "SUCCESS";
+                response.Message = "OK";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal memuat list remark: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        protected static SaveAssignResponse ExecuteAddTrainingNote(
+            string trainingId,
+            string custId,
+            string categoryId,
+            string remark,
+            string pictureFileName)
+        {
+            SaveAssignResponse response = new SaveAssignResponse
+            {
+                Result = "ERROR",
+                AssignID = string.Empty,
+                Message = string.Empty
+            };
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                response.Message = "Session tidak ditemukan.";
+                return response;
+            }
+
+            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]);
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                response.Message = "Koneksi database tidak tersedia.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                response.Message = "User login tidak ditemukan.";
+                return response;
+            }
+
+            string safeTrainingId = (trainingId ?? string.Empty).Trim();
+            string safeCustId = (custId ?? string.Empty).Trim();
+            string safeCategoryId = (categoryId ?? string.Empty).Trim();
+            string safeRemark = (remark ?? string.Empty).Trim();
+            string safePictureFileName = Path.GetFileName((pictureFileName ?? string.Empty).Trim());
+
+            if (string.IsNullOrWhiteSpace(safeTrainingId) || string.IsNullOrWhiteSpace(safeCustId) || string.IsNullOrWhiteSpace(safeRemark))
+            {
+                response.Message = "Training ID, Customer, dan Remark wajib diisi.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(safeCategoryId) || safeCategoryId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                response.Message = "Category wajib dipilih.";
+                return response;
+            }
+
+            try
+            {
+                string sql = "sp_submit_training_notes '"
+                    + EscapeSqlLiteral(safeTrainingId) + "','"
+                    + EscapeSqlLiteral(safeCustId) + "','"
+                    + EscapeSqlLiteral(safeCategoryId) + "','"
+                    + EscapeSqlLiteral(safePictureFileName) + "','"
+                    + EscapeSqlLiteral(safeRemark) + "','"
+                    + EscapeSqlLiteral(userId.Trim()) + "'";
+
+                ExecCommand ec = new ExecCommand();
+                int affected = 0;
+                string error = string.Empty;
+                if (!ec.Execute(sql, connString.Trim(), ref affected, ref error))
+                {
+                    response.Message = string.IsNullOrWhiteSpace(error) ? "Add Notes gagal." : error;
+                    return response;
+                }
+
+                response.Result = "SUCCESS";
+                response.AssignID = safeTrainingId;
+                response.Message = "Add Notes training has been save successfully!";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Add Notes training has been failed (" + (ex.Message ?? string.Empty) + ")";
+            }
+
+            return response;
+        }
+
+        private static void SendJobTrainingCreateTelegram(
+            string connString,
+            DateTime scheduleDate,
+            string customerName,
+            string picName,
+            string picPhone,
+            string remark)
+        {
+            string msg = "<b>CREATE JOB ORDER TRAINING</b>\r\n"
+                + "<b>Customer</b>\r\n"
+                + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
+                + "<b>Schedule Date</b>\r\n"
+                + "<b>" + scheduleDate.ToString("dd/MM/yyyy") + "</b>\r\n"
+                + "<b>PIC Name</b>\r\n"
+                + "<b>" + (picName ?? string.Empty) + "</b>\r\n"
+                + "<b>PIC Number</b>\r\n"
+                + "<b>" + (picPhone ?? string.Empty) + "</b>\r\n"
+                + "<b>Remark</b>\r\n"
+                + "<b>" + (remark ?? string.Empty) + "</b>\r\n";
+            SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
+        }
+
+        private static void SendTrainingCustomerCloseTelegram(
+            string connString,
+            string trainingId,
+            string schDateText,
+            DateTime trainingDate,
+            string customerName,
+            string remark,
+            string trainers)
+        {
+            string msg = "<b>JOB ORDER CUSTOMER TRAINING SUCCESS</b>\r\n"
+                + "<b>Training Job Order</b>\r\n"
+                + "<b>" + (trainingId ?? string.Empty) + "</b>\r\n"
+                + "<b>Customer</b>\r\n"
+                + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
+                + "<b>Schedule Date</b>\r\n"
+                + "<b>" + FormatDateForTrainingTelegram(schDateText) + "</b>\r\n"
+                + "<b>Training Date</b>\r\n"
+                + "<b>" + trainingDate.ToString("dd/MM/yyyy") + "</b>\r\n"
+                + "<b>Remark</b>\r\n"
+                + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
+                + "<b>Trainers</b>\r\n"
+                + "<b>" + (trainers ?? string.Empty) + "</b>\r\n";
+            SendLegacyTrainingTelegram(connString, "TelegramChatID2", msg);
+        }
+
+        private static void SendLegacyTrainingTelegram(string connString, string chatIdParam, string text)
+        {
+            try
+            {
+                string chatId = GetParGlobalValue(connString, chatIdParam);
+                string apiToken = GetParGlobalValue(connString, "TelegramApi");
+                string url = GetParGlobalValue(connString, "TelegramUrl");
+                if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(apiToken) || string.IsNullOrWhiteSpace(url))
+                {
+                    return;
+                }
+
+                string urlString = string.Format(url, apiToken, chatId, text);
+                using (WebClient webclient = new WebClient())
+                {
+                    webclient.Encoding = Encoding.UTF8;
+                    webclient.DownloadString(urlString);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static string GetParGlobalValue(string connString, string parName)
+        {
+            if (string.IsNullOrWhiteSpace(parName))
+            {
+                return string.Empty;
+            }
+
+            string sql = "sp_list_par_global '" + EscapeSqlLiteral(parName) + "'";
+            DataTable table = ExecuteJobTrainingQuery(sql, connString);
+            if (table == null || table.Rows.Count == 0)
+            {
+                table = ExecuteAdHocSqlQuery("EXEC dbo." + sql, connString);
+            }
+
+            if (table == null || table.Rows.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return FirstNonEmptyStatic(GetValue(table.Rows[0], "ParValue"), GetValue(table.Rows[0], "parvalue"));
+        }
+
+        private static string FormatDateForTrainingTelegram(string raw)
+        {
+            DateTime dt;
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            if (DateTime.TryParse(raw, out dt))
+            {
+                return dt.ToString("dd/MM/yyyy");
+            }
+
+            return raw.Trim();
+        }
+
+        private static string FormatTrainingNoteDate(string raw)
+        {
+            DateTime dt;
+            if (DateTime.TryParse(raw, out dt))
+            {
+                return dt.ToString("dd/MM/yyyy HH:mm");
+            }
+
+            return (raw ?? string.Empty).Trim();
         }
 
         protected static ScheduleReportResponse BuildItsScheduleDayReport(string technicianId, string schDate, string technicianName)

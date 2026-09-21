@@ -164,9 +164,23 @@ namespace vtsadm
         string remark,
         string categoryId,
         string itUserId,
-        string itUserName)
+        string itUserName,
+        string customerName = "",
+        string picName = "",
+        string picPhone = "")
     {
-      return ExecuteSaveJobTrainingAssign(custId, reqDate, billableId, schDate, remark, categoryId, itUserId, itUserName);
+      return ExecuteSaveJobTrainingAssign(
+          custId,
+          reqDate,
+          billableId,
+          schDate,
+          remark,
+          categoryId,
+          itUserId,
+          itUserName,
+          customerName,
+          picName,
+          picPhone);
     }
 
     [WebMethod(EnableSession = true)]
