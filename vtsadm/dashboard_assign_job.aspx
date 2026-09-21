@@ -3885,7 +3885,7 @@
                 </div>
                 <div class="modal-body detail-jo-body">
                     <div class="detail-jo-search-wrap">
-                        <input type="text" id="detailJoSearchInput" class="detail-jo-search-input" placeholder="Cari JobID, Customer, JobType, Job Date, Area, Status, OverSLA, Total GPS/ACS..." />
+                        <input type="text" id="detailJoSearchInput" class="detail-jo-search-input" placeholder="Cari JobID, Customer, JobType, Job Date, Area, Status, OverSLA, Total GPS/ACS/Qty/Done..." />
                     </div>
                     <div class="table-responsive detail-jo-table-wrap">
                         <table class="table table-bordered table-striped detail-jo-table">
@@ -3900,9 +3900,11 @@
                                     <th class="detail-jo-sortable" data-sort-col="6" data-sort-type="text">Area</th>
                                     <th class="detail-jo-sortable" data-sort-col="7" data-sort-type="number">Total GPS</th>
                                     <th class="detail-jo-sortable" data-sort-col="8" data-sort-type="number">Total ACS</th>
-                                    <th class="detail-jo-sortable" data-sort-col="9" data-sort-type="text">Status</th>
-                                    <th class="detail-jo-sortable" data-sort-col="10" data-sort-type="number">OverSLA</th>
-                                    <th class="detail-jo-sortable" data-sort-col="11" data-sort-type="text">Remark</th>
+                                    <th class="detail-jo-sortable" data-sort-col="9" data-sort-type="number">Total Qty</th>
+                                    <th class="detail-jo-sortable" data-sort-col="10" data-sort-type="number">Qty Done</th>
+                                    <th class="detail-jo-sortable" data-sort-col="11" data-sort-type="text">Status</th>
+                                    <th class="detail-jo-sortable" data-sort-col="12" data-sort-type="number">OverSLA</th>
+                                    <th class="detail-jo-sortable" data-sort-col="13" data-sort-type="text">Remark</th>
                                 </tr>
                             </thead>
                             <tbody id="detailJoTableBody">
@@ -3918,6 +3920,8 @@
                                             <td><%# Eval("AreaDisplay") %></td>
                                             <td><%# Eval("QtyGpsDisplay") %></td>
                                             <td><%# Eval("QtyAcsDisplay") %></td>
+                                            <td><%# Eval("TotalQtyDisplay") %></td>
+                                            <td><%# Eval("QtyDoneDisplay") %></td>
                                             <td><%# Eval("Status") %></td>
                                             <td><%# Eval("OverSlaDisplay") %></td>
                                             <td><%# Eval("Remark") %></td>
@@ -3930,6 +3934,8 @@
                                     <td colspan="7" style="text-align:right;">Total</td>
                                     <td><span id="lblDetailTotalGps" runat="server">0</span></td>
                                     <td><span id="lblDetailTotalAcs" runat="server">0</span></td>
+                                    <td><span id="lblDetailTotalQty" runat="server">0</span></td>
+                                    <td><span id="lblDetailQtyDone" runat="server">0</span></td>
                                     <td colspan="3"></td>
                                 </tr>
                             </tfoot>

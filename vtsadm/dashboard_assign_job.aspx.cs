@@ -433,6 +433,8 @@ namespace vtsadm
         protected HtmlGenericControl lblDetailEmpty;
         protected HtmlGenericControl lblDetailTotalGps;
         protected HtmlGenericControl lblDetailTotalAcs;
+        protected HtmlGenericControl lblDetailTotalQty;
+        protected HtmlGenericControl lblDetailQtyDone;
         protected HtmlGenericControl lblMemberCount;
         protected Literal litPerformanceRows;
         protected Literal litScheduleHeader;
@@ -7215,6 +7217,18 @@ ORDER BY
             {
                 lblDetailTotalAcs.InnerText = totalQtyAcs.ToString();
             }
+            if (lblDetailTotalQty != null)
+            {
+                lblDetailTotalQty.InnerText = dtByRole.AsEnumerable()
+                    .Sum(r => ParseFirstAvailableInt(r, "TotalQty", "TOTALQTY", "TotalQTY"))
+                    .ToString();
+            }
+            if (lblDetailQtyDone != null)
+            {
+                lblDetailQtyDone.InnerText = dtByRole.AsEnumerable()
+                    .Sum(r => ParseFirstAvailableInt(r, "QtyDone", "QTYDONE"))
+                    .ToString();
+            }
 
             lblModalTitle.InnerText = BuildDetailModalTitle(normalizedStatus, normalizedDetailJobType, normalizedDetailMetric);
             lblModalPeriode.InnerText = periode;
@@ -7292,6 +7306,14 @@ ORDER BY
             {
                 source.Columns.Add("QtyAcsDisplay");
             }
+            if (!source.Columns.Contains("TotalQtyDisplay"))
+            {
+                source.Columns.Add("TotalQtyDisplay");
+            }
+            if (!source.Columns.Contains("QtyDoneDisplay"))
+            {
+                source.Columns.Add("QtyDoneDisplay");
+            }
             if (!source.Columns.Contains("JobTypeDisplay"))
             {
                 source.Columns.Add("JobTypeDisplay");
@@ -7350,6 +7372,8 @@ ORDER BY
 
                 row["QtyGpsDisplay"] = ParseFirstAvailableInt(row, "QtyGPS", "QTYGPS", "QtyGps", "TotalGPS", "TotalGps").ToString();
                 row["QtyAcsDisplay"] = ParseFirstAvailableInt(row, "QtyACS", "QTYACS", "QtyAcs", "TotalACS", "TotalAcs").ToString();
+                row["TotalQtyDisplay"] = ParseFirstAvailableInt(row, "TotalQty", "TOTALQTY", "TotalQTY").ToString();
+                row["QtyDoneDisplay"] = ParseFirstAvailableInt(row, "QtyDone", "QTYDONE").ToString();
                 row["JobTypeDisplay"] = FirstNonEmpty(
                     GetString(row, "JobType"),
                     GetJobCategory(row),
@@ -7717,6 +7741,8 @@ ORDER BY
             html.Append("<th>Area</th>");
             html.Append("<th>Total GPS</th>");
             html.Append("<th>Total ACS</th>");
+            html.Append("<th>Total Qty</th>");
+            html.Append("<th>Qty Done</th>");
             html.Append("<th>Status</th>");
             html.Append("<th>OverSLA</th>");
             html.Append("<th>Remark</th>");
@@ -7745,6 +7771,8 @@ ORDER BY
                     html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "AreaDisplay")) + "</td>");
                     html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "QtyGpsDisplay")) + "</td>");
                     html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "QtyAcsDisplay")) + "</td>");
+                    html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "TotalQtyDisplay")) + "</td>");
+                    html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "QtyDoneDisplay")) + "</td>");
                     html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "Status")) + "</td>");
                     html.Append("<td" + overSlaValueStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "OverSlaDisplay")) + "</td>");
                     html.Append("<td" + overSlaCellStyle + ">" + HttpUtility.HtmlEncode(GetString(row, "Remark")) + "</td>");
@@ -7757,6 +7785,20 @@ ORDER BY
             html.Append("<td colspan='7' style='text-align:right;font-weight:bold;'>Total</td>");
             html.Append("<td style='font-weight:bold;'>" + totalQtyGps.ToString() + "</td>");
             html.Append("<td style='font-weight:bold;'>" + totalQtyAcs.ToString() + "</td>");
+            int exportTotalQty = 0;
+            if (source != null)
+            {
+                exportTotalQty = source.AsEnumerable()
+                    .Sum(r => ParseFirstAvailableInt(r, "TotalQty", "TOTALQTY", "TotalQTY"));
+            }
+            html.Append("<td style='font-weight:bold;'>" + exportTotalQty.ToString() + "</td>");
+            int exportQtyDone = 0;
+            if (source != null)
+            {
+                exportQtyDone = source.AsEnumerable()
+                    .Sum(r => ParseFirstAvailableInt(r, "QtyDone", "QTYDONE"));
+            }
+            html.Append("<td style='font-weight:bold;'>" + exportQtyDone.ToString() + "</td>");
             html.Append("<td colspan='3'></td>");
             html.Append("</tr></tfoot>");
             html.Append("</table>");
