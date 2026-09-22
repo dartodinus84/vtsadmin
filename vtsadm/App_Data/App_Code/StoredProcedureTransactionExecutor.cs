@@ -90,7 +90,6 @@ namespace vtsadm.App_Code
         {
             if (connection == null) throw new ArgumentNullException("connection");
             if (connection.State != ConnectionState.Open) throw new InvalidOperationException("Connection must be open.");
-            if (transaction == null) throw new ArgumentNullException("transaction");
             ValidateProcedureName(procedureName);
 
             return ExecuteInternal(connection, transaction, procedureName, parameters);
