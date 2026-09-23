@@ -116,7 +116,11 @@ namespace vtsadm
                     return Fail("Pilih company, vehicle, dan server mirror.");
                 if (form.mirrorServers == null || form.mirrorServers.Length == 0)
                     return Fail("Pilih company, vehicle, dan server mirror.");
-                if (!form.allVehicles && (form.vehicleIds == null || form.vehicleIds.Length == 0))
+
+                string editVehicleId = ParseVehicleIdFromRowId(form.id);
+                if (!form.allVehicles
+                    && (form.vehicleIds == null || form.vehicleIds.Length == 0)
+                    && string.IsNullOrWhiteSpace(editVehicleId))
                     return Fail("Pilih company, vehicle, dan server mirror.");
 
                 var companies = LoadCompanies();
@@ -133,8 +137,21 @@ namespace vtsadm
                 }
                 else
                 {
-                    var wanted = new HashSet<string>(form.vehicleIds.Where(v => !string.IsNullOrWhiteSpace(v)), StringComparer.OrdinalIgnoreCase);
+                    var wanted = new HashSet<string>(
+                        (form.vehicleIds ?? new string[0]).Where(v => !string.IsNullOrWhiteSpace(v)),
+                        StringComparer.OrdinalIgnoreCase);
+                    if (!string.IsNullOrWhiteSpace(editVehicleId))
+                        wanted.Add(editVehicleId);
                     selected = vehicles.Where(v => wanted.Contains(v.VehicleId) || wanted.Contains(v.Plate)).ToList();
+                    if (selected.Count == 0 && !string.IsNullOrWhiteSpace(editVehicleId))
+                    {
+                        selected.Add(new VehicleItem
+                        {
+                            VehicleId = editVehicleId,
+                            Plate = editVehicleId,
+                            TvaId = ""
+                        });
+                    }
                 }
 
                 if (selected.Count == 0) return Fail("Vehicle tidak ditemukan pada company terpilih.");
@@ -150,10 +167,38 @@ namespace vtsadm
                     .ToArray();
                 if (servers.Length == 0) return Fail("Pilih company, vehicle, dan server mirror.");
 
+                var ec = new ExecCommand();
+                int saved = 0;
+                for (int i = 0; i < selected.Count; i++)
+                {
+                    var vehicleId = (selected[i].VehicleId ?? "").Trim();
+                    if (string.IsNullOrWhiteSpace(vehicleId) || IsPlaceholder(vehicleId))
+                        continue;
+
+                    for (int s = 0; s < servers.Length; s++)
+                    {
+                        int aff = 0;
+                        string err = "";
+                        string sql = "sp_vehicle_mirror_realtime_upsert '"
+                            + vehicleId.Replace("'", "''") + "','"
+                            + servers[s].Replace("'", "''") + "'";
+                        if (!ec.Execute(sql, GetDbConn(), ref aff, ref err))
+                        {
+                            return Fail(string.IsNullOrWhiteSpace(err)
+                                ? "Gagal menyimpan mirroring untuk vehicle " + vehicleId + "."
+                                : err);
+                        }
+                        saved++;
+                    }
+                }
+
+                if (saved == 0)
+                    return Fail("Tidak ada data mirroring yang disimpan.");
+
                 return new
                 {
-                    success = false,
-                    message = "Simpan mirroring sementara dinonaktifkan. Data hanya dibaca dari GPSB."
+                    success = true,
+                    message = "Pengaturan mirroring berhasil disimpan (" + saved.ToString() + ")."
                 };
             }
             catch (Exception ex)
@@ -407,6 +452,14 @@ namespace vtsadm
                     return Convert.ToString(row[name]) ?? "";
             }
             return "";
+        }
+
+        private static string ParseVehicleIdFromRowId(string rowId)
+        {
+            if (string.IsNullOrWhiteSpace(rowId)) return "";
+            var parts = rowId.Split('|');
+            if (parts.Length < 2) return "";
+            return (parts[parts.Length - 1] ?? "").Trim();
         }
 
         private static bool IsPlaceholder(string value)
