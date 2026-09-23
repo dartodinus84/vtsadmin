@@ -1154,7 +1154,7 @@ namespace vtsadm
                     GetPayloadString(args, "reqDate"),
                     GetPayloadString(args, "billableId"),
                     GetPayloadString(args, "schDate"),
-                    GetPayloadString(args, "remark"),
+                    FirstNonEmptyStatic(GetPayloadString(args, "remark"), GetPayloadString(args, "Remark")),
                     GetPayloadString(args, "categoryId"),
                     GetPayloadString(args, "itUserId"),
                     GetPayloadString(args, "itUserName"),
@@ -1576,7 +1576,7 @@ namespace vtsadm
             return Convert.ToString(context.Session["ClsTypeUserID"]).Trim();
         }
 
-        protected static bool IsAssignAdminSession()
+        public static bool IsAssignAdminSession()
         {
             HttpContext context = HttpContext.Current;
             if (context == null || context.Session == null)
@@ -1585,7 +1585,59 @@ namespace vtsadm
             }
 
             string groupId = Convert.ToString(context.Session["ClsTypeUserGroupID"]).Trim().ToUpperInvariant();
-            return groupId == "ADMINISTRATORS" || groupId == "ADMINISTRATOR";
+            return groupId == "ADMINISTRATORS"
+                || groupId == "ADMINISTRATOR"
+                || groupId == "ADM";
+        }
+
+        public static bool CurrentUserCanAccessCloseJobTraining()
+        {
+            if (IsAssignAdminSession())
+            {
+                return true;
+            }
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return false;
+            }
+
+            string menus = Convert.ToString(context.Session["ClsTypeAccessMenu"]);
+            if (!string.IsNullOrWhiteSpace(menus)
+                && menus.ToUpperInvariant().Contains("MNUCUSTJOBTRAINING"))
+            {
+                return true;
+            }
+
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]).Trim();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(ItsSupportAssignData.LookupItId(userId))
+                || !string.IsNullOrWhiteSpace(LookupItIdByUserId(userId));
+        }
+
+        public static bool CurrentUserCanCloseAssignedTrainingJob(string trainingId, out string message)
+        {
+            message = string.Empty;
+            if (IsAssignAdminSession())
+            {
+                return true;
+            }
+
+            string assignedTechnicianId;
+            string assignedSchDate;
+            if (!TryLoadActiveItsAssignSnapshot(trainingId, out assignedTechnicianId, out assignedSchDate)
+                || !ItsTechnicianIdMatchesCurrentUser(assignedTechnicianId))
+            {
+                message = "JO ini tidak di-assign ke user login.";
+                return false;
+            }
+
+            return true;
         }
 
         protected static bool IsItsViewOnlySession()
@@ -1605,10 +1657,16 @@ namespace vtsadm
             keys.Add(userId);
             keys.Add(TrimToLength(userId, 20));
 
-            string itId = NormalizeItId(LookupItIdByUserId(userId));
+            string itId = NormalizeItId(ItsSupportAssignData.LookupItId(userId));
             if (!string.IsNullOrWhiteSpace(itId))
             {
                 keys.Add(itId);
+            }
+
+            string fromUserTable = NormalizeItId(LookupItIdByUserId(userId));
+            if (!string.IsNullOrWhiteSpace(fromUserTable))
+            {
+                keys.Add(fromUserTable);
             }
 
             return keys;
@@ -5864,6 +5922,26 @@ namespace vtsadm
             }
 
             return table;
+        }
+
+        private static int ExecuteAdHocSqlNonQuery(string sql, string connString)
+        {
+            string sqlConn = ResolveJobTrainingSqlConnectionString(connString);
+            if (string.IsNullOrWhiteSpace(sqlConn) || string.IsNullOrWhiteSpace(sql))
+            {
+                return 0;
+            }
+
+            using (SqlConnection conn = new SqlConnection(sqlConn))
+            {
+                conn.Open();
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandTimeout = 120;
+                    return cmd.ExecuteNonQuery();
+                }
+            }
         }
 
         private static DataTable ExecuteParameterizedSqlQuery(string sql, string connString, params SqlParameter[] parameters)
@@ -11725,6 +11803,139 @@ ORDER BY
             return string.Empty;
         }
 
+        public static DataTable LoadCloseableTrainingJobsTable(string searchKeyword)
+        {
+            DataTable result = CreateCloseableTrainingJobsSchema();
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return result;
+            }
+
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]).Trim();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return result;
+            }
+
+            bool isAdmin = IsAssignAdminSession();
+            HashSet<string> selfKeys = isAdmin ? null : GetItsSelfIdentityKeys();
+            if (!isAdmin && (selfKeys == null || selfKeys.Count == 0))
+            {
+                return result;
+            }
+
+            string keyword = (searchKeyword ?? string.Empty).Trim();
+            DataTable source = LoadAssignedTrainingJobsForClose();
+            if (source == null || source.Rows.Count == 0)
+            {
+                source = ExecuteJobTrainingQuery(
+                    "sp_list_trainig_customer_job_training_search '"
+                    + EscapeSqlLiteral(keyword) + "','"
+                    + EscapeSqlLiteral(isAdmin ? string.Empty : userId) + "'");
+            }
+
+            Dictionary<string, string> assignedTechByJob = LoadActiveTrainingAssignTechnicianMap();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (source == null)
+            {
+                return result;
+            }
+
+            foreach (DataRow row in source.Rows)
+            {
+                string trainingId = FirstNonEmptyStatic(
+                    GetValue(row, "TrainingID"),
+                    GetValue(row, "JobID"));
+                if (string.IsNullOrWhiteSpace(trainingId) || !seen.Add(trainingId))
+                {
+                    continue;
+                }
+
+                string technicianId = GetValue(row, "TechnicianID").Trim();
+                string assignUserId = GetValue(row, "AssignUserID").Trim();
+                if (string.IsNullOrWhiteSpace(technicianId) && string.IsNullOrWhiteSpace(assignUserId))
+                {
+                    assignedTechByJob.TryGetValue(trainingId, out technicianId);
+                }
+
+                if (string.IsNullOrWhiteSpace(technicianId) && string.IsNullOrWhiteSpace(assignUserId))
+                {
+                    continue;
+                }
+
+                if (!isAdmin && !ItsIdentityMatchesSelf(assignUserId, technicianId, selfKeys))
+                {
+                    continue;
+                }
+
+                TrainingCloseJobItem item = MapCloseableTrainingJobItem(row, trainingId);
+                if (!CloseTrainingJobMatchesKeyword(item, keyword))
+                {
+                    continue;
+                }
+
+                DataRow added = result.NewRow();
+                added["TrainingID"] = item.TrainingID;
+                added["sReqDate"] = item.ReqDate;
+                added["FullName"] = item.CustomerName;
+                added["sSchDate"] = item.SchDate;
+                added["CustID"] = item.CustID;
+                added["CustBranchName"] = item.BranchName;
+                added["BusinessFieldID"] = item.BusinessFieldID;
+                added["TrainCategoryID"] = item.CategoryID;
+                added["TrainCategoryDesc"] = item.CategoryDesc;
+                added["AssignCategoryID"] = item.CategoryID;
+                added["AssignCategoryDesc"] = item.CategoryDesc;
+                added["sAssignDate"] = item.AssignDate;
+                added["AssignTrainer"] = item.AssignTrainer;
+                added["TechnicianID"] = technicianId ?? string.Empty;
+                added["AssignUserID"] = assignUserId ?? string.Empty;
+                result.Rows.Add(added);
+            }
+
+            return result;
+        }
+
+        private static DataTable CreateCloseableTrainingJobsSchema()
+        {
+            DataTable table = new DataTable();
+            table.Columns.Add("TrainingID");
+            table.Columns.Add("sReqDate");
+            table.Columns.Add("FullName");
+            table.Columns.Add("sSchDate");
+            table.Columns.Add("CustID");
+            table.Columns.Add("CustBranchName");
+            table.Columns.Add("BusinessFieldID");
+            table.Columns.Add("TrainCategoryID");
+            table.Columns.Add("TrainCategoryDesc");
+            table.Columns.Add("AssignCategoryID");
+            table.Columns.Add("AssignCategoryDesc");
+            table.Columns.Add("sAssignDate");
+            table.Columns.Add("AssignTrainer");
+            table.Columns.Add("TechnicianID");
+            table.Columns.Add("AssignUserID");
+            return table;
+        }
+
+        private static TrainingCloseJobItem MapCloseableTrainingJobItem(DataRow row, string trainingId)
+        {
+            return new TrainingCloseJobItem
+            {
+                TrainingID = trainingId,
+                ReqDate = FirstNonEmptyStatic(GetValue(row, "sReqDate"), GetValue(row, "ReqDate")),
+                CustomerName = FirstNonEmptyStatic(GetValue(row, "FullName"), GetValue(row, "CustomerName")),
+                SchDate = FirstNonEmptyStatic(GetValue(row, "sSchDate"), GetValue(row, "SchDate"), GetValue(row, "ScheduleDate")),
+                CustID = GetValue(row, "CustID"),
+                BranchName = FirstNonEmptyStatic(GetValue(row, "CustBranchName"), GetValue(row, "BranchName")),
+                BusinessFieldID = GetValue(row, "BusinessFieldID"),
+                CategoryID = FirstNonEmptyStatic(GetValue(row, "TrainCategoryID"), GetValue(row, "AssignCategoryID"), GetValue(row, "CategoryID")),
+                CategoryDesc = FirstNonEmptyStatic(GetValue(row, "TrainCategoryDesc"), GetValue(row, "AssignCategoryDesc"), GetValue(row, "CategoryDesc")),
+                AssignDate = FirstNonEmptyStatic(GetValue(row, "sAssignDate"), GetValue(row, "AssignDate")),
+                AssignTrainer = FirstNonEmptyStatic(GetValue(row, "AssignTrainer"), GetValue(row, "Trainers"))
+            };
+        }
+
         protected static TrainingCloseSearchResponse BuildOpenTrainingJobsResponse(string searchKeyword)
         {
             TrainingCloseSearchResponse response = new TrainingCloseSearchResponse
@@ -11749,77 +11960,24 @@ ORDER BY
             }
 
             bool isAdmin = IsAssignAdminSession();
-            HashSet<string> selfKeys = isAdmin ? null : GetItsSelfIdentityKeys();
-            if (!isAdmin && (selfKeys == null || selfKeys.Count == 0))
+            if (!isAdmin)
             {
-                response.Message = "ITID / UserID login tidak ditemukan.";
-                return response;
+                HashSet<string> selfKeys = GetItsSelfIdentityKeys();
+                if (selfKeys == null || selfKeys.Count == 0)
+                {
+                    response.Message = "ITID / UserID login tidak ditemukan.";
+                    return response;
+                }
             }
 
             try
             {
-                string keyword = (searchKeyword ?? string.Empty).Trim();
-                DataTable source = LoadAssignedTrainingJobsForClose();
-                if (source == null || source.Rows.Count == 0)
-                {
-                    source = ExecuteJobTrainingQuery(
-                        "sp_list_trainig_customer_job_training_search '"
-                        + EscapeSqlLiteral(keyword) + "','"
-                        + EscapeSqlLiteral(isAdmin ? string.Empty : userId) + "'");
-                }
-
-                Dictionary<string, string> assignedTechByJob = LoadActiveTrainingAssignTechnicianMap();
-                HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                DataTable source = LoadCloseableTrainingJobsTable(searchKeyword);
                 if (source != null)
                 {
                     foreach (DataRow row in source.Rows)
                     {
-                        string trainingId = FirstNonEmptyStatic(
-                            GetValue(row, "TrainingID"),
-                            GetValue(row, "JobID"));
-                        if (string.IsNullOrWhiteSpace(trainingId) || !seen.Add(trainingId))
-                        {
-                            continue;
-                        }
-
-                        string technicianId = GetValue(row, "TechnicianID").Trim();
-                        string assignUserId = GetValue(row, "AssignUserID").Trim();
-                        if (string.IsNullOrWhiteSpace(technicianId) && string.IsNullOrWhiteSpace(assignUserId))
-                        {
-                            assignedTechByJob.TryGetValue(trainingId, out technicianId);
-                        }
-
-                        if (string.IsNullOrWhiteSpace(technicianId) && string.IsNullOrWhiteSpace(assignUserId))
-                        {
-                            continue;
-                        }
-
-                        if (!isAdmin && !ItsIdentityMatchesSelf(assignUserId, technicianId, selfKeys))
-                        {
-                            continue;
-                        }
-
-                        TrainingCloseJobItem item = new TrainingCloseJobItem
-                        {
-                            TrainingID = trainingId,
-                            ReqDate = FirstNonEmptyStatic(GetValue(row, "sReqDate"), GetValue(row, "ReqDate")),
-                            CustomerName = FirstNonEmptyStatic(GetValue(row, "FullName"), GetValue(row, "CustomerName")),
-                            SchDate = FirstNonEmptyStatic(GetValue(row, "sSchDate"), GetValue(row, "SchDate"), GetValue(row, "ScheduleDate")),
-                            CustID = GetValue(row, "CustID"),
-                            BranchName = FirstNonEmptyStatic(GetValue(row, "CustBranchName"), GetValue(row, "BranchName")),
-                            BusinessFieldID = GetValue(row, "BusinessFieldID"),
-                            CategoryID = FirstNonEmptyStatic(GetValue(row, "TrainCategoryID"), GetValue(row, "AssignCategoryID"), GetValue(row, "CategoryID")),
-                            CategoryDesc = FirstNonEmptyStatic(GetValue(row, "TrainCategoryDesc"), GetValue(row, "AssignCategoryDesc"), GetValue(row, "CategoryDesc")),
-                            AssignDate = FirstNonEmptyStatic(GetValue(row, "sAssignDate"), GetValue(row, "AssignDate")),
-                            AssignTrainer = FirstNonEmptyStatic(GetValue(row, "AssignTrainer"), GetValue(row, "Trainers"))
-                        };
-
-                        if (!CloseTrainingJobMatchesKeyword(item, keyword))
-                        {
-                            continue;
-                        }
-
-                        response.Rows.Add(item);
+                        response.Rows.Add(MapCloseableTrainingJobItem(row, GetValue(row, "TrainingID")));
                     }
                 }
 
@@ -12040,16 +12198,11 @@ ORDER BY
                 return response;
             }
 
-            if (!IsAssignAdminSession())
+            string closeDeniedMessage;
+            if (!CurrentUserCanCloseAssignedTrainingJob(safeTrainingId, out closeDeniedMessage))
             {
-                string assignedTechnicianId;
-                string assignedSchDate;
-                if (!TryLoadActiveItsAssignSnapshot(safeTrainingId, out assignedTechnicianId, out assignedSchDate)
-                    || !ItsTechnicianIdMatchesCurrentUser(assignedTechnicianId))
-                {
-                    response.Message = "JO ini tidak di-assign ke user login.";
-                    return response;
-                }
+                response.Message = closeDeniedMessage;
+                return response;
             }
 
             List<Dictionary<string, object>> functions = GetPayloadObjectList(payload, "functions");
@@ -12449,35 +12602,8 @@ ORDER BY
                 requestDateValue = DateTime.Today;
             }
 
-            string safeRemark = (remark ?? string.Empty).Trim();
-            string safeItName = (itUserName ?? string.Empty).Trim();
-            string safeItId = (itUserId ?? string.Empty).Trim();
-            if (!string.IsNullOrWhiteSpace(safeItName) || !string.IsNullOrWhiteSpace(safeItId))
-            {
-                List<string> tags = new List<string>();
-                if (!string.IsNullOrWhiteSpace(safeItId))
-                {
-                    tags.Add("ITID:" + safeItId);
-                }
-
-                if (!string.IsNullOrWhiteSpace(safeItName))
-                {
-                    tags.Add("ITNAME:" + safeItName);
-                    tags.Add("IT:" + safeItName);
-                }
-                else if (!string.IsNullOrWhiteSpace(safeItId))
-                {
-                    tags.Add("IT:" + safeItId);
-                }
-
-                foreach (string tag in tags)
-                {
-                    if (safeRemark.IndexOf(tag, StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        safeRemark = string.IsNullOrWhiteSpace(safeRemark) ? tag : (safeRemark + " | " + tag);
-                    }
-                }
-            }
+            string originalRemark = (remark ?? string.Empty).Trim();
+            string safeRemark = originalRemark;
 
             try
             {
@@ -12510,13 +12636,30 @@ ORDER BY
                 response.Result = "SUCCESS";
                 response.AssignID = string.Empty;
                 response.Message = "Job Training/Visit berhasil dibuat.";
+                PersistCreatedTrainingOrderRemark(
+                    connString,
+                    custId.Trim(),
+                    userId,
+                    scheduleDateValue,
+                    originalRemark);
+                if (TryAutoAssignCreatedTrainingJob(
+                    connString,
+                    userId,
+                    custId.Trim(),
+                    scheduleDateValue,
+                    categoryId.Trim(),
+                    originalRemark))
+                {
+                    response.Message = "Job Training/Visit berhasil dibuat dan di-assign ke user login.";
+                }
+
                 SendJobTrainingCreateTelegram(
                     connString,
                     scheduleDateValue,
                     customerName,
                     picName,
                     picPhone,
-                    remark);
+                    originalRemark);
             }
             catch (Exception ex)
             {
@@ -12676,6 +12819,211 @@ ORDER BY
             }
 
             return response;
+        }
+
+        public static bool AutoAssignCreatedTrainingJobIfNeeded(
+            string connString,
+            string userId,
+            string custId,
+            DateTime schDate,
+            string categoryId,
+            string remark = "")
+        {
+            return TryAutoAssignCreatedTrainingJob(connString, userId, custId, schDate, categoryId, remark);
+        }
+
+        public static void PersistCreatedTrainingOrderRemark(
+            string connString,
+            string custId,
+            string userId,
+            DateTime schDate,
+            string remark)
+        {
+            string safeRemark = (remark ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(connString) || string.IsNullOrWhiteSpace(safeRemark))
+            {
+                return;
+            }
+
+            try
+            {
+                string jobId = LookupLatestCreatedTrainingId(connString, custId, userId, schDate);
+                if (string.IsNullOrWhiteSpace(jobId))
+                {
+                    return;
+                }
+
+                ExecuteAdHocSqlNonQuery(
+                    "UPDATE trx_training_order SET Remark = '"
+                    + EscapeSqlLiteral(safeRemark)
+                    + "' WHERE LTRIM(RTRIM(ISNULL(TrainingID, ''))) = '"
+                    + EscapeSqlLiteral(jobId)
+                    + "'",
+                    connString);
+
+                try
+                {
+                    ExecuteAdHocSqlNonQuery(
+                        "UPDATE trx_training_order SET RemarkTraining = '"
+                        + EscapeSqlLiteral(safeRemark)
+                        + "' WHERE LTRIM(RTRIM(ISNULL(TrainingID, ''))) = '"
+                        + EscapeSqlLiteral(jobId)
+                        + "'",
+                        connString);
+                }
+                catch
+                {
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool TryAutoAssignCreatedTrainingJob(
+            string connString,
+            string userId,
+            string custId,
+            DateTime schDate,
+            string categoryId,
+            string remark = "")
+        {
+            if (IsAssignAdminSession())
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(connString)
+                || string.IsNullOrWhiteSpace(userId)
+                || string.IsNullOrWhiteSpace(custId))
+            {
+                return false;
+            }
+
+            try
+            {
+                if (HttpContext.Current != null)
+                {
+                    HttpContext.Current.Items[ItsSupportPageContextKey] = true;
+                }
+
+                string technicianId;
+                string itIdMessage;
+                if (!TryResolveItsAssignTechnicianId(userId, out technicianId, out itIdMessage)
+                    || string.IsNullOrWhiteSpace(technicianId))
+                {
+                    return false;
+                }
+
+                string jobId = LookupLatestCreatedTrainingId(connString, custId, userId, schDate);
+                if (string.IsNullOrWhiteSpace(jobId))
+                {
+                    return false;
+                }
+
+                string areaId = LookupCustomerSupportAreaId(custId);
+                SaveAssignResponse assignResult = ExecuteSaveAssignOnce(
+                    connString,
+                    jobId,
+                    custId,
+                    technicianId,
+                    schDate,
+                    1,
+                    string.Empty,
+                    areaId,
+                    "AV",
+                    userId,
+                    categoryId ?? string.Empty);
+                if (assignResult == null
+                    || !string.Equals(assignResult.Result, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    ItsAssignTelegramService.NotifyAfterAssign(
+                        connString,
+                        jobId,
+                        custId,
+                        technicianId,
+                        schDate,
+                        remark);
+                }
+                catch
+                {
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string LookupLatestCreatedTrainingId(
+            string connString,
+            string custId,
+            string userId,
+            DateTime schDate)
+        {
+            string safeCustId = EscapeSqlLiteral((custId ?? string.Empty).Trim());
+            string safeUserId = EscapeSqlLiteral((userId ?? string.Empty).Trim());
+            string schIso = schDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            string[] queries =
+            {
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(TrainingID, ''))) AS TrainingID "
+                    + "FROM trx_training_order WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "' "
+                    + "AND CONVERT(date, ScheduleDate) = '" + schIso + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "AND LTRIM(RTRIM(ISNULL(UsrCrt, ISNULL(UsrUpd, '')))) = '" + safeUserId + "' "
+                    + "ORDER BY DtmCrt DESC, TrainingID DESC",
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(TrainingID, ''))) AS TrainingID "
+                    + "FROM trx_training_order WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "' "
+                    + "AND CONVERT(date, ScheduleDate) = '" + schIso + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "ORDER BY TrainingID DESC"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteJobTrainingQuery(sql, connString);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                string trainingId = FirstNonEmptyStatic(GetValue(table.Rows[0], "TrainingID"));
+                if (!string.IsNullOrWhiteSpace(trainingId))
+                {
+                    return trainingId.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string LookupCustomerSupportAreaId(string custId)
+        {
+            string safeCustId = EscapeSqlLiteral((custId ?? string.Empty).Trim());
+            if (string.IsNullOrWhiteSpace(safeCustId))
+            {
+                return string.Empty;
+            }
+
+            DataTable table = ExecuteJobTrainingQuery(
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(SupAreaID, ISNULL(SupportAreaID, '')))) AS AreaID "
+                    + "FROM mst_customer WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "'");
+            if (table == null || table.Rows.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return FirstNonEmptyStatic(GetValue(table.Rows[0], "AreaID"), GetValue(table.Rows[0], "SupAreaID"));
         }
 
         private static void SendJobTrainingCreateTelegram(
@@ -13215,11 +13563,12 @@ ORDER BY
             string safeJobId = EscapeSqlLiteral(row.JobID.Trim());
             string[] queries =
             {
+                "SELECT TOP 1 * FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'",
                 "SELECT TOP 1 Remark, RemarkTraining, TrainCategoryID, TrainCategoryName, TrainingCategoryName, CategoryName "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'",
-                "SELECT TOP 1 Remark, RemarkTraining, TrainCategoryID "
+                "SELECT TOP 1 Remark, TrainCategoryID "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'",
-                "SELECT TOP 1 Remark, RemarkTraining "
+                "SELECT TOP 1 Remark "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + safeJobId + "'"
             };
 

@@ -16,7 +16,7 @@ namespace vtsadm
             try
             {
                 ClsType ClType = new ClsType();
-                if (!Session["ClsTypeAccessMenu"].ToString().ToUpper().Contains("MNUCUSTJOBTRAINING"))
+                if (!dashboard_assign_job.CurrentUserCanAccessCloseJobTraining())
                 {
                     Response.Redirect("dashboard.aspx");
                 }
@@ -87,8 +87,13 @@ namespace vtsadm
         private void Open_GridViewJobTraining(string sName)
         {
             ClsType ClType = new ClsType();
-            string strSQL = "sp_list_trainig_customer_job_training_search '" + sName + "','" + Session["ClsTypeUserID"].ToString() + "'";
-            Session["RecListTrainingCustJobTrainingSearch"] = ClType.Open_GridView(GridView1, strSQL, Session["ClsTypeDBConnStringSQL"].ToString(), LblPaging);
+            DataTable table = dashboard_assign_job.LoadCloseableTrainingJobsTable(sName);
+            DataSet ds = new DataSet();
+            ds.Tables.Add(table.Copy());
+            Session["RecListTrainingCustJobTrainingSearch"] = ds;
+            GridView1.DataSource = ds.Tables[0];
+            GridView1.DataBind();
+            ClType.showPaging(ds, GridView1, LblPaging);
         }
         protected void GridView1_PageIndexChanging(Object sender, System.Web.UI.WebControls.GridViewPageEventArgs e)
         {

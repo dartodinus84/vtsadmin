@@ -200,6 +200,19 @@ namespace vtsadm
                         {
                             if (intAff > 0)
                             {
+                                dashboard_assign_job.PersistCreatedTrainingOrderRemark(
+                                    Session["ClsTypeDBConnStringSQL"].ToString(),
+                                    txtCustID.Value.Trim(),
+                                    Session["ClsTypeUserID"].ToString(),
+                                    Convert.ToDateTime(txtScheduleDate.Text),
+                                    tanda);
+                                dashboard_assign_job.AutoAssignCreatedTrainingJobIfNeeded(
+                                    Session["ClsTypeDBConnStringSQL"].ToString(),
+                                    Session["ClsTypeUserID"].ToString(),
+                                    txtCustID.Value.Trim(),
+                                    Convert.ToDateTime(txtScheduleDate.Text),
+                                    CmbTrainCategoryID.SelectedItem.Value.Trim(),
+                                    tanda);
                                 clear();
                                 Open_GridViewHeader();
                                 div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Submit job training has been successfully</div>";

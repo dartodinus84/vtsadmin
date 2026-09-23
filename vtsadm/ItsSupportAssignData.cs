@@ -1422,6 +1422,7 @@ namespace vtsadm
             public string FullName { get; set; }
             public string Address { get; set; }
             public string PicName { get; set; }
+            public string OfficePhone1 { get; set; }
             public string BranchName { get; set; }
             public string MarketingName { get; set; }
         }
@@ -1442,6 +1443,7 @@ namespace vtsadm
                     + "LTRIM(RTRIM(ISNULL(Address, ''))) AS Address, "
                     + "LTRIM(RTRIM(ISNULL(PICName1, ''))) AS PICName1, "
                     + "LTRIM(RTRIM(ISNULL(PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(OfficePhone1, ''))) AS OfficePhone1, "
                     + "LTRIM(RTRIM(ISNULL(BranchName, ''))) AS BranchName "
                     + "FROM mst_customer WITH (NOLOCK) "
                     + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "'");
@@ -1461,6 +1463,7 @@ namespace vtsadm
                     + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ''))) AS OfficePhone1, "
                     + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName "
                     + "FROM trx_training_order t WITH (NOLOCK) "
                     + "INNER JOIN mst_customer c WITH (NOLOCK) "
@@ -1476,6 +1479,7 @@ namespace vtsadm
                     + "AND ISNULL(t.Status, '') NOT IN ('DE')");
             }
 
+            CustomerContact bestWithoutPhone = null;
             foreach (string sql in queries)
             {
                 DataTable table = QueryDataTable(sql, connString);
@@ -1485,17 +1489,32 @@ namespace vtsadm
                 }
 
                 CustomerContact contact = MapCustomerContact(table.Rows[0]);
-                if (contact != null
-                    && (!string.IsNullOrWhiteSpace(contact.Address)
-                        || !string.IsNullOrWhiteSpace(contact.PicName)
-                        || !string.IsNullOrWhiteSpace(contact.FullName)
-                        || !string.IsNullOrWhiteSpace(contact.CustId)))
+                if (contact == null)
+                {
+                    continue;
+                }
+
+                bool hasIdentity = !string.IsNullOrWhiteSpace(contact.Address)
+                    || !string.IsNullOrWhiteSpace(contact.PicName)
+                    || !string.IsNullOrWhiteSpace(contact.FullName)
+                    || !string.IsNullOrWhiteSpace(contact.CustId);
+                if (!hasIdentity && string.IsNullOrWhiteSpace(contact.OfficePhone1))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(contact.OfficePhone1))
                 {
                     return contact;
                 }
+
+                if (bestWithoutPhone == null)
+                {
+                    bestWithoutPhone = contact;
+                }
             }
 
-            return null;
+            return bestWithoutPhone;
         }
 
         private static CustomerContact MapCustomerContact(DataRow row)
@@ -1527,6 +1546,9 @@ namespace vtsadm
                     GetRowString(row, "PicName"),
                     GetRowString(row, "PICName"),
                     GetRowString(row, "PICName2"))),
+                OfficePhone1 = CleanCustomerField(FirstNonEmpty(
+                    GetRowString(row, "OfficePhone1"),
+                    GetRowString(row, "Office Phone 1"))),
                 BranchName = CleanCustomerField(GetRowString(row, "BranchName")),
                 MarketingName = CleanCustomerField(GetRowString(row, "MarketingName"))
             };

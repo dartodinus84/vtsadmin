@@ -39,7 +39,8 @@ namespace vtsadm
             string jobId,
             string custId,
             string technicianId,
-            DateTime schDate)
+            DateTime schDate,
+            string jobRemark = "")
         {
             AssignDetail detail = ResolveAssignNotificationDetail(
                 connString,
@@ -52,6 +53,7 @@ namespace vtsadm
                 return;
             }
 
+            ApplyJobOrderRemarkOverride(detail, jobRemark);
             SendNotificationMessage(connString, BuildDetailMessage(detail));
         }
 
@@ -733,6 +735,7 @@ namespace vtsadm
                     + "SchDate, "
                     + "LTRIM(RTRIM(ISNULL(Remark, ''))) AS Remark, "
                     + "LTRIM(RTRIM(ISNULL(Status, ''))) AS Status, "
+                    + "LTRIM(RTRIM(ISNULL(DeviceTypeID, ''))) AS DeviceTypeID, "
                     + "DtmUpd "
                     + "FROM trx_job_assign_detail WITH (NOLOCK) "
                     + "WHERE AssignID = '" + EscapeSqlLiteral(assignId.Trim()) + "' "
@@ -764,6 +767,16 @@ namespace vtsadm
             detail.InstallDate = ParseDate(FirstNonEmpty(GetRowString(row, "InstallDate"), GetRowString(row, "MIS_Date"), FormatDateValue(detail.InstallDate)));
             detail.AreaName = FirstNonEmpty(GetRowString(row, "AreaName"), detail.AreaName);
             detail.Status = FirstNonEmpty(GetRowString(row, "Status"), detail.Status);
+            string assignCategoryId = FirstNonEmpty(
+                GetRowString(row, "DeviceTypeID"),
+                GetRowString(row, "TrainCategoryID"),
+                GetRowString(row, "InsDeviceTypeID"));
+            if (!string.IsNullOrWhiteSpace(assignCategoryId)
+                && !assignCategoryId.Equals("[Select]", StringComparison.OrdinalIgnoreCase)
+                && !assignCategoryId.Equals("-", StringComparison.OrdinalIgnoreCase))
+            {
+                detail.TrainCategoryId = FirstNonEmpty(detail.TrainCategoryId, assignCategoryId);
+            }
         }
 
         private static void EnrichFromCustomer(string connString, AssignDetail detail)
@@ -793,6 +806,7 @@ namespace vtsadm
             detail.MarketingName = FirstNonEmpty(contact.MarketingName, detail.MarketingName);
             detail.Address = FirstNonEmpty(contact.Address, detail.Address);
             detail.PicName = FirstNonEmpty(contact.PicName, detail.PicName);
+            detail.CustomerNumber = FirstNonEmpty(contact.OfficePhone1);
         }
 
         private static AssignDetail BuildFallbackAssignDetail(
@@ -867,11 +881,11 @@ namespace vtsadm
             string safeKey = EscapeSqlLiteral(technicianKey);
             string[] queries =
             {
-                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Name, ''))) AS Name "
+                "SELECT TOP 1 * "
                     + "FROM mst_itsupport WITH (NOLOCK) "
                     + "WHERE LTRIM(RTRIM(ISNULL(ITID, ''))) = '" + safeKey + "' "
                     + "AND ISNULL(Status, '') NOT IN ('DE', 'BL')",
-                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Name, ''))) AS Name "
+                "SELECT TOP 1 * "
                     + "FROM mst_itsupport WITH (NOLOCK) "
                     + "WHERE LTRIM(RTRIM(ISNULL(UserID, ''))) = '" + safeKey + "' "
                     + "AND ISNULL(Status, '') NOT IN ('DE', 'BL')"
@@ -885,10 +899,28 @@ namespace vtsadm
                     continue;
                 }
 
-                string name = GetRowString(table.Rows[0], "Name");
+                DataRow row = table.Rows[0];
+                string name = GetRowString(row, "Name");
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     detail.TechnicianName = name;
+                }
+
+                string telegram = FirstNonEmpty(
+                    GetRowString(row, "Telegram"),
+                    GetRowString(row, "TelegramID"),
+                    GetRowString(row, "TelegramName"),
+                    GetRowString(row, "TelegramUser"),
+                    GetRowString(row, "TelegramUsername"),
+                    GetRowString(row, "TelegramAccount"));
+                if (!string.IsNullOrWhiteSpace(telegram))
+                {
+                    detail.TechnicianTelegram = telegram;
+                }
+
+                if (!string.IsNullOrWhiteSpace(detail.TechnicianName)
+                    || !string.IsNullOrWhiteSpace(detail.TechnicianTelegram))
+                {
                     return;
                 }
             }
@@ -934,12 +966,17 @@ namespace vtsadm
 
             string[] queries = new string[]
             {
+                "SELECT TOP 1 * FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'",
+                "SELECT TOP 1 t.TrainingID, t.CustID, t.ScheduleDate, t.Remark, t.RemarkTraining, t.BranchName, "
+                    + "t.TrainCategoryID, cat.TrainCategoryDesc "
+                    + "FROM trx_training_order t WITH (NOLOCK) "
+                    + "LEFT JOIN ref_train_category cat WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(cat.TrainCategoryID, ''))) = LTRIM(RTRIM(ISNULL(t.TrainCategoryID, ''))) "
+                    + "WHERE t.TrainingID = '" + jobId + "'",
                 "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName, "
                     + "TrainCategoryID, TrainingCategoryName, TrainCategoryName, CategoryName "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'",
-                "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName, TrainCategoryID "
-                    + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'",
-                "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, RemarkTraining, BranchName "
+                "SELECT TOP 1 TrainingID, CustID, ScheduleDate, Remark, BranchName, TrainCategoryID "
                     + "FROM trx_training_order WITH (NOLOCK) WHERE TrainingID = '" + jobId + "'"
             };
 
@@ -954,13 +991,21 @@ namespace vtsadm
                 DataRow row = table.Rows[0];
                 detail.CustId = FirstNonEmpty(GetRowString(row, "CustID"), detail.CustId);
                 detail.TrainingScheduleDate = ParseDate(GetRowString(row, "ScheduleDate"));
-                detail.RemarkOrder = FirstNonEmpty(GetRowString(row, "Remark"), detail.RemarkOrder);
+                detail.RemarkOrder = FirstNonEmpty(
+                    GetAnyTrainingRemark(row),
+                    detail.RemarkOrder);
+                detail.RemarkTraining = FirstNonEmpty(
+                    GetRowString(row, "RemarkTraining"),
+                    GetAnyTrainingRemark(row),
+                    detail.RemarkTraining);
+                detail.Remark = FirstNonEmpty(GetAnyTrainingRemark(row), detail.Remark);
                 detail.TrainCategoryId = FirstNonEmpty(
                     GetRowString(row, "TrainCategoryID"),
                     GetRowString(row, "TrainingCategoryID"),
                     detail.TrainCategoryId);
 
                 string category = FirstNonEmpty(
+                    GetRowString(row, "TrainCategoryDesc"),
                     GetRowString(row, "TrainingCategoryName"),
                     GetRowString(row, "TrainCategoryName"),
                     GetRowString(row, "CategoryName"));
@@ -1050,8 +1095,49 @@ namespace vtsadm
         {
             string alamat = FirstNonEmpty(detail != null ? detail.Address : string.Empty, "-");
             string picCustomer = FirstNonEmpty(detail != null ? detail.PicName : string.Empty, "-");
+            string officePhone = FirstNonEmpty(detail != null ? detail.CustomerNumber : string.Empty, "-");
             sb.AppendLine("Alamat : <b>" + EscapeHtml(alamat) + "</b>");
             sb.AppendLine("PIC Customer : <b>" + EscapeHtml(picCustomer) + "</b>");
+            sb.AppendLine("No. Telp : <b>" + EscapeHtml(officePhone) + "</b>");
+        }
+
+        private static void AppendTelegramUserTag(StringBuilder sb, AssignDetail detail)
+        {
+            string tag = FormatTelegramMention(detail == null ? string.Empty : detail.TechnicianTelegram);
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                return;
+            }
+
+            sb.AppendLine();
+            sb.AppendLine(EscapeHtml(tag));
+        }
+
+        private static string FormatTelegramMention(string raw)
+        {
+            string value = (raw ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            int spaceIndex = value.IndexOf(' ');
+            if (spaceIndex > 0)
+            {
+                value = value.Substring(0, spaceIndex).Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            if (value[0] != '@')
+            {
+                value = "@" + value.TrimStart('@');
+            }
+
+            return value;
         }
 
         private static DateTime? ResolveBotAssignDate(AssignDetail detail)
@@ -1096,6 +1182,7 @@ namespace vtsadm
             sb.AppendLine();
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             AppendBotCustomerContactSection(sb, detail);
+            AppendTelegramUserTag(sb, detail);
 
             return sb.ToString().TrimEnd();
         }
@@ -1107,11 +1194,12 @@ namespace vtsadm
             string customerName = ResolveBotCustomerDisplayName(detail);
             string fromItSupport = FirstNonEmpty(detail.PreviousTechnicianName, detail.PreviousTechnicianId, "-");
             string toItSupport = FirstNonEmpty(detail.TechnicianName, detail.TechnicianId, "-");
-            string remark = ResolveActionNoteForMessage(detail);
+            string remark = ResolveJobOrderCatatan(detail);
 
-            sb.AppendLine("🔁 <b>NOTIFIKASI PINDAH PENUGASAN</b>");
+            sb.AppendLine("🔁 <b>NOTIFIKASI PINDAH " + EscapeHtml(category.ToUpperInvariant()) + "</b>");
             sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
             sb.AppendLine();
+            sb.AppendLine("Jenis : <b>" + EscapeHtml(category) + "</b>");
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
@@ -1125,6 +1213,8 @@ namespace vtsadm
             sb.AppendLine();
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             AppendBotCustomerContactSection(sb, detail);
+            sb.AppendLine("Reason Move : <b>" + EscapeHtml(ResolveActionNoteForMessage(detail)) + "</b>");
+            AppendTelegramUserTag(sb, detail);
 
             return sb.ToString().TrimEnd();
         }
@@ -1135,11 +1225,12 @@ namespace vtsadm
             StringBuilder sb = new StringBuilder();
             string customerName = ResolveBotCustomerDisplayName(detail);
             string itSupportName = FirstNonEmpty(detail.TechnicianName, detail.TechnicianId, "-");
-            string remark = ResolveActionNoteForMessage(detail);
+            string remark = ResolveJobOrderCatatan(detail);
 
-            sb.AppendLine("🗑 <b>NOTIFIKASI HAPUS PENUGASAN</b>");
+            sb.AppendLine("🗑 <b>NOTIFIKASI HAPUS " + EscapeHtml(category.ToUpperInvariant()) + "</b>");
             sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
             sb.AppendLine();
+            sb.AppendLine("Jenis : <b>" + EscapeHtml(category) + "</b>");
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
@@ -1152,41 +1243,93 @@ namespace vtsadm
             sb.AppendLine();
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             AppendBotCustomerContactSection(sb, detail);
+            sb.AppendLine("Reason Delete : <b>" + EscapeHtml(ResolveActionNoteForMessage(detail)) + "</b>");
+            AppendTelegramUserTag(sb, detail);
 
             return sb.ToString().TrimEnd();
         }
 
         private static string ResolveCategoryLabel(AssignDetail detail)
         {
-            string category = FirstNonEmpty(detail.CategoryLabel, detail.JobType, "Training/Visit");
-            if (IsVisitAssign(detail) || category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0)
+            string fromId = LookupTrainCategoryDesc(detail);
+            if (!string.IsNullOrWhiteSpace(fromId))
             {
-                return "Visit";
+                return fromId;
             }
 
-            if (category.IndexOf("train", StringComparison.OrdinalIgnoreCase) >= 0)
+            string classified = ClassifyTrainVisitLabel(detail == null ? string.Empty : detail.CategoryLabel);
+            if (!string.IsNullOrWhiteSpace(classified))
+            {
+                return classified;
+            }
+
+            return FirstNonEmpty(detail == null ? string.Empty : detail.CategoryLabel, "Training/Visit");
+        }
+
+        private static string LookupTrainCategoryDesc(AssignDetail detail)
+        {
+            if (detail == null)
+            {
+                return string.Empty;
+            }
+
+            string categoryId = FirstNonEmpty(detail.TrainCategoryId);
+            if (categoryId.Equals("[Select]", StringComparison.OrdinalIgnoreCase)
+                || categoryId.Equals("-", StringComparison.OrdinalIgnoreCase))
+            {
+                categoryId = string.Empty;
+            }
+
+            if (categoryId.Equals("TRC0000001", StringComparison.OrdinalIgnoreCase))
             {
                 return "Training";
             }
 
-            return category;
-        }
-
-        private static bool IsVisitAssign(AssignDetail detail)
-        {
-            if (detail == null)
-            {
-                return false;
-            }
-
-            string categoryId = FirstNonEmpty(detail.TrainCategoryId);
             if (categoryId.Equals("TRC0000002", StringComparison.OrdinalIgnoreCase))
             {
-                return true;
+                return "Visit";
             }
 
-            string category = FirstNonEmpty(detail.CategoryLabel, detail.JobType);
-            return category.IndexOf("visit", StringComparison.OrdinalIgnoreCase) >= 0;
+            return ClassifyTrainVisitLabel(FirstNonEmpty(detail.CategoryLabel, detail.JobType));
+        }
+
+        private static string ClassifyTrainVisitLabel(string raw)
+        {
+            string text = (raw ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return string.Empty;
+            }
+
+            if (text.Equals("Training", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Training";
+            }
+
+            if (text.Equals("Visit", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Visit";
+            }
+
+            string lower = text.ToLowerInvariant();
+            bool hasTrain = lower.IndexOf("train", StringComparison.Ordinal) >= 0;
+            bool hasVisit = lower.IndexOf("visit", StringComparison.Ordinal) >= 0;
+            if (hasTrain && hasVisit)
+            {
+                return string.Empty;
+            }
+
+            if (hasTrain)
+            {
+                return "Training";
+            }
+
+            if (hasVisit)
+            {
+                return "Visit";
+            }
+
+            return string.Empty;
         }
 
         private static string ResolveJobOrderCatatan(AssignDetail detail)
@@ -1196,7 +1339,91 @@ namespace vtsadm
                 return "-";
             }
 
-            return FirstNonEmpty(detail.RemarkOrder, "-");
+            return FirstNonEmpty(
+                StripAssigneeTagsFromRemark(detail.RemarkOrder),
+                StripAssigneeTagsFromRemark(detail.RemarkTraining),
+                StripAssigneeTagsFromRemark(detail.Remark),
+                "-");
+        }
+
+        private static void ApplyJobOrderRemarkOverride(AssignDetail detail, string jobRemark)
+        {
+            string cleaned = StripAssigneeTagsFromRemark(jobRemark);
+            if (detail == null || string.IsNullOrWhiteSpace(cleaned))
+            {
+                return;
+            }
+
+            detail.RemarkOrder = cleaned;
+            detail.Remark = FirstNonEmpty(cleaned, detail.Remark);
+        }
+
+        private static string GetAnyTrainingRemark(DataRow row)
+        {
+            if (row == null || row.Table == null)
+            {
+                return string.Empty;
+            }
+
+            string direct = FirstNonEmpty(
+                GetRowString(row, "Remark"),
+                GetRowString(row, "Remarks"),
+                GetRowString(row, "RemarkTraining"),
+                GetRowString(row, "RemarkOrder"),
+                GetRowString(row, "Catatan"));
+            if (!string.IsNullOrWhiteSpace(direct))
+            {
+                return direct;
+            }
+
+            foreach (DataColumn column in row.Table.Columns)
+            {
+                string name = column.ColumnName ?? string.Empty;
+                if (name.IndexOf("remark", StringComparison.OrdinalIgnoreCase) < 0
+                    && name.IndexOf("catatan", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                string value = GetRowString(row, name);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string StripAssigneeTagsFromRemark(string remark)
+        {
+            string raw = (remark ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            string[] parts = raw.Split('|');
+            List<string> kept = new List<string>();
+            foreach (string part in parts)
+            {
+                string text = (part ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                if (text.StartsWith("ITID:", StringComparison.OrdinalIgnoreCase)
+                    || text.StartsWith("ITNAME:", StringComparison.OrdinalIgnoreCase)
+                    || text.StartsWith("IT:", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                kept.Add(text);
+            }
+
+            return kept.Count == 0 ? string.Empty : string.Join(" | ", kept.ToArray());
         }
 
         private static string ResolveActionNoteForMessage(AssignDetail detail)
@@ -1491,7 +1718,8 @@ namespace vtsadm
                 }
 
                 string response = CallTelegramApi(apiToken, "sendMessage", payload);
-                return !string.IsNullOrWhiteSpace(response) && response.IndexOf("\"ok\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+            return !string.IsNullOrWhiteSpace(response)
+                && response.Replace(" ", string.Empty).IndexOf("\"ok\":true", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
             {
@@ -1522,7 +1750,8 @@ namespace vtsadm
                 }
 
                 string response = CallTelegramApi(apiToken, "sendMessage", payload);
-                return !string.IsNullOrWhiteSpace(response) && response.IndexOf("\"ok\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+            return !string.IsNullOrWhiteSpace(response)
+                && response.Replace(" ", string.Empty).IndexOf("\"ok\":true", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
             {
@@ -2171,6 +2400,7 @@ namespace vtsadm
             public string CustomerName { get; set; }
             public string TechnicianId { get; set; }
             public string TechnicianName { get; set; }
+            public string TechnicianTelegram { get; set; }
             public string PreviousTechnicianId { get; set; }
             public string PreviousTechnicianName { get; set; }
             public string MarketingName { get; set; }

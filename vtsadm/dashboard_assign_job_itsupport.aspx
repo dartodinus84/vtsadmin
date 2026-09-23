@@ -166,8 +166,12 @@
             max-width: 920px;
         }
 
+        #assignCloseJoBackdrop {
+            z-index: 1460;
+        }
+
         #assignCloseJoPickerBackdrop {
-            z-index: 1400;
+            z-index: 1480;
         }
 
         #assignCloseJoPickerBackdrop .assign-jo-table {
@@ -2078,8 +2082,8 @@
         }
 
         .assign-report-table td.col-action {
-            white-space: nowrap;
-            min-width: 135px;
+            white-space: normal;
+            min-width: 280px;
         }
 
         .assign-report-table tbody tr:last-child td {
@@ -2255,11 +2259,32 @@
             text-decoration: none;
         }
 
+        .assign-report-close-jo-btn {
+            border: 1px solid #fdba74;
+            border-radius: 8px;
+            background: #fff7ed;
+            color: #c2410c;
+            font-size: 11px;
+            font-weight: 700;
+            min-height: 30px;
+            padding: 4px 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            line-height: 1.2;
+        }
+
+        .assign-report-close-jo-btn:hover,
+        .assign-report-close-jo-btn:focus {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+
         .assign-report-action-wrap {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             white-space: nowrap;
         }
 
@@ -4485,7 +4510,7 @@
             <div class="assign-job-modal-header">
                 <div class="assign-job-title-wrap">
                     <h4 id="assignCloseJoTitle">Close Job Training / Visit</h4>
-                    <p>Close JO yang sudah assigned, sama seperti menu Training Customer</p>
+                    <p>Semua user bisa close JO yang assigned ke mereka. Hanya admin yang melihat semua JO.</p>
                 </div>
                 <button type="button" class="assign-job-close" id="assignCloseJoCloseBtn" aria-label="Close">&times;</button>
             </div>
@@ -4626,7 +4651,7 @@
             <div class="assign-job-modal-header">
                 <div class="assign-job-title-wrap">
                     <h4 id="assignCloseJoPickerTitle">Pilih Job Training</h4>
-                    <p>Cari JO Training/Visit yang belum di-close</p>
+                    <p>Hanya admin yang melihat semua JO. User lain hanya JO assigned ke mereka.</p>
                 </div>
                 <button type="button" class="assign-job-close" id="assignCloseJoPickerCloseBtn" aria-label="Close">&times;</button>
             </div>
@@ -4635,7 +4660,7 @@
                     <input type="text" id="assignCloseJoSearchInput" placeholder="Cari Training ID / Customer / Branch..." />
                     <button type="button" id="assignCloseJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
-                <p class="assign-jo-search-hint">Non-admin hanya melihat JO yang di-assign ke UserID/ITID login. Admin melihat semua JO assigned yang belum close.</p>
+                <p class="assign-jo-search-hint">Semua user bisa close JO mereka sendiri. Hanya admin yang melihat semua JO assigned yang belum close.</p>
                 <div class="assign-jo-table-wrap">
                     <table class="assign-jo-table">
                         <thead>
@@ -5102,6 +5127,7 @@
                 supAreaId: ""
             };
             var assignDocumentEventsBound = false;
+            var assignModalControlsBound = false;
             var assignJoPageSize = 20;
             var assignNewInstallPageUrl = "<%= ResolveUrl("~/installation_job_new.aspx") %>";
             var closedJobRequestToken = 0;
@@ -5570,6 +5596,10 @@
             }
 
             function confirmReportDelete() {
+                if (reportModalState.isSaving) {
+                    return;
+                }
+
                 var rowIndex = reportModalState.pendingDeleteRowIndex;
                 var rows = reportModalState.rows || [];
                 if (rowIndex < 0 || rowIndex >= rows.length) {
@@ -5598,6 +5628,7 @@
                 }
 
                 setReportFeedback("Menghapus assign job...", false, false);
+                reportModalState.isSaving = true;
                 callAssignPageMethod(
                     "DeleteScheduleAssign",
                     {
@@ -5606,6 +5637,7 @@
                         actionRemark: actionRemark
                     },
                     function (result) {
+                        reportModalState.isSaving = false;
                         var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
                         if (!success) {
                             setReportFeedback((result && result.Message) || "Gagal menghapus assign job.", true, false);
@@ -5627,6 +5659,7 @@
                         }
                     },
                     function (errorMessage) {
+                        reportModalState.isSaving = false;
                         setReportFeedback("Gagal menghapus assign job. " + (errorMessage || ""), true, false);
                     });
             }
@@ -6010,13 +6043,16 @@
                     var canEdit = canDelete;
                     var detailButton = "<button type=\"button\" class=\"assign-report-training-btn\" data-row-index=\"" + i + "\">Info</button>";
                     var installButton = "";
+                    var closeJoButton = (!isCompleted && (row.JobID || "").toString().trim())
+                        ? "<button type=\"button\" class=\"assign-report-close-jo-btn\" data-row-index=\"" + i + "\">Close</button>"
+                        : "";
                     var editButton = canEdit
                         ? "<button type=\"button\" class=\"assign-report-edit-btn\" data-row-index=\"" + i + "\">Edit</button>"
                         : "";
                     var deleteButton = canDelete
                         ? "<button type=\"button\" class=\"assign-report-delete-btn\" data-row-index=\"" + i + "\">Delete</button>"
                         : "";
-                    var actionButton = "<div class=\"assign-report-action-wrap\">" + detailButton + installButton + editButton + deleteButton + "</div>";
+                    var actionButton = "<div class=\"assign-report-action-wrap\">" + detailButton + installButton + closeJoButton + editButton + deleteButton + "</div>";
                     var customerName = getScheduleRowCustomerName(row);
                     html.push("<tr>"
                         + "<td class=\"col-action\">" + actionButton + "</td>"
@@ -8431,7 +8467,7 @@
                     || "";
                 var billableId = (document.getElementById("assignTrainingBillable") || {}).value || "";
                 var categoryId = (document.getElementById("assignTrainingCategory") || {}).value || "";
-                var remark = (document.getElementById("assignTrainingRemark") || {}).value || "";
+                var remark = ((document.getElementById("assignTrainingRemark") || {}).value || "").trim();
                 var itUserId = (document.getElementById("assignTrainingItUserId") || {}).value || "";
                 var itUserName = (document.getElementById("assignTrainingItUserName") || {}).value || "";
                 var customerName = ((document.getElementById("assignTrainingCustName") || {}).textContent || "").trim();
@@ -8627,7 +8663,23 @@
                 renderCloseJoNotes([]);
             }
 
-            function openCloseJoModal() {
+            function mapScheduleRowToCloseJo(row) {
+                row = row || {};
+                return {
+                    TrainingID: (row.JobID || "").toString().trim(),
+                    CustomerName: getScheduleRowCustomerName(row),
+                    CustID: (row.CustID || "").toString().trim(),
+                    ReqDate: row.AssignDate || "",
+                    SchDate: row.SchDate || reportModalState.schDate || "",
+                    BranchName: row.BranchName || row.AreaName || "",
+                    CategoryID: "",
+                    CategoryDesc: row.JobType || row.DeviceTypeDesc || "",
+                    AssignDate: row.AssignDate || row.SchDate || "",
+                    AssignTrainer: row.TechnicianName || reportModalState.technicianName || ""
+                };
+            }
+
+            function openCloseJoModal(prefillRow) {
                 resetCloseJoForm();
                 setCloseJoFeedback("Memuat category...", false, false);
                 var backdrop = getCloseJoBackdrop();
@@ -8640,8 +8692,19 @@
                         return;
                     }
                     setCloseJoFeedback("", false, false);
+                    if (prefillRow) {
+                        applyCloseJoPick(prefillRow);
+                    }
                 });
                 loadCloseJoFunctions();
+            }
+
+            function openCloseJoFromScheduleRow(row) {
+                var mapped = mapScheduleRowToCloseJo(row);
+                if (!mapped.TrainingID) {
+                    return;
+                }
+                openCloseJoModal(mapped);
             }
 
             function parseCloseJoDateToIso(value) {
@@ -9031,7 +9094,7 @@
                         }
                         return;
                     }
-                    renderCloseJoPickerRows(result.Rows || result.rows || []);
+                    renderCloseJoPickerRows(result.Rows || result.rows || [], (result && result.Message) || "");
                 }, function (errorMessage) {
                     if (body) {
                         body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Gagal memuat JO Training. "
@@ -9041,14 +9104,16 @@
                 });
             }
 
-            function renderCloseJoPickerRows(rows) {
+            function renderCloseJoPickerRows(rows, emptyMessage) {
                 var body = document.getElementById("assignCloseJoPickerBody");
                 if (!body) {
                     return;
                 }
                 closeJoPickerRows = rows || [];
                 if (!closeJoPickerRows.length) {
-                    body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Tidak ada JO Training/Visit yang bisa di-close.</td></tr>";
+                    body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">"
+                        + escapeHtml(emptyMessage || "Tidak ada JO Training/Visit yang bisa di-close.")
+                        + "</td></tr>";
                     return;
                 }
                 var html = "";
@@ -9598,6 +9663,10 @@
             }
 
             function bindAssignModalControls() {
+                if (assignModalControlsBound) {
+                    return;
+                }
+                assignModalControlsBound = true;
                 var closeBtn = document.getElementById("assignJobCloseBtn");
                 var closeActionBtn = document.getElementById("assignJobCloseActionBtn");
                 var cancelBtn = document.getElementById("assignJobCancelBtn");
@@ -9942,6 +10011,15 @@
                 }
                 if (reportTableBody) {
                     reportTableBody.addEventListener("click", function (event) {
+                        var closeJoBtnRow = closestByClass(event.target, "assign-report-close-jo-btn");
+                        if (closeJoBtnRow) {
+                            var closeIndex = parseInt(closeJoBtnRow.getAttribute("data-row-index"), 10);
+                            if (!isNaN(closeIndex) && reportModalState.rows && closeIndex >= 0 && closeIndex < reportModalState.rows.length) {
+                                openCloseJoFromScheduleRow(reportModalState.rows[closeIndex] || {});
+                            }
+                            return;
+                        }
+
                         var editBtn = closestByClass(event.target, "assign-report-edit-btn");
                         if (editBtn) {
                             var editIndex = parseInt(editBtn.getAttribute("data-row-index"), 10);

@@ -47,7 +47,7 @@ namespace vtsadm
                 }
 
                 ClsType ClType = new ClsType();
-                if (!Session["ClsTypeAccessMenu"].ToString().ToUpper().Contains("MNUCUSTJOBTRAINING"))
+                if (!dashboard_assign_job.CurrentUserCanAccessCloseJobTraining())
                 {
                     Response.Redirect("dashboard.aspx");
                 }
@@ -876,6 +876,14 @@ namespace vtsadm
                     if (userId == "" || conn == "")
                     {
                         div_comment.InnerHtml = "<div class='alert alert-danger alert-dismissible'><h4><i class='icon fa fa-ban'></i> Failed!</h4>Session expired. Please login again.</div>";
+                        return;
+                    }
+
+                    string closeDeniedMessage;
+                    if (!dashboard_assign_job.CurrentUserCanCloseAssignedTrainingJob(trainingId, out closeDeniedMessage))
+                    {
+                        div_comment.InnerHtml = "<div class='alert alert-danger alert-dismissible'><h4><i class='icon fa fa-ban'></i> Failed!</h4>"
+                            + HttpUtility.HtmlEncode(closeDeniedMessage) + "</div>";
                         return;
                     }
 
