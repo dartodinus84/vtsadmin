@@ -318,7 +318,7 @@ namespace vtsadm
             }
 
             return raw
-                .Where(x => !string.IsNullOrWhiteSpace(x.VehicleId))
+                .Where(x => IsRealVehicleRow(x))
                 .GroupBy(x => x.CompanyId + "|" + x.VehicleId, StringComparer.OrdinalIgnoreCase)
                 .Select(g =>
                 {
@@ -367,9 +367,8 @@ namespace vtsadm
 
         private static object ToClientRow(MirrorRow row)
         {
-            var culture = CultureInfo.GetCultureInfo("id-ID");
             var updated = row.UpdatedAt.HasValue
-                ? row.UpdatedAt.Value.ToString("dd MMM yyyy, HH:mm", culture)
+                ? row.UpdatedAt.Value.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture)
                 : "";
             return new
             {
@@ -382,7 +381,7 @@ namespace vtsadm
                 mirrorServers = row.MirrorServers,
                 status = row.Status,
                 updatedAt = updated,
-                updatedBy = string.IsNullOrWhiteSpace(row.UpdatedBy) ? "Admin" : row.UpdatedBy
+                updatedBy = row.UpdatedBy ?? ""
             };
         }
 
@@ -408,6 +407,23 @@ namespace vtsadm
                     return Convert.ToString(row[name]) ?? "";
             }
             return "";
+        }
+
+        private static bool IsPlaceholder(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return true;
+            var v = value.Trim();
+            return v == "0"
+                || string.Equals(v, "[Select]", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "dummy", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "test", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsRealVehicleRow(MirrorRow row)
+        {
+            return row != null
+                && !IsPlaceholder(row.VehicleId)
+                && !IsPlaceholder(row.CompanyId);
         }
 
         private static object Fail(string message)

@@ -500,13 +500,15 @@ namespace vtsadm
 
         private static string ResolveTvdIdByKeysInScope(OleDbConnection connection, OleDbTransaction transaction, string tvaId, string tdtId, string tgtId, string technicianId)
         {
-            if (connection == null || connection.State != ConnectionState.Open || transaction == null)
+            if (connection == null || connection.State != ConnectionState.Open)
                 return "";
             if (string.IsNullOrWhiteSpace(tvaId) || string.IsNullOrWhiteSpace(tdtId) ||
                 string.IsNullOrWhiteSpace(tgtId) || string.IsNullOrWhiteSpace(technicianId))
                 return "";
 
-            using (var cmd = new OleDbCommand("sp_new_installation_get_tvdid", connection, transaction))
+            using (var cmd = transaction == null
+                ? new OleDbCommand("sp_new_installation_get_tvdid", connection)
+                : new OleDbCommand("sp_new_installation_get_tvdid", connection, transaction))
             {
                 cmd.CommandType = CommandType.StoredProcedure;
                 cmd.CommandTimeout = 60;
@@ -909,92 +911,75 @@ namespace vtsadm
                     using (var connection = new OleDbConnection(GetSessionConn()))
                     {
                         connection.Open();
-                        using (var tx = connection.BeginTransaction(IsolationLevel.ReadCommitted))
+                        var parameters = new object[]
                         {
-                            try
+                            TvaID.Trim(),
+                            PoID.Trim(),
+                            VehicleID.Trim(),
+                            TdtID.Trim(),
+                            DeviceID.Trim(),
+                            TgtID.Trim(),
+                            GsmID.Trim(),
+                            TechnicianID.Trim(),
+                            JobID.Trim(),
+                            serverInstall,
+                            serverDevice,
+                            installDate,
+                            (Remarks ?? "").Trim(),
+                            contrac,
+                            isRelay,
+                            pendingFiles.Count > 0 ? pendingFiles[0].FileName : "",
+                            userId
+                        };
+
+                        // Do not use BeginTransaction: linked-server SPs (Indocement) cannot join MSDTC.
+                        executor.ExecuteInScope(connection, null, "sp_insert_new_installation_new", parameters);
+                        insertedTvdId = ResolveTvdIdByKeysInScope(connection, null, TvaID, TdtID, TgtID, TechnicianID);
+                        if (string.IsNullOrWhiteSpace(insertedTvdId))
+                            throw new InvalidOperationException("sp_insert_new_installation_new tidak menghasilkan data TVDID.");
+
+                        if (pendingFiles.Count > 0)
+                        {
+                            var pictureNames = new List<string>();
+                            for (int i = 0; i < pendingFiles.Count; i++) pictureNames.Add(pendingFiles[i].FileName);
+                            while (pictureNames.Count < 10) pictureNames.Add("");
+                            var picParams = new object[]
                             {
-                                var parameters = new object[]
-                                {
-                                    TvaID.Trim(),
-                                    PoID.Trim(),
-                                    VehicleID.Trim(),
-                                    TdtID.Trim(),
-                                    DeviceID.Trim(),
-                                    TgtID.Trim(),
-                                    GsmID.Trim(),
-                                    TechnicianID.Trim(),
-                                    JobID.Trim(),
-                                    serverInstall,
-                                    serverDevice,
-                                    installDate,
-                                    (Remarks ?? "").Trim(),
-                                    contrac,
-                                    isRelay,
-                                    pendingFiles.Count > 0 ? pendingFiles[0].FileName : "",
-                                    userId
-                                };
+                                TdtID.Trim(),
+                                JobID.Trim(),
+                                pictureNames[0],
+                                pictureNames[1],
+                                pictureNames[2],
+                                pictureNames[3],
+                                pictureNames[4],
+                                pictureNames[5],
+                                pictureNames[6],
+                                pictureNames[7],
+                                pictureNames[8],
+                                pictureNames[9],
+                                userId
+                            };
+                            executor.ExecuteInScope(connection, null, "sp_insert_trx_vehicle_device_picture", picParams);
+                        }
 
-                                // Do not rely on ExecuteNonQuery affected rows for SP success,
-                                // because many procedures use SET NOCOUNT ON and may return 0/-1.
-                                executor.ExecuteInScope(connection, tx, "sp_insert_new_installation_new", parameters);
-                                insertedTvdId = ResolveTvdIdByKeysInScope(connection, tx, TvaID, TdtID, TgtID, TechnicianID);
-                                if (string.IsNullOrWhiteSpace(insertedTvdId))
-                                    throw new InvalidOperationException("sp_insert_new_installation_new tidak menghasilkan data TVDID.");
-
-                                if (pendingFiles.Count > 0)
-                                {
-                                    var pictureNames = new List<string>();
-                                    for (int i = 0; i < pendingFiles.Count; i++) pictureNames.Add(pendingFiles[i].FileName);
-                                    while (pictureNames.Count < 10) pictureNames.Add("");
-                                    var picParams = new object[]
-                                    {
-                                        TdtID.Trim(),
-                                        JobID.Trim(),
-                                        pictureNames[0],
-                                        pictureNames[1],
-                                        pictureNames[2],
-                                        pictureNames[3],
-                                        pictureNames[4],
-                                        pictureNames[5],
-                                        pictureNames[6],
-                                        pictureNames[7],
-                                        pictureNames[8],
-                                        pictureNames[9],
-                                        userId
-                                    };
-                                    executor.ExecuteInScope(connection, tx, "sp_insert_trx_vehicle_device_picture", picParams);
-                                }
-
-                                try
-                                {
-                                    // Keep compatibility with legacy flow (new_install.aspx.cs): 3 parameters only.
-                                    executor.ExecuteInScope(connection, tx, "sp_insert_interfacing_user_access", new object[]
-                                    {
-                                        noSn,
-                                        interfacingAutoId,
-                                        serverInstall
-                                    });
-                                }
-                                catch
-                                {
-                                    // Fallback for installations that already use 4-parameter signature.
-                                    // Do not use session user id here by request.
-                                    executor.ExecuteInScope(connection, tx, "sp_insert_interfacing_user_access", new object[]
-                                    {
-                                        noSn,
-                                        interfacingAutoId,
-                                        serverInstall,
-                                        ""
-                                    });
-                                }
-
-                                tx.Commit();
-                            }
-                            catch
+                        try
+                        {
+                            executor.ExecuteInScope(connection, null, "sp_insert_interfacing_user_access", new object[]
                             {
-                                try { tx.Rollback(); } catch { }
-                                throw;
-                            }
+                                noSn,
+                                interfacingAutoId,
+                                serverInstall
+                            });
+                        }
+                        catch
+                        {
+                            executor.ExecuteInScope(connection, null, "sp_insert_interfacing_user_access", new object[]
+                            {
+                                noSn,
+                                interfacingAutoId,
+                                serverInstall,
+                                ""
+                            });
                         }
                     }
                 }
