@@ -1915,9 +1915,8 @@ namespace vtsadm
                 return true;
             }
 
-            string webhookUrl = FirstNonEmpty(
-                GetAppSetting("ItsSupportTelegramWebhookUrl"),
-                BuildWebhookUrl(context));
+            string webhookUrl = ResolvePublicWebhookUrl(context);
+            bool isLocalWebhook = IsLocalOrPrivateWebhookUrl(webhookUrl);
 
             StringBuilder report = new StringBuilder();
             report.AppendLine("IT Support Telegram setup");
@@ -1946,13 +1945,26 @@ namespace vtsadm
             report.AppendLine("  " + BuildWebhookUrl(context) + "?setup=itssetup&simulate=open");
             report.AppendLine("  " + BuildWebhookUrl(context) + "?setup=itssetup&simulate=detail&job=TRO0006127");
             report.AppendLine();
-            report.AppendLine("NOTE: Telegram app sends commands to the registered webhook URL above, not localhost.");
+            report.AppendLine("NOTE: Telegram app sends /help /open to the registered public webhook, not localhost.");
             report.AppendLine();
 
             string skipRegister = (context.Request["register"] ?? string.Empty).Trim();
-            if (skipRegister == "0" || skipRegister.Equals("false", StringComparison.OrdinalIgnoreCase))
+            bool skipByDefault = isLocalWebhook && string.IsNullOrWhiteSpace(skipRegister);
+            if (skipByDefault
+                || skipRegister == "0"
+                || skipRegister.Equals("false", StringComparison.OrdinalIgnoreCase))
             {
-                report.AppendLine("Skipped setWebhook (register=0).");
+                report.AppendLine(isLocalWebhook
+                    ? "Skipped setWebhook on localhost so Telegram keeps the public webhook."
+                    : "Skipped setWebhook (register=0).");
+                context.Response.StatusCode = 200;
+                context.Response.Write(report.ToString().TrimEnd());
+                return true;
+            }
+
+            if (isLocalWebhook)
+            {
+                report.AppendLine("Refused setWebhook: Telegram cannot reach localhost/http URLs.");
                 context.Response.StatusCode = 200;
                 context.Response.Write(report.ToString().TrimEnd());
                 return true;
@@ -1986,6 +1998,51 @@ namespace vtsadm
             context.Response.StatusCode = 200;
             context.Response.Write(report.ToString().TrimEnd());
             return true;
+        }
+
+        private static string ResolvePublicWebhookUrl(HttpContext context)
+        {
+            string configured = GetAppSetting("ItsSupportTelegramWebhookUrl");
+            if (!IsLocalOrPrivateWebhookUrl(configured))
+            {
+                return configured;
+            }
+
+            string built = BuildWebhookUrl(context);
+            if (!IsLocalOrPrivateWebhookUrl(built))
+            {
+                return built;
+            }
+
+            return FirstNonEmpty(configured, built);
+        }
+
+        private static bool IsLocalOrPrivateWebhookUrl(string webhookUrl)
+        {
+            if (string.IsNullOrWhiteSpace(webhookUrl))
+            {
+                return true;
+            }
+
+            Uri uri;
+            if (!Uri.TryCreate(webhookUrl.Trim(), UriKind.Absolute, out uri))
+            {
+                return true;
+            }
+
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string host = (uri.Host ?? string.Empty).Trim().ToLowerInvariant();
+            return host == "localhost"
+                || host == "127.0.0.1"
+                || host == "::1"
+                || host.EndsWith(".local", StringComparison.Ordinal)
+                || host.StartsWith("192.168.", StringComparison.Ordinal)
+                || host.StartsWith("10.", StringComparison.Ordinal)
+                || host.StartsWith("172.16.", StringComparison.Ordinal);
         }
 
         private static string BuildWebhookUrl(HttpContext context)

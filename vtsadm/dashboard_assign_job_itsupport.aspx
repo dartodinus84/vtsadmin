@@ -1635,6 +1635,31 @@
         .assign-report-delete-submit-btn {
             border-color: #b91c1c;
             background: #b91c1c;
+            position: relative;
+        }
+
+        .assign-report-delete-submit-btn:disabled {
+            opacity: .7;
+            cursor: wait;
+        }
+
+        .assign-report-delete-submit-btn.is-loading {
+            padding-left: 34px;
+            pointer-events: none;
+        }
+
+        .assign-report-delete-submit-btn.is-loading:before {
+            content: "";
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            width: 14px;
+            height: 14px;
+            margin-top: -7px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.45);
+            border-top-color: #fff;
+            animation: assign-spin .8s linear infinite;
         }
 
         .assign-field select {
@@ -5576,6 +5601,7 @@
                 reportModalState.showAssignForm = false;
                 resetReportAssignFormFields();
                 reportModalState.pendingDeleteRowIndex = rowIndex;
+                setReportDeleteLoading(false);
                 renderReportAssignForm();
                 renderReportDeletePanel();
                 var deleteInput = document.getElementById("assignReportDeleteNoteInput");
@@ -5588,11 +5614,31 @@
             }
 
             function cancelReportDeletePanel() {
+                if (reportModalState.isSaving) {
+                    return;
+                }
                 reportModalState.pendingDeleteRowIndex = -1;
                 clearDashboardNote("assignReportDeleteNoteInput");
                 renderReportDeletePanel();
                 renderReportAssignForm();
                 setReportFeedback("", false, false);
+            }
+
+            function setReportDeleteLoading(isLoading) {
+                var confirmBtn = document.getElementById("assignReportDeleteConfirmBtn");
+                var cancelBtn = document.getElementById("assignReportDeleteCancelBtn");
+                var noteInput = document.getElementById("assignReportDeleteNoteInput");
+                if (confirmBtn) {
+                    confirmBtn.disabled = !!isLoading;
+                    confirmBtn.classList.toggle("is-loading", !!isLoading);
+                    confirmBtn.textContent = isLoading ? "Menghapus..." : "Hapus";
+                }
+                if (cancelBtn) {
+                    cancelBtn.disabled = !!isLoading;
+                }
+                if (noteInput) {
+                    noteInput.disabled = !!isLoading;
+                }
             }
 
             function confirmReportDelete() {
@@ -5629,6 +5675,7 @@
 
                 setReportFeedback("Menghapus assign job...", false, false);
                 reportModalState.isSaving = true;
+                setReportDeleteLoading(true);
                 callAssignPageMethod(
                     "DeleteScheduleAssign",
                     {
@@ -5638,6 +5685,7 @@
                     },
                     function (result) {
                         reportModalState.isSaving = false;
+                        setReportDeleteLoading(false);
                         var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
                         if (!success) {
                             setReportFeedback((result && result.Message) || "Gagal menghapus assign job.", true, false);
@@ -5660,6 +5708,7 @@
                     },
                     function (errorMessage) {
                         reportModalState.isSaving = false;
+                        setReportDeleteLoading(false);
                         setReportFeedback("Gagal menghapus assign job. " + (errorMessage || ""), true, false);
                     });
             }
@@ -6769,6 +6818,9 @@
             }
 
             function deleteAssignFromReportRow(rowIndex) {
+                if (reportModalState.isSaving) {
+                    return;
+                }
                 if (getIsTechnicianUser()) {
                     setReportFeedback("User IT Support tidak memiliki akses untuk menghapus assignment.", true, false);
                     return;
