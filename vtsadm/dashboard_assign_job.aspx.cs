@@ -2944,7 +2944,10 @@ namespace vtsadm
             }
 
             // Col-day numbers = assignments to IT Support (trx_job_assign_detail).
-            ApplyTrxJobAssignDetailDayCounts(trainers, periodDate, filterSupArea, filterAreaGroup);
+            // Do not filter those counts by WEST/EAST: the people on the grid are already
+            // region-filtered. AreaID on assign detail is often empty or a customer area,
+            // which made assigned cells fall back to AV after switching region.
+            ApplyTrxJobAssignDetailDayCounts(trainers, periodDate, string.Empty, string.Empty);
             // Total Closed JO Training/Visit columns = job_training.aspx data.
             ApplyJobTrainingClosedCountsOnly(trainers, periodDate, filterSupArea, filterAreaGroup);
 
