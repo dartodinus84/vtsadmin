@@ -192,6 +192,13 @@ namespace vtsadm
 
     [WebMethod(EnableSession = true)]
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public new static CustomerOpenJobResponse LoadCustomerOpenJobs(string custId, string excludeJobId = "")
+    {
+      return BuildCustomerOpenJobsResponse(custId, excludeJobId);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
     public static TrainingFunctionListResponse LoadTrainingFunctions()
     {
       return BuildTrainingFunctionsResponse();
@@ -287,10 +294,10 @@ namespace vtsadm
         Message = "OK"
       };
 
-      if (IsItsViewOnlySession())
+      if (IsItsViewOnlySession() && !ItsUserCanAssignToTechnician(technicianId))
       {
         response.Result = "ERROR";
-        response.Message = ItsViewOnlyMutationMessage;
+        response.Message = "Hanya bisa assign Job Order ke IT Support login.";
         return response;
       }
 
@@ -696,12 +703,6 @@ namespace vtsadm
         TotalPages = 1,
         ErrorMessage = string.Empty
       };
-
-      if (IsItsViewOnlySession())
-      {
-        response.ErrorMessage = "Hanya admin yang dapat memilih Job Order.";
-        return response;
-      }
 
       try
       {

@@ -1438,15 +1438,19 @@ namespace vtsadm
                 string safeCustId = EscapeSqlLiteral(trimmedCustId);
                 queries.Add(
                     "SELECT TOP 1 "
-                    + "LTRIM(RTRIM(ISNULL(CustID, ''))) AS CustID, "
-                    + "LTRIM(RTRIM(ISNULL(FullName, ''))) AS FullName, "
-                    + "LTRIM(RTRIM(ISNULL(Address, ''))) AS Address, "
-                    + "LTRIM(RTRIM(ISNULL(PICName1, ''))) AS PICName1, "
-                    + "LTRIM(RTRIM(ISNULL(PICName2, ''))) AS PICName2, "
-                    + "LTRIM(RTRIM(ISNULL(OfficePhone1, ''))) AS OfficePhone1, "
-                    + "LTRIM(RTRIM(ISNULL(BranchName, ''))) AS BranchName "
-                    + "FROM mst_customer WITH (NOLOCK) "
-                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "'");
+                    + "LTRIM(RTRIM(ISNULL(c.CustID, ''))) AS CustID, "
+                    + "LTRIM(RTRIM(ISNULL(c.FullName, ''))) AS FullName, "
+                    + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
+                    + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
+                    + "LTRIM(RTRIM(ISNULL(c.PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ''))) AS OfficePhone1, "
+                    + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName, "
+                    + "LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) AS MarketingID, "
+                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                    + "FROM mst_customer c WITH (NOLOCK) "
+                    + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(c.CustID, ''))) = '" + safeCustId + "'");
                 queries.Add(
                     "SELECT TOP 1 * "
                     + "FROM mst_customer WITH (NOLOCK) "
@@ -1464,10 +1468,14 @@ namespace vtsadm
                     + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName2, ''))) AS PICName2, "
                     + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ''))) AS OfficePhone1, "
-                    + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName "
+                    + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName, "
+                    + "LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) AS MarketingID, "
+                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
                     + "FROM trx_training_order t WITH (NOLOCK) "
                     + "INNER JOIN mst_customer c WITH (NOLOCK) "
                     + "ON LTRIM(RTRIM(ISNULL(c.CustID, ''))) = LTRIM(RTRIM(ISNULL(t.CustID, ''))) "
+                    + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) "
                     + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = '" + safeJobId + "' "
                     + "AND ISNULL(t.Status, '') NOT IN ('DE')");
                 queries.Add(
@@ -1492,6 +1500,17 @@ namespace vtsadm
                 if (contact == null)
                 {
                     continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(contact.MarketingName))
+                {
+                    contact.MarketingName = LookupMarketingNameByMarketingId(
+                        GetRowString(table.Rows[0], "MarketingID"));
+                }
+
+                if (string.IsNullOrWhiteSpace(contact.MarketingName))
+                {
+                    contact.MarketingName = LookupMarketingNameByCustId(contact.CustId);
                 }
 
                 bool hasIdentity = !string.IsNullOrWhiteSpace(contact.Address)
@@ -1550,8 +1569,92 @@ namespace vtsadm
                     GetRowString(row, "OfficePhone1"),
                     GetRowString(row, "Office Phone 1"))),
                 BranchName = CleanCustomerField(GetRowString(row, "BranchName")),
-                MarketingName = CleanCustomerField(GetRowString(row, "MarketingName"))
+                MarketingName = CleanCustomerField(FirstNonEmpty(
+                    GetRowString(row, "MarketingName"),
+                    GetRowString(row, "Marketing")))
             };
+        }
+
+        public static string LookupMarketingNameByCustId(string custId)
+        {
+            string trimmed = (custId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)
+                || trimmed.Equals("[SELECT]", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+
+            string safeCustId = EscapeSqlLiteral(trimmed);
+            string[] queries =
+            {
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                    + "FROM mst_customer c WITH (NOLOCK) "
+                    + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(c.CustID, ''))) = '" + safeCustId + "' "
+                    + "AND LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) NOT IN ('', '[SELECT]')",
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                    + "FROM mst_customer c WITH (NOLOCK) "
+                    + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
+                    + "ON m.MarketingID = c.MarketingID "
+                    + "WHERE c.CustID = '" + safeCustId + "'"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteQuery(sql);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                string marketingName = CleanCustomerField(GetRowString(table.Rows[0], "MarketingName"));
+                if (!string.IsNullOrWhiteSpace(marketingName))
+                {
+                    return marketingName;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        public static string LookupMarketingNameByMarketingId(string marketingId)
+        {
+            string trimmed = (marketingId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)
+                || trimmed.Equals("[SELECT]", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("-", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+
+            string safeId = EscapeSqlLiteral(trimmed);
+            string[] queries =
+            {
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MarketingName, ''))) AS MarketingName "
+                    + "FROM mst_marketing WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(MarketingID, ''))) = '" + safeId + "'",
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MarketingName, ''))) AS MarketingName "
+                    + "FROM mst_marketing WITH (NOLOCK) "
+                    + "WHERE MarketingID = '" + safeId + "'"
+            };
+
+            foreach (string sql in queries)
+            {
+                DataTable table = ExecuteQuery(sql);
+                if (table == null || table.Rows.Count == 0)
+                {
+                    continue;
+                }
+
+                string marketingName = CleanCustomerField(GetRowString(table.Rows[0], "MarketingName"));
+                if (!string.IsNullOrWhiteSpace(marketingName))
+                {
+                    return marketingName;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static string CleanCustomerField(string value)

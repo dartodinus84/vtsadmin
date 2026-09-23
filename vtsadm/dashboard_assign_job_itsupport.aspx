@@ -1827,6 +1827,23 @@
             border-color: #bbf7d0;
         }
 
+        .assign-existing-jo-notice {
+            display: none;
+            border-radius: 10px;
+            border: 1px solid #f0c36d;
+            background: #fff8e1;
+            color: #8a6d00;
+            padding: 9px 11px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.45;
+            margin: 8px 0 12px;
+        }
+
+        .assign-existing-jo-notice.is-visible {
+            display: block;
+        }
+
         .assign-actions {
             display: flex;
             justify-content: flex-end;
@@ -3308,6 +3325,14 @@
             background: #f8fafc;
         }
 
+        .assign-jo-table tbody tr.assign-jo-row-transfer {
+            background: #fde047;
+        }
+
+        .assign-jo-table tbody tr.assign-jo-row-transfer:hover {
+            background: #facc15;
+        }
+
         .assign-jo-pick-btn {
             border: 1px solid #0a5c48;
             border-radius: 6px;
@@ -4041,6 +4066,8 @@
         <asp:HiddenField ID="hfActiveTab" runat="server" Value="itsupport" />
         <asp:HiddenField ID="hfDetailStatus" runat="server" Value="all" />
         <asp:HiddenField ID="hfIsTechnician" runat="server" Value="0" />
+        <asp:HiddenField ID="hfLoginItId" runat="server" Value="" />
+        <asp:HiddenField ID="hfLoginItName" runat="server" Value="" />
         <asp:HiddenField ID="hfDetailJobType" runat="server" Value="all" />
         <asp:HiddenField ID="hfDetailMetric" runat="server" Value="jo" />
         <asp:LinkButton ID="btnTabRefresh" runat="server" CssClass="assign-hidden-trigger" CausesValidation="false" OnClick="btnTabRefresh_Click">refresh</asp:LinkButton>
@@ -4374,11 +4401,17 @@
                         <button type="button" class="assign-pick-btn" id="assignPickJobOrderBtn">Pilih Job Order</button>
                         <div class="assign-picked-jo" id="assignPickedJoText">Belum ada Job Order dipilih</div>
                     </div>
+                    <div class="assign-existing-jo-notice" id="assignExistingJoNotice"></div>
+                    <div class="assign-existing-jo-notice" id="assignMoveJoNotice"></div>
 
                     <div class="assign-order-card">
                         <div class="assign-info-item">
                             <span class="assign-info-label">Customer</span>
                             <span class="assign-info-value" id="assignInfoCustomer">-</span>
+                        </div>
+                        <div class="assign-info-item" id="assignPreviousAssignWrap" hidden>
+                            <span class="assign-info-label">Previously Assigned To</span>
+                            <span class="assign-info-value" id="assignInfoPreviousAssign">-</span>
                         </div>
                         <div class="assign-info-item">
                             <span class="assign-info-label">Total Unit Customer</span>
@@ -4466,9 +4499,14 @@
                             <button type="button" class="assign-pick-btn" id="assignCreateJoPickCustomerBtn">Pilih Customer</button>
                             <div class="assign-picked-jo" id="assignPickedCustomerText">Belum ada Customer dipilih</div>
                         </div>
+                        <div class="assign-existing-jo-notice" id="assignCreateJoExistingNotice"></div>
                         <div class="assign-info-item">
                             <span class="assign-info-label">Full Name</span>
                             <span class="assign-info-value" id="assignTrainingCustName">-</span>
+                        </div>
+                        <div class="assign-info-item" id="assignCreateJoPreviousWrap" hidden style="margin-top:8px;">
+                            <span class="assign-info-label">Previously Assigned To</span>
+                            <span class="assign-info-value" id="assignCreateJoPreviousAssign">-</span>
                         </div>
                         <div class="assign-info-item" style="margin-top:8px;">
                             <span class="assign-info-label">Customer Type</span>
@@ -4768,7 +4806,7 @@
                     <input type="text" id="assignJoSearchInput" placeholder="Cari Job ID / Customer / Branch / Remark..." />
                     <button type="button" id="assignJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
-                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi. Ketik <strong>Job ID tepat</strong> untuk pindahkan ke IT Support lain.</p>
+                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi. Ketik <strong>Job ID tepat</strong> untuk pindahkan ke IT Support lain. <strong>Baris kuning</strong> = JO sudah di-assign ke IT Support lain.</p>
                 <div class="assign-jo-filter-wrap">
                     <label for="assignJoBranchFilter">Branch</label>
                     <select id="assignJoBranchFilter">
@@ -4896,12 +4934,18 @@
                     <div class="assign-field assign-pick-row">
                         <button type="button" class="assign-pick-btn" id="assignReportPickJobOrderBtn">Pilih Job Order</button>
                         <div class="assign-picked-jo" id="assignReportPickedJoText">Belum ada Job Order dipilih</div>
+                        <div class="assign-existing-jo-notice" id="assignReportExistingJoNotice"></div>
+                        <div class="assign-existing-jo-notice" id="assignReportMoveJoNotice"></div>
                     </div>
 
                     <div class="assign-order-card">
                         <div class="assign-info-item">
                             <span class="assign-info-label">Customer</span>
                             <span class="assign-info-value" id="assignReportInfoCustomer">-</span>
+                        </div>
+                        <div class="assign-info-item" id="assignReportPreviousAssignWrap" hidden>
+                            <span class="assign-info-label">Previously Assigned To</span>
+                            <span class="assign-info-value" id="assignReportInfoPreviousAssign">-</span>
                         </div>
                         <div class="assign-info-item">
                             <span class="assign-info-label">Total Unit Customer</span>
@@ -5176,6 +5220,8 @@
             };
             var techDeviceDetailCache = {};
             var technicianFlagFieldId = "<%= hfIsTechnician.ClientID %>";
+            var loginItIdFieldId = "<%= hfLoginItId.ClientID %>";
+            var loginItNameFieldId = "<%= hfLoginItName.ClientID %>";
 
             function getIsTechnicianUser() {
                 var field = document.getElementById(technicianFlagFieldId);
@@ -5542,6 +5588,10 @@
                         } else {
                             setReportFeedback("", false, false);
                         }
+                        refreshCustomerOpenJoNotice(
+                            (enriched && (enriched.Customer || enriched.CustID)) || "",
+                            (enriched && enriched.JobID) || "",
+                            "assignReportExistingJoNotice");
                     } else {
                         assignModalState.joType = pickedJoType;
                         assignModalState.selectedOrder = enriched;
@@ -5552,6 +5602,10 @@
                         } else {
                             setFeedback("", false, false);
                         }
+                        refreshCustomerOpenJoNotice(
+                            (enriched && (enriched.Customer || enriched.CustID)) || "",
+                            (enriched && enriched.JobID) || "",
+                            "assignExistingJoNotice");
                     }
                 });
             }
@@ -5584,7 +5638,7 @@
                 if (assignCard) {
                     if (show) {
                         assignCard.style.display = "none";
-                    } else if (!getIsTechnicianUser() && !isPastScheduleDate(reportModalState.schDate || "")) {
+                    } else if (!isPastScheduleDate(reportModalState.schDate || "")) {
                         assignCard.style.display = "";
                     }
                 }
@@ -5950,9 +6004,6 @@
                 if (!cell) {
                     return false;
                 }
-                if (getIsTechnicianUser()) {
-                    return false;
-                }
 
                 var status = normalizeStatusCode(cell.getAttribute("data-status") || "");
                 var cellDate = parseIsoDate(cell.getAttribute("data-date"));
@@ -6303,12 +6354,11 @@
                 var assignCard = document.getElementById("assignReportAssignCard");
                 var intro = document.getElementById("assignReportAssignIntro");
                 var formWrap = document.getElementById("assignReportAssignForm");
-                var isTechnicianUser = getIsTechnicianUser();
                 var isPastDate = isPastScheduleDate(reportModalState.schDate || "");
                 if (assignCard) {
-                    assignCard.style.display = (isTechnicianUser || isPastDate) ? "none" : "";
+                    assignCard.style.display = isPastDate ? "none" : "";
                 }
-                if (isTechnicianUser || isPastDate) {
+                if (isPastDate) {
                     return;
                 }
 
@@ -6357,6 +6407,12 @@
                 if (customer) {
                     customer.textContent = selected ? getCustomerDisplayText(selected) : "-";
                 }
+                syncMoveJoPreviousAssign(
+                    selected,
+                    reportModalState.technicianId,
+                    "assignReportPreviousAssignWrap",
+                    "assignReportInfoPreviousAssign",
+                    "assignReportMoveJoNotice");
 
                 var remainingGps = selected ? toInt(selected.RemainingUnitGps, 0) : 0;
                 var remainingAcs = selected ? toInt(selected.RemainingUnitAcs, 0) : 0;
@@ -6621,10 +6677,6 @@
                     return;
                 }
                 reportModalState.submitAction = actionSource === "administration" ? "administration" : "assign";
-                if (getIsTechnicianUser()) {
-                    setReportFeedback("User IT Support hanya dapat melihat detail informasi.", true, false);
-                    return;
-                }
                 if (isPastScheduleDate(reportModalState.schDate || "")) {
                     setReportFeedback("Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.", true, false);
                     return;
@@ -7540,7 +7592,7 @@
                 var upperValue = normalizeStatusCode(value);
                 var cellDate = parseIsoDate(cell.getAttribute("data-date"));
                 var isFutureOrToday = cellDate && cellDate.getTime() >= getTodayDateOnly().getTime();
-                var isAssignableClickable = !getIsTechnicianUser() && isFutureOrToday && (
+                var isAssignableClickable = isFutureOrToday && (
                     upperValue === "OF"
                     || (!!canAssign && (upperValue === "AV" || upperValue === "AD"))
                 );
@@ -7735,7 +7787,13 @@
             }
 
             function getJobOrderTransferLabel(order, targetTechnicianId) {
-                if (!requiresTransferNoteForOrder(order, targetTechnicianId)) {
+                if (!order) {
+                    return "";
+                }
+                var assignedId = normalizeTechId(getOrderAssignedTechnicianId(order));
+                var targetId = normalizeTechId(targetTechnicianId);
+                var assignedToOther = !!assignedId && !!targetId && assignedId !== targetId;
+                if (!assignedToOther && !requiresTransferNoteForOrder(order, targetTechnicianId)) {
                     return "";
                 }
                 var itName = (order.AssignedTechnicianName || order.AssignedTechnicianId || "-").toString().trim();
@@ -7936,6 +7994,7 @@
                     syncAssignInputByDeviceGroup(0);
                     renderSelectedJoText();
                     syncTransferNoteField("assignTransferNoteWrap", "assignTransferNoteInput", null, getTargetAssignTechnicianId("main"));
+                    syncMoveJoPreviousAssign(null, getTargetAssignTechnicianId("main"), "assignPreviousAssignWrap", "assignInfoPreviousAssign", "assignMoveJoNotice");
                     if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(assignModalState.selectedAreaId)) {
                         areaSelect.value = normalizeAreaId(assignModalState.selectedAreaId);
                     }
@@ -7961,6 +8020,7 @@
                 syncAssignInputByDeviceGroup(assignedItSupport);
                 renderSelectedJoText();
                 syncTransferNoteField("assignTransferNoteWrap", "assignTransferNoteInput", selected, getTargetAssignTechnicianId("main"));
+                syncMoveJoPreviousAssign(selected, getTargetAssignTechnicianId("main"), "assignPreviousAssignWrap", "assignInfoPreviousAssign", "assignMoveJoNotice");
                 if (areaSelect && normalizeAreaId(areaSelect.value) !== normalizeAreaId(assignModalState.selectedAreaId)) {
                     areaSelect.value = normalizeAreaId(assignModalState.selectedAreaId);
                 }
@@ -8058,22 +8118,28 @@
                     body.innerHTML = "<tr><td class=\"assign-jo-empty\" colspan=\"" + tableColspan + "\">Data job order tidak ditemukan.</td></tr>";
                 } else {
                     var rows = [];
+                    var targetTechId = getTargetAssignTechnicianId(joLookupOwner === "report" ? "report" : "main");
                     for (var i = 0; i < rowsData.length; i++) {
                         var item = rowsData[i];
                         var customerGps = getCustomerGpsCount(item);
                         var lastAssign = item.LastAssignDate || "-";
                         var assignDate = item.AssignDate || "-";
                         var slaDays = toInt(item.SlaDays, 0);
-                        var transfer = isJobOrderTransferCandidate(item);
-                        var pickLabel = transfer ? "Pindah" : "Pilih";
-                        var pickClass = transfer ? "assign-jo-pick-btn assign-jo-transfer-btn" : "assign-jo-pick-btn";
-                        var transferHint = transfer
-                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item, getTargetAssignTechnicianId(joLookupOwner === "report" ? "report" : "main"))) + "</div>"
+                        var assignedToOther = isJobOrderTransfer(item, targetTechId)
+                            || (isJobOrderTransferCandidate(item)
+                                && (!normalizeTechId(getOrderAssignedTechnicianId(item))
+                                    || !normalizeTechId(targetTechId)
+                                    || normalizeTechId(getOrderAssignedTechnicianId(item)) !== normalizeTechId(targetTechId)));
+                        var pickLabel = assignedToOther ? "Pindah" : "Pilih";
+                        var pickClass = assignedToOther ? "assign-jo-pick-btn assign-jo-transfer-btn" : "assign-jo-pick-btn";
+                        var transferHint = assignedToOther
+                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item, targetTechId) || "Sudah di-assign ke IT Support lain") + "</div>"
                             : "";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
                             : "";
-                        rows.push("<tr>" +
+                        var rowClass = assignedToOther ? " class=\"assign-jo-row-transfer\"" : "";
+                        rows.push("<tr" + rowClass + ">" +
                             "<td>" + escapeHtml(item.JobID) + transferHint + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(getCustomerDisplayText(item)) + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.BranchName || "-") + "</td>" +
@@ -8232,6 +8298,9 @@
                 assignModalState.joRows = [];
                 assignModalState.joTotalPages = 1;
                 assignModalState.joTotalRecords = 0;
+                setExistingJoNotice("assignExistingJoNotice", "");
+                setExistingJoNotice("assignMoveJoNotice", "");
+                setPreviousAssignField("assignPreviousAssignWrap", "assignInfoPreviousAssign", "");
 
                 var techName = cell.getAttribute("data-tech-name") || "-";
                 var dateText = cell.getAttribute("data-date") || "-";
@@ -8278,6 +8347,126 @@
                 });
             }
 
+            function setExistingJoNotice(boxId, html) {
+                var box = document.getElementById(boxId);
+                if (!box) {
+                    return;
+                }
+                box.classList.remove("is-visible");
+                box.innerHTML = html || "";
+                if (html) {
+                    box.classList.add("is-visible");
+                }
+            }
+
+            function formatPreviousAssignText(name, id, schDate) {
+                var displayName = (name || "").toString().trim();
+                var displayId = (id || "").toString().trim();
+                var text = displayName || displayId;
+                if (!text) {
+                    return "";
+                }
+                if (displayName && displayId && displayName !== displayId) {
+                    text = displayName + " (" + displayId + ")";
+                }
+                if (schDate) {
+                    text += " · " + schDate;
+                }
+                return text;
+            }
+
+            function setPreviousAssignField(wrapId, valueId, text) {
+                var wrap = document.getElementById(wrapId);
+                var value = document.getElementById(valueId);
+                if (value) {
+                    value.textContent = text || "-";
+                }
+                if (wrap) {
+                    wrap.hidden = !text;
+                    wrap.style.display = text ? "" : "none";
+                }
+            }
+
+            function syncMoveJoPreviousAssign(order, targetTechnicianId, wrapId, valueId, noticeBoxId) {
+                var isMove = !!(order && (order.IsAlreadyAssigned
+                    || requiresTransferNoteForOrder(order, targetTechnicianId)
+                    || isJobOrderTransferCandidate(order)));
+                var name = order ? (order.AssignedTechnicianName || "") : "";
+                var id = getOrderAssignedTechnicianId(order);
+                var schDate = getOrderAssignedSchDate(order);
+                var text = isMove ? formatPreviousAssignText(name, id, schDate) : "";
+                setPreviousAssignField(wrapId, valueId, text);
+                if (!noticeBoxId) {
+                    return;
+                }
+                if (!text) {
+                    setExistingJoNotice(noticeBoxId, "");
+                    return;
+                }
+                setExistingJoNotice(
+                    noticeBoxId,
+                    "<strong>JO ini sebelumnya assigned ke</strong> "
+                        + escapeHtml(text)
+                        + ". Tetap bisa pindah / assign.");
+            }
+
+            function refreshCustomerOpenJoNotice(custId, excludeJobId, boxId) {
+                setExistingJoNotice(boxId, "");
+                if (boxId === "assignCreateJoExistingNotice") {
+                    setPreviousAssignField("assignCreateJoPreviousWrap", "assignCreateJoPreviousAssign", "");
+                }
+                if (!custId) {
+                    return;
+                }
+                callAssignPageMethod(
+                    "LoadCustomerOpenJobs",
+                    { custId: custId, excludeJobId: excludeJobId || "" },
+                    function (result) {
+                        if (!result || (result.Result || "").toUpperCase() !== "SUCCESS") {
+                            return;
+                        }
+                        var rows = Object.prototype.toString.call(result.Rows) === "[object Array]" ? result.Rows : [];
+                        if (!result.OpenCount || !rows.length) {
+                            return;
+                        }
+                        var parts = [];
+                        var assignedParts = [];
+                        var maxShow = 5;
+                        for (var i = 0; i < rows.length && i < maxShow; i++) {
+                            var row = rows[i] || {};
+                            var assignedText = formatPreviousAssignText(row.AssignedTo, row.AssignedToId, row.AssignedSchDate);
+                            var piece = (row.JobID || "").toString();
+                            if (row.Category) {
+                                piece += " · " + row.Category;
+                            }
+                            if (row.SchDate) {
+                                piece += " · " + row.SchDate;
+                            }
+                            if (assignedText) {
+                                piece += " · assigned ke " + assignedText;
+                                assignedParts.push(assignedText);
+                            }
+                            if (piece) {
+                                parts.push(piece);
+                            }
+                        }
+                        var extra = rows.length > maxShow ? " (+" + (rows.length - maxShow) + " lagi)" : "";
+                        setExistingJoNotice(
+                            boxId,
+                            "<strong>Perusahaan ini sudah punya JO terbuka</strong> ("
+                                + result.OpenCount
+                                + "). Tetap bisa buat / assign JO baru.<br/>"
+                                + escapeHtml(parts.join(" | "))
+                                + extra);
+                        if (boxId === "assignCreateJoExistingNotice" && assignedParts.length) {
+                            setPreviousAssignField(
+                                "assignCreateJoPreviousWrap",
+                                "assignCreateJoPreviousAssign",
+                                assignedParts[0]);
+                        }
+                    });
+            }
+
             function setCreateJoFeedback(message, isError, isSuccess) {
                 var box = document.getElementById("assignCreateJoFeedback");
                 if (!box) {
@@ -8317,10 +8506,45 @@
                     $("#modal-training-customer").modal("hide");
                 }
                 setCreateJoFeedback("", false, false);
+                setExistingJoNotice("assignCreateJoExistingNotice", "");
+            }
+
+            function getLoginItAssignee() {
+                var idField = document.getElementById(loginItIdFieldId);
+                var nameField = document.getElementById(loginItNameFieldId);
+                return {
+                    techId: idField ? (idField.value || "").trim() : "",
+                    techName: nameField ? (nameField.value || "").trim() : ""
+                };
+            }
+
+            function resolveCreateJoAssignee() {
+                var login = getLoginItAssignee();
+                var schDate = formatIsoDateInput(new Date());
+                var cell = (assignModalState && assignModalState.activeCell)
+                    || (reportModalState && reportModalState.activeCell)
+                    || null;
+                var cellTechId = cell ? (cell.getAttribute("data-tech-id") || "").trim() : "";
+                var cellTechName = cell ? (cell.getAttribute("data-tech-name") || "").trim() : "";
+                var cellDate = cell ? (cell.getAttribute("data-date") || "").trim() : "";
+                if (getIsTechnicianUser()) {
+                    return {
+                        techId: login.techId || cellTechId,
+                        techName: login.techName || cellTechName,
+                        schDate: cellDate || schDate
+                    };
+                }
+
+                return {
+                    techId: cellTechId || login.techId,
+                    techName: cellTechName || login.techName,
+                    schDate: cellDate || schDate
+                };
             }
 
             function openCreateJoModal() {
-                resetTrainingAssignForm("", "", formatIsoDateInput(new Date()));
+                var assignee = resolveCreateJoAssignee();
+                resetTrainingAssignForm(assignee.techId, assignee.techName, assignee.schDate);
                 setCreateJoFeedback("Memuat category / billable...", false, false);
                 var backdrop = getCreateJoBackdrop();
                 if (backdrop) {
@@ -8380,6 +8604,8 @@
                 if (custName) custName.textContent = "-";
                 if (custType) custType.textContent = "-";
                 if (custBranch) custBranch.textContent = "-";
+                setExistingJoNotice("assignCreateJoExistingNotice", "");
+                setPreviousAssignField("assignCreateJoPreviousWrap", "assignCreateJoPreviousAssign", "");
             }
 
             function formatIsoDateInput(dateObj) {
@@ -8522,6 +8748,13 @@
                 var remark = ((document.getElementById("assignTrainingRemark") || {}).value || "").trim();
                 var itUserId = (document.getElementById("assignTrainingItUserId") || {}).value || "";
                 var itUserName = (document.getElementById("assignTrainingItUserName") || {}).value || "";
+                var loginAssignee = getLoginItAssignee();
+                if (!itUserId) {
+                    itUserId = loginAssignee.techId || "";
+                }
+                if (!itUserName) {
+                    itUserName = loginAssignee.techName || "";
+                }
                 var customerName = ((document.getElementById("assignTrainingCustName") || {}).textContent || "").trim();
                 var picName = (document.getElementById("assignTrainingPicName") || {}).value || "";
                 var picPhone = (document.getElementById("assignTrainingPicPhone") || {}).value || "";
@@ -8581,6 +8814,14 @@
                         setCreateJoFeedback(successMessage, false, true);
                         showAssignToast(successMessage, false);
                         closeCreateJoModal();
+                        var assignedTechId = ((result && result.TechnicianId) || itUserId || "").trim();
+                        var assignedDate = ((result && result.SchDate) || schDate || "").trim();
+                        if (assignedTechId && assignedDate) {
+                            refreshAfterAssignChange({
+                                scheduleDate: assignedDate,
+                                technicianIds: [assignedTechId]
+                            });
+                        }
                     },
                     function (errorMessage) {
                         createJoSaving = false;
@@ -8616,6 +8857,7 @@
                 }
                 if (isCreateJoModalOpen()) {
                     setCreateJoFeedback("", false, false);
+                    refreshCustomerOpenJoNotice(sCustID, "", "assignCreateJoExistingNotice");
                 } else {
                     setFeedback("", false, false);
                 }

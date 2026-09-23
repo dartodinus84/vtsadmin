@@ -835,6 +835,10 @@ namespace vtsadm
                 connString);
             if (contact == null)
             {
+                if (string.IsNullOrWhiteSpace(detail.MarketingName) && !string.IsNullOrWhiteSpace(detail.CustId))
+                {
+                    detail.MarketingName = ItsSupportAssignData.LookupMarketingNameByCustId(detail.CustId);
+                }
                 return;
             }
 
@@ -846,7 +850,10 @@ namespace vtsadm
             }
 
             detail.BranchName = FirstNonEmpty(contact.BranchName, detail.BranchName);
-            detail.MarketingName = FirstNonEmpty(contact.MarketingName, detail.MarketingName);
+            detail.MarketingName = FirstNonEmpty(
+                contact.MarketingName,
+                detail.MarketingName,
+                ItsSupportAssignData.LookupMarketingNameByCustId(detail.CustId));
             detail.Address = FirstNonEmpty(contact.Address, detail.Address);
             detail.PicName = FirstNonEmpty(contact.PicName, detail.PicName);
             detail.CustomerNumber = FirstNonEmpty(contact.OfficePhone1);
@@ -1144,6 +1151,12 @@ namespace vtsadm
             sb.AppendLine("No. Telp : <b>" + EscapeHtml(officePhone) + "</b>");
         }
 
+        private static void AppendBotMarketingLine(StringBuilder sb, AssignDetail detail)
+        {
+            string marketingName = FirstNonEmpty(detail != null ? detail.MarketingName : string.Empty, "-");
+            sb.AppendLine("Marketing : <b>" + EscapeHtml(marketingName) + "</b>");
+        }
+
         private static void AppendTelegramUserTag(StringBuilder sb, AssignDetail detail)
         {
             string tag = FormatTelegramMention(detail == null ? string.Empty : detail.TechnicianTelegram);
@@ -1215,10 +1228,7 @@ namespace vtsadm
             sb.AppendLine();
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
             sb.AppendLine("IT Support : <b>" + EscapeHtml(itSupportName) + "</b>");
-            if (!string.IsNullOrWhiteSpace(detail.MarketingName))
-            {
-                sb.AppendLine("Marketing : <b>" + EscapeHtml(detail.MarketingName) + "</b>");
-            }
+            AppendBotMarketingLine(sb, detail);
             sb.AppendLine();
             sb.AppendLine("<b>Catatan :</b>");
             sb.AppendLine(EscapeHtml(remark));
@@ -1250,6 +1260,7 @@ namespace vtsadm
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
             sb.AppendLine("Dari IT Support : <b>" + EscapeHtml(fromItSupport) + "</b>");
             sb.AppendLine("Ke IT Support : <b>" + EscapeHtml(toItSupport) + "</b>");
+            AppendBotMarketingLine(sb, detail);
             sb.AppendLine();
             sb.AppendLine("<b>Catatan :</b>");
             sb.AppendLine(EscapeHtml(remark));
@@ -1280,6 +1291,7 @@ namespace vtsadm
             sb.AppendLine();
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
             sb.AppendLine("IT Support : <b>" + EscapeHtml(itSupportName) + "</b>");
+            AppendBotMarketingLine(sb, detail);
             sb.AppendLine();
             sb.AppendLine("<b>Catatan :</b>");
             sb.AppendLine(EscapeHtml(remark));
