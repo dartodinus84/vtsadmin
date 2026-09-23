@@ -9,6 +9,7 @@ namespace vtsadm
         {
             try
             {
+                ItsAssignTelegramService.EnsurePublicWebhook();
                 ItsAssignTelegramService.ProcessWebhook(context);
             }
             catch (Exception ex)

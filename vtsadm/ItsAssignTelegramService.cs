@@ -19,8 +19,11 @@ namespace vtsadm
     public static class ItsAssignTelegramService
     {
         private const int OpenListMaxRows = 15;
+        private const int WebhookEnsureIntervalSeconds = 60;
         private static readonly CultureInfo IndonesianCulture = CultureInfo.GetCultureInfo("id-ID");
+        private static readonly object WebhookEnsureLock = new object();
         private static bool _tlsConfigured;
+        private static DateTime lastWebhookEnsureUtc = DateTime.MinValue;
 
         private static void EnsureTls12()
         {
@@ -163,6 +166,7 @@ namespace vtsadm
                 return;
             }
 
+            EnsurePublicWebhook();
             TelegramConfig config = LoadTelegramConfig(connString);
             if (!config.IsValid)
             {
@@ -170,6 +174,45 @@ namespace vtsadm
             }
 
             SendTelegramMessage(config.ApiToken, config.ChatId, text);
+        }
+
+        public static void EnsurePublicWebhook()
+        {
+            string webhookUrl = GetAppSetting("ItsSupportTelegramWebhookUrl");
+            if (IsLocalOrPrivateWebhookUrl(webhookUrl))
+            {
+                return;
+            }
+
+            string apiToken = FirstNonEmpty(
+                GetAppSetting("ItsSupportTelegramApiToken"),
+                GetAppSetting("TelegramApi"));
+            if (string.IsNullOrWhiteSpace(apiToken))
+            {
+                return;
+            }
+
+            lock (WebhookEnsureLock)
+            {
+                if ((DateTime.UtcNow - lastWebhookEnsureUtc).TotalSeconds < WebhookEnsureIntervalSeconds)
+                {
+                    return;
+                }
+
+                lastWebhookEnsureUtc = DateTime.UtcNow;
+            }
+
+            try
+            {
+                CallTelegramApiGet(
+                    apiToken,
+                    "setWebhook?url=" + Uri.EscapeDataString(webhookUrl)
+                    + "&allowed_updates=" + Uri.EscapeDataString(
+                        "[\"message\",\"edited_message\",\"callback_query\"]"));
+            }
+            catch
+            {
+            }
         }
 
         private static string ResolveItsSupportName(string connString, string technicianId)
@@ -1974,7 +2017,9 @@ namespace vtsadm
             {
                 string setResult = CallTelegramApiGet(
                     config.ApiToken,
-                    "setWebhook?url=" + Uri.EscapeDataString(webhookUrl));
+                    "setWebhook?url=" + Uri.EscapeDataString(webhookUrl)
+                    + "&allowed_updates=" + Uri.EscapeDataString(
+                        "[\"message\",\"edited_message\",\"callback_query\"]"));
                 report.AppendLine("setWebhook:");
                 report.AppendLine(setResult);
                 report.AppendLine();
