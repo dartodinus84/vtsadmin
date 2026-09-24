@@ -248,6 +248,63 @@ namespace vtsadm
 
     [WebMethod(EnableSession = true)]
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static SaveAssignResponse CloseJobTraining(
+        string trainingId,
+        string trainingDate,
+        string trainers,
+        string attendances,
+        string categoryId,
+        string remark,
+        string businessFieldId,
+        string pictureFileName,
+        object functions)
+    {
+      Dictionary<string, object> payload = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+      if (functions != null)
+      {
+        payload["functions"] = functions;
+      }
+
+      return ExecuteCloseJobTraining(
+          trainingId,
+          trainingDate,
+          trainers,
+          attendances,
+          categoryId,
+          remark,
+          businessFieldId,
+          pictureFileName,
+          payload);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static TrainingPictureUploadResponse UploadTrainingPicture(string fileName, string contentBase64)
+    {
+      return ExecuteUploadTrainingPicture(fileName, contentBase64);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static TrainingNoteListResponse LoadTrainingNotes(string trainingId)
+    {
+      return BuildTrainingNotesResponse(trainingId);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static SaveAssignResponse AddTrainingNote(
+        string trainingId,
+        string custId,
+        string categoryId,
+        string remark,
+        string pictureFileName)
+    {
+      return ExecuteAddTrainingNote(trainingId, custId, categoryId, remark, pictureFileName);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
     public new static DeleteScheduleAssignResponse DeleteScheduleAssign(string assignId, int seq, string actionRemark = "")
     {
       return dashboard_assign_job.DeleteScheduleAssign(assignId, seq, actionRemark);

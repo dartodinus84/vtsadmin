@@ -147,6 +147,21 @@
             }
         }
 
+        .assign-edit-jo-btn {
+            min-width: 0;
+            white-space: nowrap;
+            background: #0f766e;
+            border-color: #0f766e;
+            color: #fff;
+        }
+
+        .assign-edit-jo-btn:hover,
+        .assign-edit-jo-btn:focus {
+            background: #115e59;
+            border-color: #115e59;
+            color: #fff;
+        }
+
         .assign-close-jo-btn {
             min-width: 0;
             white-space: nowrap;
@@ -8817,7 +8832,7 @@
                 body.innerHTML = html;
             }
 
-            function applyEditJoPick(row) {
+            function applyEditJoPickFields(row) {
                 if (!row) {
                     return;
                 }
@@ -8876,12 +8891,48 @@
                 }
             }
 
-            function syncCreateJoButtonVisibility() {
-                var btn = document.getElementById("assignCreateJoBtn");
-                if (!btn) {
+            function applyEditJoPick(row) {
+                if (!row) {
                     return;
                 }
-                btn.style.display = "";
+                var trainingId = ((row.TrainingID || row.trainingId || "") + "").trim();
+                if (!trainingId) {
+                    setCreateJoFeedback("Training ID tidak valid.", true, false);
+                    return;
+                }
+
+                setCreateJoFeedback("Memuat detail JO...", false, false);
+                callAssignPageMethod("LoadJobTrainingEditDetail", { trainingId: trainingId }, function (result) {
+                    var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                    if (isSuccess && result.Row) {
+                        applyEditJoPickFields(result.Row);
+                        return;
+                    }
+                    var message = (result && result.Message) || "Gagal memuat detail JO Training.";
+                    if (row.CustID || row.custId) {
+                        applyEditJoPickFields(row);
+                        setCreateJoFeedback(message, true, false);
+                        return;
+                    }
+                    setCreateJoFeedback(message, true, false);
+                }, function (errorMessage) {
+                    if (row.CustID || row.custId) {
+                        applyEditJoPickFields(row);
+                        setCreateJoFeedback("Gagal memuat detail JO. " + (errorMessage || ""), true, false);
+                        return;
+                    }
+                    setCreateJoFeedback("Gagal memuat detail JO. " + (errorMessage || ""), true, false);
+                });
+            }
+
+            function syncCreateJoButtonVisibility() {
+                var buttonIds = ["assignCreateJoBtn", "assignEditJoBtn", "assignCloseJoBtn"];
+                for (var i = 0; i < buttonIds.length; i++) {
+                    var btn = document.getElementById(buttonIds[i]);
+                    if (btn) {
+                        btn.style.display = "";
+                    }
+                }
             }
 
             function resetTrainingAssignForm(techId, techName, schDate) {
