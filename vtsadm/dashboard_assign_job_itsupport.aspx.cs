@@ -156,6 +156,41 @@ namespace vtsadm
 
     [WebMethod(EnableSession = true)]
     [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static TrainingEditSearchResponse LoadEditableTrainingJobs(string searchKeyword)
+    {
+      return BuildEditableTrainingJobsResponse(searchKeyword);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static TrainingEditDetailResponse LoadJobTrainingEditDetail(string trainingId)
+    {
+      return BuildJobTrainingEditDetailResponse(trainingId);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static SaveAssignResponse UpdateJobTrainingAssign(
+        string trainingId,
+        string custId,
+        string reqDate,
+        string billableId,
+        string schDate,
+        string remark,
+        string categoryId)
+    {
+      return ExecuteUpdateJobTrainingAssign(
+          trainingId,
+          custId,
+          reqDate,
+          billableId,
+          schDate,
+          remark,
+          categoryId);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
     public static SaveAssignResponse SaveJobTrainingAssign(
         string custId,
         string reqDate,
@@ -195,6 +230,13 @@ namespace vtsadm
     public new static CustomerOpenJobResponse LoadCustomerOpenJobs(string custId, string excludeJobId = "")
     {
       return BuildCustomerOpenJobsResponse(custId, excludeJobId);
+    }
+
+    [WebMethod(EnableSession = true)]
+    [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
+    public static CustomerContactInfoResponse GetCustomerContactInfo(string custId)
+    {
+      return BuildCustomerContactInfoResponse(custId);
     }
 
     [WebMethod(EnableSession = true)]

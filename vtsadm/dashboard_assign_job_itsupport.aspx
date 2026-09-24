@@ -178,6 +178,14 @@
             min-width: 980px;
         }
 
+        #assignEditJoPickerBackdrop {
+            z-index: 1480;
+        }
+
+        #assignEditJoPickerBackdrop .assign-jo-table {
+            min-width: 980px;
+        }
+
         .assign-close-fn-wrap {
             border: 1px solid #e5e7eb;
             border-radius: 8px;
@@ -960,31 +968,24 @@
             color: #0a5c48;
         }
 
-        /* Sel angka: RemainingJo <> 0 - merah pastel (selaras AV/OFF) */
-        .st-unit,
-        .st-unit-open,
-        .status-cell.st-unit,
-        .status-cell.st-unit-open {
+        /* Sel angka assigned: hari ini / mendatang = krem amber lembut */
+        .st-assigned-future,
+        .status-cell.st-assigned-future {
+            background: #fffbeb !important;
+            color: #b45309 !important;
+        }
+
+        /* Sel angka assigned: tanggal lewat = merah */
+        .st-assigned-past,
+        .status-cell.st-assigned-past {
             background: #fee2e2 !important;
             color: #991b1b !important;
         }
 
-        /* Sel angka: RemainingJo = 0 - biru #007bff (beda AV hari ini #dbeafe) */
-        .st-unit-done,
-        .status-cell.st-unit-done {
-            background: #cce7ff !important;
-            color: #007bff !important;
-        }
-
-        /* Cegah class AV hari ini menimpa sel angka (jika terpasang oleh kesalahan JS) */
-        .status-cell.st-unit-open.day-today-status {
-            background: #fee2e2 !important;
-            color: #991b1b !important;
-        }
-
-        .status-cell.st-unit-done.day-today-status {
-            background: #cce7ff !important;
-            color: #007bff !important;
+        .status-cell.st-assigned-future.day-today-status,
+        .status-cell.st-assigned-past.day-today-status {
+            background: inherit;
+            color: inherit;
         }
 
         .st-close {
@@ -1192,33 +1193,33 @@
 
         .assign-cell--report-clickable {
             cursor: pointer;
-            box-shadow: inset 0 0 0 1px rgba(146, 64, 14, .18);
+            box-shadow: inset 0 0 0 1px rgba(180, 83, 9, .14);
         }
 
-        .assign-cell--report-clickable.st-unit-open {
+        .assign-cell--report-clickable.st-assigned-future {
+            box-shadow: inset 0 0 0 1px rgba(180, 83, 9, .18) !important;
+        }
+
+        .assign-cell--report-clickable.st-assigned-past {
             box-shadow: inset 0 0 0 1px rgba(153, 27, 27, .22) !important;
         }
 
-        .assign-cell--report-clickable.st-unit-done {
-            box-shadow: inset 0 0 0 1px rgba(0, 123, 255, .28) !important;
-        }
-
-        .assign-cell--report-clickable.st-unit-open:hover,
-        .assign-cell--report-clickable.st-unit-open:active,
-        .assign-cell--report-clickable.st-unit-open:focus {
-            background: #fecaca !important;
-            color: #991b1b !important;
+        .assign-cell--report-clickable.st-assigned-future:hover,
+        .assign-cell--report-clickable.st-assigned-future:active,
+        .assign-cell--report-clickable.st-assigned-future:focus {
+            background: #fef3c7 !important;
+            color: #b45309 !important;
             transform: none;
             filter: none;
             z-index: auto;
             position: static;
         }
 
-        .assign-cell--report-clickable.st-unit-done:hover,
-        .assign-cell--report-clickable.st-unit-done:active,
-        .assign-cell--report-clickable.st-unit-done:focus {
-            background: #99ccff !important;
-            color: #007bff !important;
+        .assign-cell--report-clickable.st-assigned-past:hover,
+        .assign-cell--report-clickable.st-assigned-past:active,
+        .assign-cell--report-clickable.st-assigned-past:focus {
+            background: #fecaca !important;
+            color: #991b1b !important;
             transform: none;
             filter: none;
             z-index: auto;
@@ -4056,6 +4057,7 @@
 
             <div class="assign-topbar-right">
                 <button type="button" class="btn btn-primary assign-btn assign-create-jo-btn" id="assignCreateJoBtn">Buat JO Training/Visit</button>
+                <button type="button" class="btn btn-primary assign-btn assign-edit-jo-btn" id="assignEditJoBtn">Edit JO Training/Visit</button>
                 <button type="button" class="btn btn-primary assign-btn assign-close-jo-btn" id="assignCloseJoBtn">Close JO Training/Visit</button>
                 <asp:TextBox ID="txtPeriode" runat="server" CssClass="form-control assign-period js-periode-picker" placeholder="yyyy-MM" autocomplete="off"></asp:TextBox>
                 <asp:Button ID="btnApply" runat="server" CssClass="btn btn-primary assign-btn" Text="Apply" OnClick="btnApply_Click" OnClientClick="showOverlay();" />
@@ -4068,6 +4070,7 @@
         <asp:HiddenField ID="hfIsTechnician" runat="server" Value="0" />
         <asp:HiddenField ID="hfLoginItId" runat="server" Value="" />
         <asp:HiddenField ID="hfLoginItName" runat="server" Value="" />
+        <asp:HiddenField ID="hfLoginUserId" runat="server" Value="" />
         <asp:HiddenField ID="hfDetailJobType" runat="server" Value="all" />
         <asp:HiddenField ID="hfDetailMetric" runat="server" Value="jo" />
         <asp:LinkButton ID="btnTabRefresh" runat="server" CssClass="assign-hidden-trigger" CausesValidation="false" OnClick="btnTabRefresh_Click">refresh</asp:LinkButton>
@@ -4238,13 +4241,13 @@
                     <div class="legend-title">Keterangan warna jadwal</div>
                     <div class="legend-item"><span class="legend-dot st-av">AV</span> Available</div>
                     <div class="legend-item"><span class="legend-dot st-av day-today-status">AV</span> Available hari ini (biru muda)</div>
-                    <div class="legend-item"><span class="legend-dot st-unit-open">1</span> Unit di-assign - Remaining JO &gt; 0 (merah muda)</div>
-                    <div class="legend-item"><span class="legend-dot st-unit-done">1</span> Unit di-assign - Remaining JO = 0 (biru)</div>
+                    <div class="legend-item"><span class="legend-dot st-assigned-future">1</span> Assigned hari ini / mendatang (krem amber)</div>
+                    <div class="legend-item"><span class="legend-dot st-assigned-past">1</span> Assigned tanggal lewat (merah)</div>
                     <div class="legend-item"><span class="legend-dot st-off">OF</span> Off / Libur</div>
                     <div class="legend-item"><span class="legend-dot st-cuti">CT</span> Cuti</div>
                     <div class="legend-item"><span class="legend-dot st-izin">IZ</span> Izin</div>
-                    <div class="legend-item"><span class="legend-dot st-unit-open">*</span> Tanggal lewat dan Remaining JO masih ada</div>
-                    <div class="legend-note">Angka pada sel menunjukkan jumlah unit yang di-assign. Merah muda berarti masih ada Remaining JO. Biru berarti Remaining JO sudah 0 (semua JO selesai). Biru muda hanya untuk AV hari ini.</div>
+                    <div class="legend-item"><span class="legend-dot st-assigned-past">*</span> Tanggal lewat dan Remaining JO masih ada</div>
+                    <div class="legend-note">Angka pada sel menunjukkan jumlah unit yang di-assign. Kuning = jadwal hari ini atau ke depan. Merah = jadwal sudah lewat. Tanda * berarti masih ada Remaining JO di tanggal lewat.</div>
                 </div>
             </div>
         </div>
@@ -4485,7 +4488,7 @@
             <div class="assign-job-modal-header">
                 <div class="assign-job-title-wrap">
                     <h4 id="assignCreateJoTitle">Buat Job Training / Visit</h4>
-                    <p>Input dan submit JO baru, sama seperti menu Job Training</p>
+                    <p id="assignCreateJoSubtitle">Input dan submit JO baru, sama seperti menu Job Training</p>
                 </div>
                 <button type="button" class="assign-job-close" id="assignCreateJoCloseBtn" aria-label="Close">&times;</button>
             </div>
@@ -4493,9 +4496,17 @@
                 <div class="assign-create-jo-grid">
                     <div class="assign-create-jo-col">
                         <p class="assign-section-label">Customer Information</p>
+                        <div class="assign-field" id="assignCreateJoTrainingWrap" hidden>
+                            <label class="assign-field-label" for="assignTrainingEditId">Training ID</label>
+                            <input type="hidden" id="assignTrainingEditId" value="" />
+                            <button type="button" class="assign-pick-btn" id="assignEditJoPickBtn">Pilih JO</button>
+                            <div class="assign-picked-jo" id="assignCreateJoPickedTrainingText">Belum ada JO dipilih</div>
+                        </div>
                         <div class="assign-field">
                             <label class="assign-field-label" for="assignTrainingCustId">Customer ID</label>
                             <input type="hidden" id="assignTrainingCustId" value="" />
+                            <input type="hidden" id="assignTrainingCustLat" value="" />
+                            <input type="hidden" id="assignTrainingCustLong" value="" />
                             <button type="button" class="assign-pick-btn" id="assignCreateJoPickCustomerBtn">Pilih Customer</button>
                             <div class="assign-picked-jo" id="assignPickedCustomerText">Belum ada Customer dipilih</div>
                         </div>
@@ -4523,6 +4534,9 @@
                         <div class="assign-field">
                             <label class="assign-field-label" for="assignTrainingPicPhone">PIC Phone</label>
                             <input type="text" id="assignTrainingPicPhone" readonly="readonly" placeholder="PIC Phone" />
+                        </div>
+                        <div class="assign-field">
+                            <button type="button" class="assign-pick-btn" id="assignCreateJoLocationBtn" hidden>Location</button>
                         </div>
                     </div>
                     <div class="assign-create-jo-col">
@@ -4739,6 +4753,42 @@
                             </tr>
                         </thead>
                         <tbody id="assignCloseJoPickerBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="assign-job-backdrop assign-jo-info-backdrop" id="assignEditJoPickerBackdrop">
+        <div class="assign-jo-info-modal" role="dialog" aria-modal="true" aria-labelledby="assignEditJoPickerTitle">
+            <div class="assign-job-modal-header">
+                <div class="assign-job-title-wrap">
+                    <h4 id="assignEditJoPickerTitle">Pilih JO Training / Visit</h4>
+                    <p>Hanya JO dengan status RG, DR, atau OP yang bisa diedit.</p>
+                </div>
+                <button type="button" class="assign-job-close" id="assignEditJoPickerCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="assign-job-body">
+                <div class="assign-jo-search-wrap">
+                    <input type="text" id="assignEditJoSearchInput" placeholder="Cari Training ID / Customer / Branch..." />
+                    <button type="button" id="assignEditJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
+                </div>
+                <p class="assign-jo-search-hint">Pilih JO Training/Visit yang sudah dibuat dan masih bisa diedit.</p>
+                <div class="assign-jo-table-wrap">
+                    <table class="assign-jo-table">
+                        <thead>
+                            <tr>
+                                <th>Training ID</th>
+                                <th>Customer</th>
+                                <th>Request Date</th>
+                                <th>Schedule Date</th>
+                                <th>Branch</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assignEditJoPickerBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -5222,6 +5272,7 @@
             var technicianFlagFieldId = "<%= hfIsTechnician.ClientID %>";
             var loginItIdFieldId = "<%= hfLoginItId.ClientID %>";
             var loginItNameFieldId = "<%= hfLoginItName.ClientID %>";
+            var loginUserIdFieldId = "<%= hfLoginUserId.ClientID %>";
 
             function getIsTechnicianUser() {
                 var field = document.getElementById(technicianFlagFieldId);
@@ -5997,7 +6048,50 @@
 
             function isStatusOnlyStatus(status) {
                 var normalizedStatus = normalizeStatusCode(status);
-                return normalizedStatus === "CT" || normalizedStatus === "IZ";
+                return normalizedStatus === "OF" || normalizedStatus === "CT" || normalizedStatus === "IZ";
+            }
+
+            function isOwnScheduleCell(cell) {
+                if (!cell) {
+                    return false;
+                }
+
+                var login = getLoginItAssignee();
+                var loginItId = normalizeTechId(login.techId);
+                var loginUserField = document.getElementById(loginUserIdFieldId);
+                var loginUserId = normalizeTechId(loginUserField ? loginUserField.value : "");
+                var cellTechId = normalizeTechId(cell.getAttribute("data-tech-id"));
+                var cellItId = normalizeTechId(cell.getAttribute("data-it-id"));
+
+                if (loginItId && (loginItId === cellTechId || loginItId === cellItId)) {
+                    return true;
+                }
+
+                if (loginUserId && (loginUserId === cellTechId || loginUserId === cellItId)) {
+                    return true;
+                }
+
+                return false;
+            }
+
+            function canEditScheduleStatusCell(cell) {
+                if (!cell) {
+                    return false;
+                }
+
+                if (!getIsTechnicianUser()) {
+                    return true;
+                }
+
+                return isOwnScheduleCell(cell);
+            }
+
+            function resolveAssignedCellStatusClass(cell) {
+                var cellDate = parseIsoDate(cell ? cell.getAttribute("data-date") : "");
+                if (!cellDate) {
+                    return "st-assigned-future";
+                }
+                return cellDate.getTime() < getTodayDateOnly().getTime() ? "st-assigned-past" : "st-assigned-future";
             }
 
             function isAssignableCell(cell) {
@@ -6016,15 +6110,20 @@
                     return false;
                 }
 
-                // AV/AD/OF can open assign modal; ITID is validated on open/submit.
-                return status === "AV" || status === "AD" || status === "OF";
+                if (!canEditScheduleStatusCell(cell)) {
+                    return false;
+                }
+
+                // AV/AD/OF/CT/IZ can open assign modal for status change; ITID is validated on open/submit.
+                return status === "AV"
+                    || status === "AD"
+                    || status === "OF"
+                    || status === "CT"
+                    || status === "IZ";
             }
 
             function isStatusOnlyEditableCell(cell) {
                 if (!cell) {
-                    return false;
-                }
-                if (getIsTechnicianUser()) {
                     return false;
                 }
 
@@ -6034,12 +6133,15 @@
                     return false;
                 }
                 var isPastDate = cellDate.getTime() < getTodayDateOnly().getTime();
-
-                if (isStatusOnlyStatus(status)) {
-                    return !isPastDate;
+                if (isPastDate) {
+                    return false;
                 }
 
-                return false;
+                if (!isStatusOnlyStatus(status)) {
+                    return false;
+                }
+
+                return canEditScheduleStatusCell(cell);
             }
 
             function isCompletedReportCell(cell) {
@@ -7575,21 +7677,37 @@
                 cell.textContent = value;
                 cell.setAttribute("data-status", value);
 
-                cell.classList.remove("st-av", "st-unit", "st-unit-open", "st-unit-done", "st-close", "st-off", "st-cuti", "st-sakit", "st-izin", "st-unavailable", "day-today-status");
+                cell.classList.remove(
+                    "st-av",
+                    "st-unit",
+                    "st-unit-open",
+                    "st-unit-done",
+                    "st-assigned-future",
+                    "st-assigned-past",
+                    "st-close",
+                    "st-off",
+                    "st-cuti",
+                    "st-sakit",
+                    "st-izin",
+                    "st-unavailable",
+                    "day-today-status");
+                var upperValue = normalizeStatusCode(value);
                 if (/^\d+$/.test(value)) {
-                    var hasRemainingJo = remainingJoInfo && remainingJoInfo.hasRemainingJo;
-                    var remainingJo = remainingJoInfo ? remainingJoInfo.remainingJo : -1;
-                    var isRemainingJoDone = hasRemainingJo && remainingJo === 0;
-                    cell.classList.add(isRemainingJoDone ? "st-unit-done" : "st-unit-open");
-                } else if (value.toUpperCase() === "AV" || value.toUpperCase() === "AD") {
+                    cell.classList.add(resolveAssignedCellStatusClass(cell));
+                } else if (upperValue === "AV" || upperValue === "AD") {
                     cell.classList.add("st-av");
+                } else if (upperValue === "OF") {
+                    cell.classList.add("st-off");
+                } else if (upperValue === "CT") {
+                    cell.classList.add("st-cuti");
+                } else if (upperValue === "IZ") {
+                    cell.classList.add("st-izin");
                 } else {
                     cell.classList.add("st-off");
                 }
 
                 syncTodayCellClasses(cell, value);
 
-                var upperValue = normalizeStatusCode(value);
                 var cellDate = parseIsoDate(cell.getAttribute("data-date"));
                 var isFutureOrToday = cellDate && cellDate.getTime() >= getTodayDateOnly().getTime();
                 var isAssignableClickable = isFutureOrToday && (
@@ -8288,7 +8406,8 @@
                 assignModalState.activeCell = cell;
                 assignModalState.joType = "new_install";
                 assignModalState.deviceGroupId = "GPS";
-                assignModalState.targetStatus = "AV";
+                var initialStatus = normalizeStatusCode(cell.getAttribute("data-status") || "AV");
+                assignModalState.targetStatus = isStatusOnlyStatus(initialStatus) ? initialStatus : "AV";
                 assignModalState.administrationTargetStatus = "AD";
                 assignModalState.supAreaId = (cell.getAttribute("data-sup-area") || "").trim();
                 assignModalState.selectedAreaId = "";
@@ -8505,8 +8624,38 @@
                 if (window.jQuery) {
                     $("#modal-training-customer").modal("hide");
                 }
+                hideEditJoPicker();
+                syncCreateJoFormMode("create");
                 setCreateJoFeedback("", false, false);
                 setExistingJoNotice("assignCreateJoExistingNotice", "");
+            }
+
+            function syncCreateJoFormMode(mode) {
+                createJoFormMode = mode === "edit" ? "edit" : "create";
+                var title = document.getElementById("assignCreateJoTitle");
+                var subtitle = document.getElementById("assignCreateJoSubtitle");
+                var submitBtn = document.getElementById("assignCreateJoSubmitBtn");
+                var editWrap = document.getElementById("assignCreateJoTrainingWrap");
+                var pickCustomerBtn = document.getElementById("assignCreateJoPickCustomerBtn");
+                if (title) {
+                    title.textContent = createJoFormMode === "edit"
+                        ? "Edit Job Training / Visit"
+                        : "Buat Job Training / Visit";
+                }
+                if (subtitle) {
+                    subtitle.textContent = createJoFormMode === "edit"
+                        ? "Ubah JO Training/Visit yang sudah dibuat (status RG, DR, atau OP)."
+                        : "Input dan submit JO baru, sama seperti menu Job Training";
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = createJoFormMode === "edit" ? "Update" : "Submit";
+                }
+                if (editWrap) {
+                    editWrap.hidden = createJoFormMode !== "edit";
+                }
+                if (pickCustomerBtn) {
+                    pickCustomerBtn.disabled = createJoFormMode === "edit";
+                }
             }
 
             function getLoginItAssignee() {
@@ -8545,6 +8694,7 @@
             function openCreateJoModal() {
                 var assignee = resolveCreateJoAssignee();
                 resetTrainingAssignForm(assignee.techId, assignee.techName, assignee.schDate);
+                syncCreateJoFormMode("create");
                 setCreateJoFeedback("Memuat category / billable...", false, false);
                 var backdrop = getCreateJoBackdrop();
                 if (backdrop) {
@@ -8562,6 +8712,168 @@
                     }
                     setCreateJoFeedback("", false, false);
                 });
+            }
+
+            function openEditJoModal() {
+                var assignee = resolveCreateJoAssignee();
+                resetTrainingAssignForm(assignee.techId, assignee.techName, assignee.schDate);
+                syncCreateJoFormMode("edit");
+                setCreateJoFeedback("Memuat category / billable...", false, false);
+                var backdrop = getCreateJoBackdrop();
+                if (backdrop) {
+                    backdrop.classList.add("open");
+                }
+                document.body.classList.add("assign-create-jo-open");
+                ensureTrainingLookupsLoaded(function (ok) {
+                    if (!ok) {
+                        setCreateJoFeedback(trainingLookupState.lastError || "Gagal memuat category / billable.", true, false);
+                        return;
+                    }
+                    if (!trainingLookupState.hasBillable) {
+                        setCreateJoFeedback(trainingLookupState.lastError || "Category berhasil dimuat. Billable tidak ditemukan.", true, false);
+                        return;
+                    }
+                    setCreateJoFeedback("", false, false);
+                    openEditJoPicker();
+                });
+            }
+
+            function getEditJoPickerBackdrop() {
+                return document.getElementById("assignEditJoPickerBackdrop");
+            }
+
+            function hideEditJoPicker() {
+                var backdrop = getEditJoPickerBackdrop();
+                if (backdrop) {
+                    backdrop.classList.remove("open");
+                }
+            }
+
+            function openEditJoPicker() {
+                var backdrop = getEditJoPickerBackdrop();
+                if (backdrop) {
+                    backdrop.classList.add("open");
+                }
+                var input = document.getElementById("assignEditJoSearchInput");
+                if (input) {
+                    input.value = "";
+                    try { input.focus(); } catch (e) { }
+                }
+                searchEditJoJobs();
+            }
+
+            function searchEditJoJobs() {
+                var body = document.getElementById("assignEditJoPickerBody");
+                var keyword = ((document.getElementById("assignEditJoSearchInput") || {}).value || "").trim();
+                if (body) {
+                    body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Memuat JO Training...</td></tr>";
+                }
+                callAssignPageMethod("LoadEditableTrainingJobs", { searchKeyword: keyword }, function (result) {
+                    var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                    if (!isSuccess) {
+                        if (body) {
+                            body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">"
+                                + escapeHtml((result && result.Message) || "Gagal memuat JO Training.")
+                                + "</td></tr>";
+                        }
+                        return;
+                    }
+                    renderEditJoPickerRows(result.Rows || result.rows || [], (result && result.Message) || "");
+                }, function (errorMessage) {
+                    if (body) {
+                        body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">Gagal memuat JO Training. "
+                            + escapeHtml(errorMessage || "")
+                            + "</td></tr>";
+                    }
+                });
+            }
+
+            function renderEditJoPickerRows(rows, emptyMessage) {
+                var body = document.getElementById("assignEditJoPickerBody");
+                if (!body) {
+                    return;
+                }
+                editJoPickerRows = rows || [];
+                if (!editJoPickerRows.length) {
+                    body.innerHTML = "<tr><td colspan=\"8\" class=\"assign-jo-empty\">"
+                        + escapeHtml(emptyMessage || "Tidak ada JO Training/Visit yang bisa diedit.")
+                        + "</td></tr>";
+                    return;
+                }
+                var html = "";
+                for (var i = 0; i < editJoPickerRows.length; i++) {
+                    var row = editJoPickerRows[i] || {};
+                    html += "<tr>"
+                        + "<td>" + escapeHtml(row.TrainingID || row.trainingId || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.CustomerName || row.customerName || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.ReqDate || row.reqDate || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.SchDate || row.schDate || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.BranchName || row.branchName || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.CategoryDesc || row.categoryDesc || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.Status || row.status || "-") + "</td>"
+                        + "<td><button type=\"button\" class=\"assign-jo-pick-btn js-edit-jo-pick\" data-index=\"" + i + "\">Pilih</button></td>"
+                        + "</tr>";
+                }
+                body.innerHTML = html;
+            }
+
+            function applyEditJoPick(row) {
+                if (!row) {
+                    return;
+                }
+                var trainingId = row.TrainingID || row.trainingId || "";
+                var customerName = row.CustomerName || row.customerName || "";
+                var reqDate = row.ReqDate || row.reqDate || "";
+                var schDate = row.SchDate || row.schDate || "";
+                var branch = row.BranchName || row.branchName || "";
+                var custId = row.CustID || row.custId || "";
+                var custType = row.CustTypeDesc || row.custTypeDesc || "";
+                var billableId = row.BillableID || row.billableId || "";
+                var categoryId = row.CategoryID || row.categoryId || "";
+                var categoryDesc = row.CategoryDesc || row.categoryDesc || "";
+                var remark = row.Remark || row.remark || "";
+
+                var trainingIdEl = document.getElementById("assignTrainingEditId");
+                var pickedTraining = document.getElementById("assignCreateJoPickedTrainingText");
+                var custIdEl = document.getElementById("assignTrainingCustId");
+                var pickedCustomer = document.getElementById("assignPickedCustomerText");
+                var custName = document.getElementById("assignTrainingCustName");
+                var custTypeEl = document.getElementById("assignTrainingCustType");
+                var custBranch = document.getElementById("assignTrainingCustBranch");
+                var reqDateEl = document.getElementById("assignTrainingReqDate");
+                var schHidden = document.getElementById("assignTrainingSchDate");
+                var schInput = document.getElementById("assignTrainingSchDateInput");
+                var remarkEl = document.getElementById("assignTrainingRemark");
+                var picName = document.getElementById("assignTrainingPicName");
+                var picPhone = document.getElementById("assignTrainingPicPhone");
+
+                if (trainingIdEl) trainingIdEl.value = trainingId;
+                if (pickedTraining) {
+                    pickedTraining.textContent = trainingId
+                        ? (trainingId + " - " + (customerName || ""))
+                        : "Belum ada JO dipilih";
+                }
+                if (custIdEl) custIdEl.value = custId;
+                if (pickedCustomer) {
+                    pickedCustomer.textContent = custId ? (custId + " - " + (customerName || "")) : "Belum ada Customer dipilih";
+                }
+                if (custName) custName.textContent = customerName || "-";
+                if (custTypeEl) custTypeEl.textContent = custType || "-";
+                if (custBranch) custBranch.textContent = branch || "-";
+                if (reqDateEl) reqDateEl.value = parseCloseJoDateToIso(reqDate) || "";
+                if (schHidden) schHidden.value = parseCloseJoDateToIso(schDate) || "";
+                if (schInput) schInput.value = parseCloseJoDateToIso(schDate) || "";
+                if (remarkEl) remarkEl.value = cleanDisplayValue(remark);
+                if (picName) picName.value = "";
+                if (picPhone) picPhone.value = "";
+                setSelectByIdOrText("assignTrainingBillable", billableId, "");
+                setSelectByIdOrText("assignTrainingCategory", categoryId, categoryDesc);
+                loadCustomerContactExtras(custId);
+                hideEditJoPicker();
+                setCreateJoFeedback("", false, false);
+                if (trainingId) {
+                    refreshCustomerOpenJoNotice(custId, trainingId, "assignCreateJoExistingNotice");
+                }
             }
 
             function syncCreateJoButtonVisibility() {
@@ -8604,8 +8916,92 @@
                 if (custName) custName.textContent = "-";
                 if (custType) custType.textContent = "-";
                 if (custBranch) custBranch.textContent = "-";
+                var trainingIdEl = document.getElementById("assignTrainingEditId");
+                var pickedTraining = document.getElementById("assignCreateJoPickedTrainingText");
+                if (trainingIdEl) trainingIdEl.value = "";
+                if (pickedTraining) pickedTraining.textContent = "Belum ada JO dipilih";
+                setCustomerLocationFields("", "");
                 setExistingJoNotice("assignCreateJoExistingNotice", "");
                 setPreviousAssignField("assignCreateJoPreviousWrap", "assignCreateJoPreviousAssign", "");
+            }
+
+            function cleanDisplayValue(value) {
+                var text = String(value || "")
+                    .replace(/&nbsp;/gi, " ")
+                    .replace(/\u00a0/g, " ")
+                    .trim();
+                if (!text || text === "-" || text.toUpperCase() === "NULL") {
+                    return "";
+                }
+                return text;
+            }
+
+            function hasValidCustomerCoordinates(lat, lng) {
+                var latNum = parseFloat(lat);
+                var lngNum = parseFloat(lng);
+                if (!isFinite(latNum) || !isFinite(lngNum)) {
+                    return false;
+                }
+                if (Math.abs(latNum) < 0.000001 && Math.abs(lngNum) < 0.000001) {
+                    return false;
+                }
+                return latNum >= -90 && latNum <= 90 && lngNum >= -180 && lngNum <= 180;
+            }
+
+            function setCustomerLocationFields(lat, lng) {
+                var latEl = document.getElementById("assignTrainingCustLat");
+                var lngEl = document.getElementById("assignTrainingCustLong");
+                if (latEl) {
+                    latEl.value = lat || "";
+                }
+                if (lngEl) {
+                    lngEl.value = lng || "";
+                }
+                syncCreateJoLocationButton();
+            }
+
+            function syncCreateJoLocationButton() {
+                var btn = document.getElementById("assignCreateJoLocationBtn");
+                if (!btn) {
+                    return;
+                }
+                var latEl = document.getElementById("assignTrainingCustLat");
+                var lngEl = document.getElementById("assignTrainingCustLong");
+                var lat = latEl ? latEl.value : "";
+                var lng = lngEl ? lngEl.value : "";
+                var valid = hasValidCustomerCoordinates(lat, lng);
+                btn.hidden = !valid;
+                btn.onclick = function () {
+                    if (!hasValidCustomerCoordinates(lat, lng)) {
+                        return;
+                    }
+                    window.open(
+                        "https://www.google.com/maps?q=" + encodeURIComponent(lat) + "," + encodeURIComponent(lng),
+                        "_blank");
+                };
+            }
+
+            function loadCustomerContactExtras(custId) {
+                if (!custId) {
+                    setCustomerLocationFields("", "");
+                    return;
+                }
+                callAssignPageMethod("GetCustomerContactInfo", { custId: custId }, function (result) {
+                    if (!result || result.Result !== "OK") {
+                        setCustomerLocationFields("", "");
+                        return;
+                    }
+                    var picPhone = document.getElementById("assignTrainingPicPhone");
+                    if (picPhone) {
+                        var phone = cleanDisplayValue(result.MobilePhone1) || cleanDisplayValue(result.OfficePhone1);
+                        if (phone && !cleanDisplayValue(picPhone.value)) {
+                            picPhone.value = phone;
+                        }
+                    }
+                    setCustomerLocationFields(result.Lat || "", result.Long || "");
+                }, function () {
+                    setCustomerLocationFields("", "");
+                });
             }
 
             function formatIsoDateInput(dateObj) {
@@ -8627,6 +9023,8 @@
                 waiters: []
             };
             var createJoSaving = false;
+            var createJoFormMode = "create";
+            var editJoPickerRows = [];
 
             function readLookupFlag(result) {
                 return String((result && (result.Result || result.result)) || "").toUpperCase();
@@ -8777,6 +9175,62 @@
                     return true;
                 }
 
+                if (createJoFormMode === "edit") {
+                    var trainingId = ((document.getElementById("assignTrainingEditId") || {}).value || "").trim();
+                    if (!trainingId) {
+                        setCreateJoFeedback("Training ID wajib dipilih.", true, false);
+                        return true;
+                    }
+
+                    createJoSaving = true;
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                    }
+                    setCreateJoFeedback("Mengupdate job training/visit...", false, false);
+                    callAssignPageMethod(
+                        "UpdateJobTrainingAssign",
+                        {
+                            trainingId: trainingId,
+                            custId: custId,
+                            reqDate: reqDate,
+                            billableId: billableId,
+                            schDate: schDate,
+                            remark: remark,
+                            categoryId: categoryId
+                        },
+                        function (result) {
+                            createJoSaving = false;
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                            }
+                            var isSuccess = ((result && result.Result) || "").toUpperCase() === "SUCCESS";
+                            if (!isSuccess) {
+                                var failedMessage = (result && result.Message) || "Gagal update job training.";
+                                setCreateJoFeedback(failedMessage, true, false);
+                                showAssignToast(failedMessage, true);
+                                return;
+                            }
+
+                            var successMessage = (result && result.Message) || "Job Training/Visit berhasil di-update.";
+                            setCreateJoFeedback(successMessage, false, true);
+                            showAssignToast(successMessage, false);
+                            closeCreateJoModal();
+                            refreshAfterAssignChange({
+                                scheduleDate: schDate,
+                                technicianIds: []
+                            });
+                        },
+                        function (errorMessage) {
+                            createJoSaving = false;
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                            }
+                            setCreateJoFeedback("Gagal update job training. " + (errorMessage || ""), true, false);
+                            showAssignToast("Gagal update job training.", true);
+                        });
+                    return true;
+                }
+
                 createJoSaving = true;
                 if (submitBtn) {
                     submitBtn.disabled = true;
@@ -8850,8 +9304,9 @@
                 if (custName) custName.textContent = sFullName || "-";
                 if (custType) custType.textContent = sCustTypeDesc || "-";
                 if (custBranch) custBranch.textContent = sBranchName || "-";
-                if (picName) picName.value = sPICName || "";
-                if (picPhone) picPhone.value = sPICPhone || "";
+                if (picName) picName.value = cleanDisplayValue(sPICName);
+                if (picPhone) picPhone.value = cleanDisplayValue(sPICPhone);
+                loadCustomerContactExtras(sCustID);
                 if (window.jQuery) {
                     $("#modal-training-customer").modal("hide");
                 }
@@ -9831,6 +10286,8 @@
                             closeCreateJoModal();
                         } else if (closeButton.id === "assignCloseJoPickerCloseBtn") {
                             hideCloseJoPicker();
+                        } else if (closeButton.id === "assignEditJoPickerCloseBtn") {
+                            hideEditJoPicker();
                         } else if (closeButton.id === "assignCloseJoCloseBtn") {
                             hideCloseJoModal();
                         } else {
@@ -10052,11 +10509,66 @@
                 if (createJoPickCustomerBtn && !createJoPickCustomerBtn.getAttribute("data-bound")) {
                     createJoPickCustomerBtn.addEventListener("click", function (event) {
                         event.preventDefault();
+                        if (createJoFormMode === "edit") {
+                            return;
+                        }
                         if (window.jQuery) {
                             $("#modal-training-customer").modal("show");
                         }
                     });
                     createJoPickCustomerBtn.setAttribute("data-bound", "1");
+                }
+
+                var editJoBtn = document.getElementById("assignEditJoBtn");
+                var editJoPickBtn = document.getElementById("assignEditJoPickBtn");
+                var editJoSearchBtn = document.getElementById("assignEditJoSearchBtn");
+                var editJoSearchInput = document.getElementById("assignEditJoSearchInput");
+                var editJoPickerBody = document.getElementById("assignEditJoPickerBody");
+                if (editJoBtn && !editJoBtn.getAttribute("data-bound")) {
+                    editJoBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        openEditJoModal();
+                    });
+                    editJoBtn.setAttribute("data-bound", "1");
+                }
+                if (editJoPickBtn && !editJoPickBtn.getAttribute("data-bound")) {
+                    editJoPickBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        openEditJoPicker();
+                    });
+                    editJoPickBtn.setAttribute("data-bound", "1");
+                }
+                if (editJoSearchBtn && !editJoSearchBtn.getAttribute("data-bound")) {
+                    editJoSearchBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        searchEditJoJobs();
+                    });
+                    editJoSearchBtn.setAttribute("data-bound", "1");
+                }
+                if (editJoSearchInput && !editJoSearchInput.getAttribute("data-bound")) {
+                    editJoSearchInput.addEventListener("keydown", function (event) {
+                        if (event.key === "Enter") {
+                            event.preventDefault();
+                            searchEditJoJobs();
+                        }
+                    });
+                    editJoSearchInput.setAttribute("data-bound", "1");
+                }
+                if (editJoPickerBody && !editJoPickerBody.getAttribute("data-bound")) {
+                    editJoPickerBody.addEventListener("click", function (event) {
+                        var pickBtn = closestByClass(event.target, "js-edit-jo-pick");
+                        if (!pickBtn) {
+                            return;
+                        }
+                        event.preventDefault();
+                        var idx = parseInt(pickBtn.getAttribute("data-index"), 10);
+                        if (isNaN(idx) || !editJoPickerRows[idx]) {
+                            setCreateJoFeedback("Gagal memilih JO Training.", true, false);
+                            return;
+                        }
+                        applyEditJoPick(editJoPickerRows[idx]);
+                    });
+                    editJoPickerBody.setAttribute("data-bound", "1");
                 }
 
                 var closeJoBtn = document.getElementById("assignCloseJoBtn");

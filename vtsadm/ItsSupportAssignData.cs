@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Globalization;
 using System.Text;
 using System.Web;
 using vtsadm.App_Code;
@@ -1422,9 +1423,55 @@ namespace vtsadm
             public string FullName { get; set; }
             public string Address { get; set; }
             public string PicName { get; set; }
+            public string MobilePhone1 { get; set; }
             public string OfficePhone1 { get; set; }
             public string BranchName { get; set; }
             public string MarketingName { get; set; }
+            public string Lat { get; set; }
+            public string Long { get; set; }
+        }
+
+        public static bool TryGetValidCustomerCoordinates(string latText, string longText, out double lat, out double lng)
+        {
+            lat = 0;
+            lng = 0;
+            if (!double.TryParse((latText ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lat))
+            {
+                return false;
+            }
+
+            if (!double.TryParse((longText ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lng))
+            {
+                return false;
+            }
+
+            if (Math.Abs(lat) < 0.000001 && Math.Abs(lng) < 0.000001)
+            {
+                return false;
+            }
+
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public static string BuildGoogleMapsUrl(string latText, string longText)
+        {
+            double lat;
+            double lng;
+            if (!TryGetValidCustomerCoordinates(latText, longText, out lat, out lng))
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "https://www.google.com/maps?q={0},{1}",
+                lat,
+                lng);
         }
 
         public static CustomerContact LoadCustomerContact(string custId, string jobId, string connString)
@@ -1443,10 +1490,13 @@ namespace vtsadm
                     + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(c.MobilePhone1, ''))) AS MobilePhone1, "
                     + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ''))) AS OfficePhone1, "
                     + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName, "
                     + "LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) AS MarketingID, "
-                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName, "
+                    + "LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), c.Lat), ''))) AS Lat, "
+                    + "LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), c.Long), ''))) AS Long "
                     + "FROM mst_customer c WITH (NOLOCK) "
                     + "LEFT JOIN mst_marketing m WITH (NOLOCK) "
                     + "ON LTRIM(RTRIM(ISNULL(m.MarketingID, ''))) = LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) "
@@ -1467,10 +1517,13 @@ namespace vtsadm
                     + "LTRIM(RTRIM(ISNULL(c.Address, ''))) AS Address, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName1, ''))) AS PICName1, "
                     + "LTRIM(RTRIM(ISNULL(c.PICName2, ''))) AS PICName2, "
+                    + "LTRIM(RTRIM(ISNULL(c.MobilePhone1, ''))) AS MobilePhone1, "
                     + "LTRIM(RTRIM(ISNULL(c.OfficePhone1, ''))) AS OfficePhone1, "
                     + "LTRIM(RTRIM(ISNULL(c.BranchName, ''))) AS BranchName, "
                     + "LTRIM(RTRIM(ISNULL(c.MarketingID, ''))) AS MarketingID, "
-                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName "
+                    + "LTRIM(RTRIM(ISNULL(m.MarketingName, ''))) AS MarketingName, "
+                    + "LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), c.Lat), ''))) AS Lat, "
+                    + "LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), c.Long), ''))) AS Long "
                     + "FROM trx_training_order t WITH (NOLOCK) "
                     + "INNER JOIN mst_customer c WITH (NOLOCK) "
                     + "ON LTRIM(RTRIM(ISNULL(c.CustID, ''))) = LTRIM(RTRIM(ISNULL(t.CustID, ''))) "
@@ -1517,12 +1570,14 @@ namespace vtsadm
                     || !string.IsNullOrWhiteSpace(contact.PicName)
                     || !string.IsNullOrWhiteSpace(contact.FullName)
                     || !string.IsNullOrWhiteSpace(contact.CustId);
-                if (!hasIdentity && string.IsNullOrWhiteSpace(contact.OfficePhone1))
+                bool hasPhone = !string.IsNullOrWhiteSpace(contact.MobilePhone1)
+                    || !string.IsNullOrWhiteSpace(contact.OfficePhone1);
+                if (!hasIdentity && !hasPhone)
                 {
                     continue;
                 }
 
-                if (!string.IsNullOrWhiteSpace(contact.OfficePhone1))
+                if (hasPhone)
                 {
                     return contact;
                 }
@@ -1565,10 +1620,15 @@ namespace vtsadm
                     GetRowString(row, "PicName"),
                     GetRowString(row, "PICName"),
                     GetRowString(row, "PICName2"))),
+                MobilePhone1 = CleanCustomerField(FirstNonEmpty(
+                    GetRowString(row, "MobilePhone1"),
+                    GetRowString(row, "Mobile Phone 1"))),
                 OfficePhone1 = CleanCustomerField(FirstNonEmpty(
                     GetRowString(row, "OfficePhone1"),
                     GetRowString(row, "Office Phone 1"))),
                 BranchName = CleanCustomerField(GetRowString(row, "BranchName")),
+                Lat = CleanCustomerField(GetRowString(row, "Lat")),
+                Long = CleanCustomerField(GetRowString(row, "Long")),
                 MarketingName = CleanCustomerField(FirstNonEmpty(
                     GetRowString(row, "MarketingName"),
                     GetRowString(row, "Marketing")))

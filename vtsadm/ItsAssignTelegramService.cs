@@ -857,6 +857,8 @@ namespace vtsadm
             detail.Address = FirstNonEmpty(contact.Address, detail.Address);
             detail.PicName = FirstNonEmpty(contact.PicName, detail.PicName);
             detail.CustomerNumber = FirstNonEmpty(contact.OfficePhone1);
+            detail.Latitude = FirstNonEmpty(contact.Lat);
+            detail.Longitude = FirstNonEmpty(contact.Long);
         }
 
         private static AssignDetail BuildFallbackAssignDetail(
@@ -1149,6 +1151,23 @@ namespace vtsadm
             sb.AppendLine("Alamat : <b>" + EscapeHtml(alamat) + "</b>");
             sb.AppendLine("PIC Customer : <b>" + EscapeHtml(picCustomer) + "</b>");
             sb.AppendLine("No. Telp : <b>" + EscapeHtml(officePhone) + "</b>");
+            AppendBotGoogleMapsLine(sb, detail);
+        }
+
+        private static void AppendBotGoogleMapsLine(StringBuilder sb, AssignDetail detail)
+        {
+            if (detail == null)
+            {
+                return;
+            }
+
+            string mapsUrl = ItsSupportAssignData.BuildGoogleMapsUrl(detail.Latitude, detail.Longitude);
+            if (string.IsNullOrWhiteSpace(mapsUrl))
+            {
+                return;
+            }
+
+            sb.AppendLine("Lokasi : <a href=\"" + EscapeHtml(mapsUrl) + "\">Google Maps</a>");
         }
 
         private static void AppendBotMarketingLine(StringBuilder sb, AssignDetail detail)
@@ -2535,6 +2554,8 @@ namespace vtsadm
             public string Address { get; set; }
             public string PicName { get; set; }
             public string CustomerNumber { get; set; }
+            public string Latitude { get; set; }
+            public string Longitude { get; set; }
             public string Status { get; set; }
             public DateTime? SchDate { get; set; }
             public DateTime? AssignDate { get; set; }

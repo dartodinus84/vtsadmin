@@ -19,6 +19,13 @@ namespace vtsadm
             ServicePointManager.Expect100Continue = true;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
+
+        private static bool IsStoredProcedureExecuteSuccess(bool executed, int affectedRows)
+        {
+            // OleDb + SET NOCOUNT ON often returns -1 even when the stored procedure succeeds.
+            return executed && affectedRows != 0;
+        }
+
         protected void Page_Load(object sender, EventArgs e)
         {
             try
@@ -198,7 +205,7 @@ namespace vtsadm
                         strSQL = "sp_submit_job_training '" + txtCustID.Value.Trim() + "','" + txtReqDate.Text.Trim() + "','" + CmbBillAble.SelectedItem.Value.Trim() + "','" + txtScheduleDate.Text.Trim() + "','" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                         {
-                            if (intAff > 0)
+                            if (IsStoredProcedureExecuteSuccess(true, intAff))
                             {
                                 dashboard_assign_job.PersistCreatedTrainingOrderRemark(
                                     Session["ClsTypeDBConnStringSQL"].ToString(),
@@ -242,7 +249,7 @@ namespace vtsadm
                                  "'" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                         {
-                            if (intAff > 0)
+                            if (IsStoredProcedureExecuteSuccess(true, intAff))
                             {
                                 clear();
                                 Open_GridViewHeader();
@@ -360,7 +367,7 @@ namespace vtsadm
                         strSQL = "sp_delete_job_training '" + txtTrainingIDDelete.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString(), ref intAff, ref sErr))
                         {
-                            if (intAff > 0)
+                            if (IsStoredProcedureExecuteSuccess(true, intAff))
                             {
                                 clear();
                                 Open_GridViewHeader();

@@ -1,6 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Data;
 using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
@@ -71,6 +70,17 @@ namespace vtsadm
             ClType.Gv_PageIndexChanging((sender as GridView), e.NewPageIndex, Session["RecListJobTrainingCustomerSearch"], LblPaging);
         }
 
+        private static string CleanGridCellValue(ClsType clType, object value)
+        {
+            string raw = HttpUtility.HtmlDecode(Convert.ToString(value) ?? string.Empty).Trim();
+            return clType.CheckNbsp(raw);
+        }
+
+        private static string JsStringLiteral(string value)
+        {
+            return "'" + HttpUtility.JavaScriptStringEncode(value ?? string.Empty) + "'";
+        }
+
         protected void GridView1_RowDataBound(Object sender, GridViewRowEventArgs e)
         {
             try
@@ -79,9 +89,38 @@ namespace vtsadm
                 {
                     e.Row.Cells[4].Visible = false;
                     e.Row.Cells[5].Visible = false;
+                    DataRowView rowView = e.Row.DataItem as DataRowView;
+                    if (rowView == null)
+                    {
+                        return;
+                    }
+
+                    ClsType clType = new ClsType();
+                    string custId = CleanGridCellValue(clType, rowView["CustID"]);
+                    string fullName = CleanGridCellValue(clType, rowView["FullName"]);
+                    string custTypeDesc = CleanGridCellValue(clType, rowView["CustTypeDesc"]);
+                    string branchName = CleanGridCellValue(clType, rowView["BranchName"]);
+                    string picName = CleanGridCellValue(clType, rowView["PICName1"]);
+                    string picPhone = CleanGridCellValue(clType, rowView["MobilePhone1"]);
+                    if (string.IsNullOrWhiteSpace(picPhone))
+                    {
+                        picPhone = CleanGridCellValue(clType, rowView["OfficePhone1"]);
+                    }
+
                     LinkButton CmdButton = (LinkButton)e.Row.FindControl("CmdSelect");
-                    CmdButton.OnClientClick = "parent.postCustChild('" + e.Row.Cells[0].Text.ToString() + "','" + e.Row.Cells[1].Text.ToString() + "'," +
-                                              "'" + e.Row.Cells[2].Text.ToString() + "','" + e.Row.Cells[3].Text.ToString() + "','" + e.Row.Cells[4].Text.ToString() + "','" + e.Row.Cells[5].Text.ToString() + "');return false;";
+                    if (CmdButton == null)
+                    {
+                        return;
+                    }
+
+                    CmdButton.OnClientClick = string.Format(
+                        "parent.postCustChild({0},{1},{2},{3},{4},{5});return false;",
+                        JsStringLiteral(custId),
+                        JsStringLiteral(fullName),
+                        JsStringLiteral(custTypeDesc),
+                        JsStringLiteral(branchName),
+                        JsStringLiteral(picName),
+                        JsStringLiteral(picPhone));
                 }
                 else if (e.Row.RowType == DataControlRowType.Header)
                 {

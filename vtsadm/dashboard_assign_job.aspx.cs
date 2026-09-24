@@ -122,6 +122,36 @@ namespace vtsadm
             public List<TrainingCloseJobItem> Rows { get; set; }
         }
 
+        public class TrainingEditJobItem
+        {
+            public string TrainingID { get; set; }
+            public string ReqDate { get; set; }
+            public string CustomerName { get; set; }
+            public string SchDate { get; set; }
+            public string CustID { get; set; }
+            public string BranchName { get; set; }
+            public string CustTypeDesc { get; set; }
+            public string BillableID { get; set; }
+            public string CategoryID { get; set; }
+            public string CategoryDesc { get; set; }
+            public string Remark { get; set; }
+            public string Status { get; set; }
+        }
+
+        public class TrainingEditSearchResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public List<TrainingEditJobItem> Rows { get; set; }
+        }
+
+        public class TrainingEditDetailResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public TrainingEditJobItem Row { get; set; }
+        }
+
         public class CustomerOpenJobItem
         {
             public string JobID { get; set; }
@@ -141,6 +171,16 @@ namespace vtsadm
             public string CustomerName { get; set; }
             public int OpenCount { get; set; }
             public List<CustomerOpenJobItem> Rows { get; set; }
+        }
+
+        public class CustomerContactInfoResponse
+        {
+            public string Result { get; set; }
+            public string Message { get; set; }
+            public string MobilePhone1 { get; set; }
+            public string OfficePhone1 { get; set; }
+            public string Lat { get; set; }
+            public string Long { get; set; }
         }
 
         public class TrainingFunctionItem
@@ -426,6 +466,7 @@ namespace vtsadm
         protected HiddenField hfIsTechnician;
         protected HiddenField hfLoginItId;
         protected HiddenField hfLoginItName;
+        protected HiddenField hfLoginUserId;
         protected HiddenField hfDetailJobType;
         protected HiddenField hfDetailMetric;
         protected LinkButton btnTabRefresh;
@@ -1193,11 +1234,38 @@ namespace vtsadm
                 return BuildOpenTrainingJobsResponse(GetPayloadString(args, "searchKeyword"));
             }
 
+            if (method.Equals("LoadEditableTrainingJobs", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildEditableTrainingJobsResponse(GetPayloadString(args, "searchKeyword"));
+            }
+
+            if (method.Equals("LoadJobTrainingEditDetail", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildJobTrainingEditDetailResponse(GetPayloadString(args, "trainingId"));
+            }
+
+            if (method.Equals("UpdateJobTrainingAssign", StringComparison.OrdinalIgnoreCase))
+            {
+                return ExecuteUpdateJobTrainingAssign(
+                    GetPayloadString(args, "trainingId"),
+                    GetPayloadString(args, "custId"),
+                    GetPayloadString(args, "reqDate"),
+                    GetPayloadString(args, "billableId"),
+                    GetPayloadString(args, "schDate"),
+                    GetPayloadString(args, "remark"),
+                    GetPayloadString(args, "categoryId"));
+            }
+
             if (method.Equals("LoadCustomerOpenJobs", StringComparison.OrdinalIgnoreCase))
             {
                 return BuildCustomerOpenJobsResponse(
                     GetPayloadString(args, "custId"),
                     GetPayloadString(args, "excludeJobId"));
+            }
+
+            if (method.Equals("GetCustomerContactInfo", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildCustomerContactInfoResponse(GetPayloadString(args, "custId"));
             }
 
             if (method.Equals("LoadTrainingFunctions", StringComparison.OrdinalIgnoreCase))
@@ -1626,6 +1694,11 @@ namespace vtsadm
             }
 
             hfLoginItId.Value = (itId ?? string.Empty).Trim();
+            if (hfLoginUserId != null)
+            {
+                hfLoginUserId.Value = userId;
+            }
+
             if (hfLoginItName == null)
             {
                 return;
@@ -7009,8 +7082,7 @@ ORDER BY
                     }
                     else if (isJobCount)
                     {
-                        bool isRemainingJoDone = hasRemainingJo && remainingJo == 0;
-                        statusCss = isRemainingJoDone ? "st-unit-done" : "st-unit-open";
+                        statusCss = ResolveAssignedJobStatusCss(currentDate);
                         normalizedValue = jobCount.ToString();
                         if (jobCount <= 1)
                         {
@@ -8845,6 +8917,11 @@ ORDER BY
             return normalized;
         }
 
+        private static string ResolveAssignedJobStatusCss(DateTime cellDate)
+        {
+            return cellDate.Date < DateTime.Today ? "st-assigned-past" : "st-assigned-future";
+        }
+
         protected static string NormalizeDeviceGroupId(string value)
         {
             string normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
@@ -9296,6 +9373,22 @@ ORDER BY
                     }
                 }
 
+                if (!requiresJobAssignment)
+                {
+                    SaveAssignResponse statusUpdate = ExecuteUpdateStatusOnlyOnce(
+                        connString,
+                        technicianId,
+                        schDateValue,
+                        normalizedTargetStatus,
+                        usrUpd);
+                    if ("SUCCESS".Equals(statusUpdate.Result, StringComparison.OrdinalIgnoreCase))
+                    {
+                        statusUpdate.TechnicianId = (technicianId ?? string.Empty).Trim();
+                        statusUpdate.SchDate = schDateValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    }
+                    return statusUpdate;
+                }
+
                 SaveAssignResponse saveOnce = ExecuteSaveAssignOnce(
                     connString,
                     jobId,
@@ -9444,7 +9537,7 @@ ORDER BY
                 return response;
             }
 
-            if (IsItsViewOnlySession())
+            if (IsItsViewOnlySession() && !ItsTechnicianIdMatchesCurrentUser(technicianId))
             {
                 response.Message = ItsViewOnlyMutationMessage;
                 return response;
@@ -12132,6 +12225,357 @@ ORDER BY
             };
         }
 
+        private static bool IsEditableTrainingJobStatus(string status)
+        {
+            string normalized = (status ?? string.Empty).Replace("&nbsp;", " ").Trim().ToUpperInvariant();
+            return normalized == "RG"
+                || normalized == "DR"
+                || normalized == "OP"
+                || normalized == "OPEN"
+                || normalized == "DRAFT";
+        }
+
+        private static TrainingEditJobItem MapEditableTrainingJobItem(DataRow row, string trainingId)
+        {
+            return new TrainingEditJobItem
+            {
+                TrainingID = trainingId,
+                ReqDate = FirstNonEmptyStatic(GetValue(row, "sReqDate"), GetValue(row, "ReqDate")),
+                CustomerName = FirstNonEmptyStatic(GetValue(row, "FullName"), GetValue(row, "CustomerName")),
+                SchDate = FirstNonEmptyStatic(GetValue(row, "sSchDate"), GetValue(row, "SchDate"), GetValue(row, "ScheduleDate")),
+                CustID = GetValue(row, "CustID"),
+                BranchName = FirstNonEmptyStatic(GetValue(row, "CustBranchName"), GetValue(row, "BranchName")),
+                CustTypeDesc = FirstNonEmptyStatic(GetValue(row, "CustTypeDesc"), GetValue(row, "CustType")),
+                BillableID = FirstNonEmptyStatic(GetValue(row, "BillAbleID"), GetValue(row, "BillableID"), GetValue(row, "BillableId")),
+                CategoryID = FirstNonEmptyStatic(GetValue(row, "TrainCategoryID"), GetValue(row, "CategoryID")),
+                CategoryDesc = FirstNonEmptyStatic(GetValue(row, "TrainCategoryDesc"), GetValue(row, "CategoryDesc")),
+                Remark = GetValue(row, "Remark"),
+                Status = FirstNonEmptyStatic(GetValue(row, "Status"), GetValue(row, "StatusCode"))
+            };
+        }
+
+        private static bool EditableTrainingJobMatchesKeyword(TrainingEditJobItem item, string keyword)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            string needle = (keyword ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(needle))
+            {
+                return true;
+            }
+
+            return ContainsIgnoreCase(item.TrainingID, needle)
+                || ContainsIgnoreCase(item.CustomerName, needle)
+                || ContainsIgnoreCase(item.CustID, needle)
+                || ContainsIgnoreCase(item.BranchName, needle)
+                || ContainsIgnoreCase(item.CategoryDesc, needle);
+        }
+
+        protected static TrainingEditSearchResponse BuildEditableTrainingJobsResponse(string searchKeyword)
+        {
+            TrainingEditSearchResponse response = new TrainingEditSearchResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                Rows = new List<TrainingEditJobItem>()
+            };
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                response.Message = "Session tidak ditemukan.";
+                return response;
+            }
+
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]).Trim();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                response.Message = "User login tidak ditemukan.";
+                return response;
+            }
+
+            try
+            {
+                string keyword = (searchKeyword ?? string.Empty).Trim();
+                DataTable source = LoadJobTrainingHeaderTable(keyword);
+                HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (source != null)
+                {
+                    foreach (DataRow row in source.Rows)
+                    {
+                        string trainingId = FirstNonEmptyStatic(
+                            GetValue(row, "TrainingID"),
+                            GetValue(row, "JobID"));
+                        if (string.IsNullOrWhiteSpace(trainingId) || !seen.Add(trainingId))
+                        {
+                            continue;
+                        }
+
+                        string status = FirstNonEmptyStatic(GetValue(row, "Status"), GetValue(row, "StatusCode"));
+                        if (!IsEditableTrainingJobStatus(status))
+                        {
+                            continue;
+                        }
+
+                        TrainingEditJobItem item = MapEditableTrainingJobItem(row, trainingId);
+                        if (!EditableTrainingJobMatchesKeyword(item, keyword))
+                        {
+                            continue;
+                        }
+
+                        response.Rows.Add(item);
+                    }
+                }
+
+                response.Result = "SUCCESS";
+                response.Message = response.Rows.Count > 0
+                    ? "OK"
+                    : "Tidak ada JO Training/Visit yang bisa diedit.";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal memuat JO Training: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        protected static TrainingEditDetailResponse BuildJobTrainingEditDetailResponse(string trainingId)
+        {
+            TrainingEditDetailResponse response = new TrainingEditDetailResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                Row = null
+            };
+
+            string trimmedTrainingId = (trainingId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmedTrainingId))
+            {
+                response.Message = "Training ID wajib dipilih.";
+                return response;
+            }
+
+            try
+            {
+                DataTable source = LoadJobTrainingHeaderTable(trimmedTrainingId);
+                if (source != null)
+                {
+                    foreach (DataRow row in source.Rows)
+                    {
+                        string rowTrainingId = FirstNonEmptyStatic(
+                            GetValue(row, "TrainingID"),
+                            GetValue(row, "JobID"));
+                        if (!rowTrainingId.Equals(trimmedTrainingId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        string status = FirstNonEmptyStatic(GetValue(row, "Status"), GetValue(row, "StatusCode"));
+                        if (!IsEditableTrainingJobStatus(status))
+                        {
+                            response.Message = "JO tidak bisa diedit karena status sudah " + (status ?? string.Empty) + ".";
+                            return response;
+                        }
+
+                        response.Row = MapEditableTrainingJobItem(row, rowTrainingId);
+                        response.Result = "SUCCESS";
+                        response.Message = "OK";
+                        return response;
+                    }
+                }
+
+                response.Message = "JO Training/Visit tidak ditemukan.";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal memuat detail JO Training: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        private static bool IsStoredProcedureExecuteSuccess(bool executed, int affectedRows)
+        {
+            // OleDb + SET NOCOUNT ON often returns -1 even when the stored procedure succeeds.
+            return executed && affectedRows != 0;
+        }
+
+        protected static SaveAssignResponse ExecuteUpdateJobTrainingAssign(
+            string trainingId,
+            string custId,
+            string reqDate,
+            string billableId,
+            string schDate,
+            string remark,
+            string categoryId)
+        {
+            SaveAssignResponse response = new SaveAssignResponse
+            {
+                Result = "ERROR",
+                AssignID = string.Empty,
+                Message = string.Empty
+            };
+
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                response.Message = "Session tidak ditemukan.";
+                return response;
+            }
+
+            string connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            string userId = Convert.ToString(context.Session["ClsTypeUserID"]);
+            if (string.IsNullOrWhiteSpace(connString))
+            {
+                response.Message = "Koneksi database tidak tersedia.";
+                return response;
+            }
+
+            string safeTrainingId = (trainingId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(safeTrainingId))
+            {
+                response.Message = "Training ID wajib dipilih.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(custId))
+            {
+                response.Message = "Customer wajib dipilih.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(categoryId) || categoryId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                response.Message = "Category Training/Visit wajib dipilih.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(billableId) || billableId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                response.Message = "Billable wajib dipilih.";
+                return response;
+            }
+
+            DateTime scheduleDateValue;
+            if (!DateTime.TryParse(schDate, out scheduleDateValue))
+            {
+                response.Message = "Schedule Date tidak valid.";
+                return response;
+            }
+
+            DateTime requestDateValue;
+            if (!DateTime.TryParse(reqDate, out requestDateValue))
+            {
+                requestDateValue = DateTime.Today;
+            }
+
+            TrainingEditDetailResponse detailResponse = BuildJobTrainingEditDetailResponse(safeTrainingId);
+            if (!string.Equals(detailResponse.Result, "SUCCESS", StringComparison.OrdinalIgnoreCase)
+                || detailResponse.Row == null)
+            {
+                response.Message = string.IsNullOrWhiteSpace(detailResponse.Message)
+                    ? "JO Training/Visit tidak ditemukan atau tidak bisa diedit."
+                    : detailResponse.Message;
+                return response;
+            }
+
+            string safeRemark = (remark ?? string.Empty).Trim();
+
+            try
+            {
+                string sql = "sp_update_job_training '"
+                    + EscapeSqlLiteral(safeTrainingId) + "','"
+                    + EscapeSqlLiteral(requestDateValue.ToString("yyyy-MM-dd")) + "','"
+                    + EscapeSqlLiteral(custId.Trim()) + "','"
+                    + EscapeSqlLiteral(scheduleDateValue.ToString("yyyy-MM-dd")) + "','"
+                    + EscapeSqlLiteral(billableId.Trim()) + "','"
+                    + EscapeSqlLiteral(safeRemark) + "','"
+                    + EscapeSqlLiteral(categoryId.Trim()) + "','"
+                    + EscapeSqlLiteral((userId ?? string.Empty).Trim()) + "'";
+
+                ExecCommand ec = new ExecCommand();
+                int affected = 0;
+                string error = string.Empty;
+                if (!ec.Execute(sql, connString.Trim(), ref affected, ref error))
+                {
+                    response.Message = string.IsNullOrWhiteSpace(error) ? "Update job training gagal." : error;
+                    return response;
+                }
+
+                if (!IsStoredProcedureExecuteSuccess(true, affected))
+                {
+                    response.Message = string.IsNullOrWhiteSpace(error)
+                        ? "Update job training gagal (no rows affected)."
+                        : error;
+                    return response;
+                }
+
+                response.Result = "SUCCESS";
+                response.AssignID = safeTrainingId;
+                response.Message = "Job Training/Visit berhasil di-update.";
+            }
+            catch (Exception ex)
+            {
+                response.Message = "Gagal update job training: " + (ex.Message ?? string.Empty);
+            }
+
+            return response;
+        }
+
+        protected static CustomerContactInfoResponse BuildCustomerContactInfoResponse(string custId)
+        {
+            CustomerContactInfoResponse response = new CustomerContactInfoResponse
+            {
+                Result = "ERROR",
+                Message = string.Empty,
+                MobilePhone1 = string.Empty,
+                OfficePhone1 = string.Empty,
+                Lat = string.Empty,
+                Long = string.Empty
+            };
+
+            string trimmedCustId = (custId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmedCustId))
+            {
+                response.Message = "Customer wajib dipilih.";
+                return response;
+            }
+
+            try
+            {
+                string connString = string.Empty;
+                HttpContext context = HttpContext.Current;
+                if (context != null && context.Session != null)
+                {
+                    connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+                }
+
+                ItsSupportAssignData.CustomerContact contact = ItsSupportAssignData.LoadCustomerContact(
+                    trimmedCustId,
+                    string.Empty,
+                    connString);
+                if (contact != null)
+                {
+                    response.MobilePhone1 = contact.MobilePhone1 ?? string.Empty;
+                    response.OfficePhone1 = contact.OfficePhone1 ?? string.Empty;
+                    response.Lat = contact.Lat ?? string.Empty;
+                    response.Long = contact.Long ?? string.Empty;
+                }
+
+                response.Result = "OK";
+            }
+            catch (Exception ex)
+            {
+                response.Message = ex.Message ?? string.Empty;
+            }
+
+            return response;
+        }
+
         protected static CustomerOpenJobResponse BuildCustomerOpenJobsResponse(string custId, string excludeJobId)
         {
             CustomerOpenJobResponse response = new CustomerOpenJobResponse
@@ -12933,7 +13377,7 @@ ORDER BY
                     return response;
                 }
 
-                if (affected <= 0)
+                if (!IsStoredProcedureExecuteSuccess(true, affected))
                 {
                     response.Message = string.IsNullOrWhiteSpace(error)
                         ? "Submit job training gagal (no rows affected)."
@@ -12969,6 +13413,7 @@ ORDER BY
 
                 SendJobTrainingCreateTelegram(
                     connString,
+                    custId.Trim(),
                     scheduleDateValue,
                     customerName,
                     picName,
@@ -13400,12 +13845,31 @@ ORDER BY
 
         private static void SendJobTrainingCreateTelegram(
             string connString,
+            string custId,
             DateTime scheduleDate,
             string customerName,
             string picName,
             string picPhone,
             string remark)
         {
+            string mapsLine = string.Empty;
+            string mapsUrl = string.Empty;
+            if (!string.IsNullOrWhiteSpace(custId))
+            {
+                ItsSupportAssignData.CustomerContact contact = ItsSupportAssignData.LoadCustomerContact(
+                    custId,
+                    string.Empty,
+                    connString);
+                mapsUrl = ItsSupportAssignData.BuildGoogleMapsUrl(
+                    contact == null ? string.Empty : contact.Lat,
+                    contact == null ? string.Empty : contact.Long);
+                if (!string.IsNullOrWhiteSpace(mapsUrl))
+                {
+                    mapsLine = "<b>Lokasi</b>\r\n"
+                        + "<b><a href=\"" + mapsUrl + "\">Google Maps</a></b>\r\n";
+                }
+            }
+
             string msg = "<b>CREATE JOB ORDER TRAINING</b>\r\n"
                 + "<b>Customer</b>\r\n"
                 + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
@@ -13415,6 +13879,7 @@ ORDER BY
                 + "<b>" + (picName ?? string.Empty) + "</b>\r\n"
                 + "<b>PIC Number</b>\r\n"
                 + "<b>" + (picPhone ?? string.Empty) + "</b>\r\n"
+                + mapsLine
                 + "<b>Remark</b>\r\n"
                 + "<b>" + (remark ?? string.Empty) + "</b>\r\n";
             SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
