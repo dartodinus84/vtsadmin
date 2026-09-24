@@ -67,7 +67,6 @@ namespace vtsadm
                         serverTotal = kpi.ServerTotal
                     }
                 };
-
             }
             catch (Exception ex)
             {
