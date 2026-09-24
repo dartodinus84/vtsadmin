@@ -114,7 +114,13 @@ namespace vtsadm
                     }
 
                     CmdButton.OnClientClick = string.Format(
-                        "parent.postCustChild({0},{1},{2},{3},{4},{5});return false;",
+                        "var postCustChildFn=null;"
+                        + "try{{"
+                        + "var w=window;while(w&&!postCustChildFn){{if(w.postCustChild){{postCustChildFn=w.postCustChild;break;}}w=(w!==w.parent)?w.parent:null;}}"
+                        + "if(!postCustChildFn&&window.top&&window.top.postCustChild){{postCustChildFn=window.top.postCustChild;}}"
+                        + "}}catch(ex){{}}"
+                        + "if(postCustChildFn){{postCustChildFn({0},{1},{2},{3},{4},{5});}}"
+                        + "return false;",
                         JsStringLiteral(custId),
                         JsStringLiteral(fullName),
                         JsStringLiteral(custTypeDesc),

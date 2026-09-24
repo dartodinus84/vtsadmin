@@ -133,12 +133,23 @@
             margin-bottom: 10px;
         }
 
-        body.assign-create-jo-open .modal-backdrop {
-            z-index: 1350;
+        #assignTrainingCustomerBackdrop {
+            z-index: 1500;
         }
 
-        body.assign-create-jo-open #modal-training-customer {
-            z-index: 1400;
+        .assign-training-customer-modal {
+            max-width: 960px;
+        }
+
+        .assign-training-customer-modal .assign-job-body {
+            padding: 0;
+        }
+
+        #assignTrainingCustomerFrame {
+            width: 100%;
+            border: none;
+            height: 420px;
+            display: block;
         }
 
         @media (max-width: 768px) {
@@ -3342,11 +3353,12 @@
         }
 
         .assign-jo-table tbody tr.assign-jo-row-transfer {
-            background: #fde047;
+            background: #fffbeb;
+            box-shadow: inset 3px 0 0 #d97706;
         }
 
         .assign-jo-table tbody tr.assign-jo-row-transfer:hover {
-            background: #facc15;
+            background: #fef3c7;
         }
 
         .assign-jo-pick-btn {
@@ -4481,19 +4493,17 @@
         </div>
     </div>
 
-    <div class="modal fade bs-example-modal-lg" id="modal-training-customer" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                    <h4 class="modal-title">Customer</h4>
+    <div class="assign-job-backdrop assign-training-customer-backdrop" id="assignTrainingCustomerBackdrop">
+        <div class="assign-job-modal assign-training-customer-modal" role="dialog" aria-modal="true" aria-labelledby="assignTrainingCustomerTitle">
+            <div class="assign-job-modal-header">
+                <div class="assign-job-title-wrap">
+                    <h4 id="assignTrainingCustomerTitle">Customer</h4>
+                    <p>Cari dan pilih customer untuk JO Training / Visit</p>
                 </div>
-                <div class="modal-body">
-                    <iframe src="job_training_customer_search.aspx" style="width: 100%; border: none; height: 350px;" scrolling="no"></iframe>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default pull-left" data-dismiss="modal">Close</button>
-                </div>
+                <button type="button" class="assign-job-close" id="assignTrainingCustomerCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="assign-job-body">
+                <iframe id="assignTrainingCustomerFrame" src="job_training_customer_search.aspx" scrolling="yes"></iframe>
             </div>
         </div>
     </div>
@@ -4871,7 +4881,7 @@
                     <input type="text" id="assignJoSearchInput" placeholder="Cari Job ID / Customer / Branch / Remark..." />
                     <button type="button" id="assignJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
-                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi. Ketik <strong>Job ID tepat</strong> untuk pindahkan ke IT Support lain. <strong>Baris kuning</strong> = JO sudah di-assign ke IT Support lain.</p>
+                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi. Ketik <strong>Job ID tepat</strong> untuk pindahkan ke IT Support lain. <strong>Baris krem amber</strong> = JO sudah di-assign ke IT Support lain.</p>
                 <div class="assign-jo-filter-wrap">
                     <label for="assignJoBranchFilter">Branch</label>
                     <select id="assignJoBranchFilter">
@@ -5543,30 +5553,69 @@
                 return cell ? (cell.getAttribute("data-tech-id") || "").trim() : "";
             }
 
-            function isJobOrderTransfer(order, targetTechnicianId) {
+            function getAssignTargetIdentityKeys(context) {
+                var keys = {};
+                function addKey(value) {
+                    var normalized = normalizeTechId(value);
+                    if (normalized) {
+                        keys[normalized] = true;
+                    }
+                }
+
+                var cell = context === "report"
+                    ? reportModalState.activeCell
+                    : assignModalState.activeCell;
+                if (cell) {
+                    addKey(cell.getAttribute("data-tech-id"));
+                    addKey(cell.getAttribute("data-it-id"));
+                }
+
+                if (context === "report") {
+                    addKey(reportModalState.technicianId);
+                } else {
+                    addKey(getTargetAssignTechnicianId("main"));
+                }
+
+                return keys;
+            }
+
+            function isAssignedToTargetIdentity(assignedId, targetKeys) {
+                var normalized = normalizeTechId(assignedId);
+                return !!(normalized && targetKeys && targetKeys[normalized]);
+            }
+
+            function isJobOrderTransfer(order, targetTechnicianId, context) {
                 if (!order) {
                     return false;
                 }
 
-                var targetId = normalizeTechId(targetTechnicianId);
+                var targetKeys = getAssignTargetIdentityKeys(context);
+                if (targetTechnicianId) {
+                    var extraTarget = normalizeTechId(targetTechnicianId);
+                    if (extraTarget) {
+                        targetKeys[extraTarget] = true;
+                    }
+                }
+
+                var hasTarget = Object.keys(targetKeys).length > 0;
                 var assignedId = normalizeTechId(getOrderAssignedTechnicianId(order));
 
-                if (assignedId && targetId && assignedId !== targetId) {
+                if (assignedId && hasTarget && !isAssignedToTargetIdentity(assignedId, targetKeys)) {
                     return true;
                 }
 
                 if (order.IsTransfer === true || order.IsTransfer === "true" || order.IsTransfer === 1) {
-                    if (assignedId && targetId) {
-                        return assignedId !== targetId;
+                    if (assignedId && hasTarget) {
+                        return !isAssignedToTargetIdentity(assignedId, targetKeys);
                     }
                     return toInt(order.TotalAssign, 0) > 0;
                 }
 
                 return toInt(order.TotalAssign, 0) > 0
                     && getOrderRemainingUnit(order) <= 0
-                    && assignedId
-                    && targetId
-                    && assignedId !== targetId;
+                    && !!assignedId
+                    && hasTarget
+                    && !isAssignedToTargetIdentity(assignedId, targetKeys);
             }
 
             function isJobOrderTransferCandidate(order) {
@@ -5582,14 +5631,14 @@
                 return toInt(order.TotalAssign, 0) > 0 && getOrderRemainingUnit(order) <= 0;
             }
 
-            function requiresTransferNoteForOrder(order, targetTechnicianId) {
+            function requiresTransferNoteForOrder(order, targetTechnicianId, context) {
                 if (!order) {
                     return false;
                 }
                 if (order._requiresTransferNote === true) {
                     return true;
                 }
-                return isJobOrderTransfer(order, targetTechnicianId);
+                return isJobOrderTransfer(order, targetTechnicianId, context);
             }
 
             function enrichSelectedOrderAssignContext(order, context, callback) {
@@ -5649,8 +5698,8 @@
                         reportModalState.editingRowIndex = -1;
                         applySelectedOrderAreaFromCustomer(enriched, reportModalState);
                         renderReportAssignForm();
-                        if (requiresTransferNoteForOrder(enriched, reportModalState.technicianId)) {
-                            setReportFeedback(getJobOrderTransferLabel(enriched, reportModalState.technicianId) || "Isi catatan pindah IT Support sebelum assign.", false, false);
+                        if (requiresTransferNoteForOrder(enriched, reportModalState.technicianId, "report")) {
+                            setReportFeedback(getJobOrderTransferLabel(enriched, reportModalState.technicianId, "report") || "Isi catatan pindah IT Support sebelum assign.", false, false);
                         } else {
                             setReportFeedback("", false, false);
                         }
@@ -5663,8 +5712,8 @@
                         assignModalState.selectedOrder = enriched;
                         applySelectedOrderAreaFromCustomer(enriched, assignModalState);
                         renderOrderInfo();
-                        if (requiresTransferNoteForOrder(enriched, getTargetAssignTechnicianId("main"))) {
-                            setFeedback(getJobOrderTransferLabel(enriched, getTargetAssignTechnicianId("main")) || "Isi catatan pindah IT Support sebelum assign.", false, false);
+                        if (requiresTransferNoteForOrder(enriched, getTargetAssignTechnicianId("main"), "main")) {
+                            setFeedback(getJobOrderTransferLabel(enriched, getTargetAssignTechnicianId("main"), "main") || "Isi catatan pindah IT Support sebelum assign.", false, false);
                         } else {
                             setFeedback("", false, false);
                         }
@@ -5676,9 +5725,12 @@
                 });
             }
 
-            function syncTransferNoteField(wrapId, inputId, order, targetTechnicianId) {
+            function syncTransferNoteField(wrapId, inputId, order, targetTechnicianId, context) {
                 var wrap = document.getElementById(wrapId);
-                var show = requiresTransferNoteForOrder(order, targetTechnicianId);
+                if (!context) {
+                    context = (wrapId || "").indexOf("Report") >= 0 ? "report" : "main";
+                }
+                var show = requiresTransferNoteForOrder(order, targetTechnicianId, context);
                 if (wrap) {
                     wrap.hidden = !show;
                     wrap.style.display = show ? "" : "none";
@@ -6516,7 +6568,7 @@
                 setActiveReportAssignButtons();
 
                 if (pickedJo) {
-                    var transferLabel = selected ? getJobOrderTransferLabel(selected, reportModalState.technicianId) : "";
+                    var transferLabel = selected ? getJobOrderTransferLabel(selected, reportModalState.technicianId, "report") : "";
                     pickedJo.textContent = selected
                         ? (selected.JobID + " - " + getCustomerDisplayText(selected) + " (" + (selected.BranchName || "-") + ")" + (transferLabel ? " [" + transferLabel + "]" : ""))
                         : "Belum ada Job Order dipilih";
@@ -6611,7 +6663,7 @@
                     : toInt(selected.RemainingUnitGps, 0);
                 var qty = 1;
                 var groupText = reportModalState.deviceGroupId === "ACS" ? "ACS" : "GPS";
-                if (reportModalState.editingRowIndex < 0 && remaining <= 0 && !isJobOrderTransfer(selected, reportModalState.technicianId)) {
+                if (reportModalState.editingRowIndex < 0 && remaining <= 0 && !isJobOrderTransfer(selected, reportModalState.technicianId, "report")) {
                     if (showFeedback) {
                         var assignedCount = toInt(selected.TotalAssign, 0);
                         if (assignedCount > 0) {
@@ -6622,7 +6674,7 @@
                     }
                     return false;
                 }
-                if (requiresTransferNoteForOrder(selected, reportModalState.technicianId)) {
+                if (requiresTransferNoteForOrder(selected, reportModalState.technicianId, "report")) {
                     var transferNote = getDashboardNoteValue("assignReportTransferNoteInput");
                     if (!transferNote) {
                         if (showFeedback) {
@@ -6635,7 +6687,7 @@
                         return false;
                     }
                     if (showFeedback) {
-                        setReportFeedback(getJobOrderTransferLabel(selected, reportModalState.technicianId), false, false);
+                        setReportFeedback(getJobOrderTransferLabel(selected, reportModalState.technicianId, "report"), false, false);
                     }
                 }
                 return true;
@@ -7919,14 +7971,21 @@
                 return toInt(order && order.CustomerAcsCount, 0);
             }
 
-            function getJobOrderTransferLabel(order, targetTechnicianId) {
+            function getJobOrderTransferLabel(order, targetTechnicianId, context) {
                 if (!order) {
                     return "";
                 }
+                var targetKeys = getAssignTargetIdentityKeys(context);
+                if (targetTechnicianId) {
+                    var extraTarget = normalizeTechId(targetTechnicianId);
+                    if (extraTarget) {
+                        targetKeys[extraTarget] = true;
+                    }
+                }
                 var assignedId = normalizeTechId(getOrderAssignedTechnicianId(order));
-                var targetId = normalizeTechId(targetTechnicianId);
-                var assignedToOther = !!assignedId && !!targetId && assignedId !== targetId;
-                if (!assignedToOther && !requiresTransferNoteForOrder(order, targetTechnicianId)) {
+                var hasTarget = Object.keys(targetKeys).length > 0;
+                var assignedToOther = !!assignedId && hasTarget && !isAssignedToTargetIdentity(assignedId, targetKeys);
+                if (!assignedToOther && !requiresTransferNoteForOrder(order, targetTechnicianId, context)) {
                     return "";
                 }
                 var itName = (order.AssignedTechnicianName || order.AssignedTechnicianId || "-").toString().trim();
@@ -8092,7 +8151,7 @@
                     element.textContent = "Belum ada Job Order dipilih";
                     return;
                 }
-                var transferLabel = getJobOrderTransferLabel(selected, getTargetAssignTechnicianId("main"));
+                var transferLabel = getJobOrderTransferLabel(selected, getTargetAssignTechnicianId("main"), "main");
                 element.textContent = selected.JobID + " - " + getCustomerDisplayText(selected) + " (" + selected.BranchName + ")";
                 if (transferLabel) {
                     element.textContent += " [" + transferLabel + "]";
@@ -8198,7 +8257,7 @@
                 var groupText = getDeviceGroupDisplayText(selectedGroup);
                 var remainingUnit = getRemainingUnitByDeviceGroup(order, selectedGroup);
 
-                if (remainingUnit <= 0 && !isJobOrderTransfer(order, getTargetAssignTechnicianId("main"))) {
+                if (remainingUnit <= 0 && !isJobOrderTransfer(order, getTargetAssignTechnicianId("main"), "main")) {
                     if (showFeedback) {
                         var assignedCount = toInt(order.TotalAssign, 0);
                         if (assignedCount > 0) {
@@ -8210,7 +8269,7 @@
                     return false;
                 }
 
-                if (requiresTransferNoteForOrder(order, getTargetAssignTechnicianId("main"))) {
+                if (requiresTransferNoteForOrder(order, getTargetAssignTechnicianId("main"), "main")) {
                     var transferNote = getDashboardNoteValue("assignTransferNoteInput");
                     if (!transferNote) {
                         if (showFeedback) {
@@ -8223,7 +8282,7 @@
                         return false;
                     }
                     if (showFeedback) {
-                        setFeedback(getJobOrderTransferLabel(order, getTargetAssignTechnicianId("main")), false, false);
+                        setFeedback(getJobOrderTransferLabel(order, getTargetAssignTechnicianId("main"), "main"), false, false);
                     }
                 }
 
@@ -8251,22 +8310,19 @@
                     body.innerHTML = "<tr><td class=\"assign-jo-empty\" colspan=\"" + tableColspan + "\">Data job order tidak ditemukan.</td></tr>";
                 } else {
                     var rows = [];
-                    var targetTechId = getTargetAssignTechnicianId(joLookupOwner === "report" ? "report" : "main");
+                    var joContext = joLookupOwner === "report" ? "report" : "main";
+                    var targetTechId = getTargetAssignTechnicianId(joContext);
                     for (var i = 0; i < rowsData.length; i++) {
                         var item = rowsData[i];
                         var customerGps = getCustomerGpsCount(item);
                         var lastAssign = item.LastAssignDate || "-";
                         var assignDate = item.AssignDate || "-";
                         var slaDays = toInt(item.SlaDays, 0);
-                        var assignedToOther = isJobOrderTransfer(item, targetTechId)
-                            || (isJobOrderTransferCandidate(item)
-                                && (!normalizeTechId(getOrderAssignedTechnicianId(item))
-                                    || !normalizeTechId(targetTechId)
-                                    || normalizeTechId(getOrderAssignedTechnicianId(item)) !== normalizeTechId(targetTechId)));
+                        var assignedToOther = isJobOrderTransfer(item, targetTechId, joContext);
                         var pickLabel = assignedToOther ? "Pindah" : "Pilih";
                         var pickClass = assignedToOther ? "assign-jo-pick-btn assign-jo-transfer-btn" : "assign-jo-pick-btn";
                         var transferHint = assignedToOther
-                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item, targetTechId) || "Sudah di-assign ke IT Support lain") + "</div>"
+                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item, targetTechId, joContext) || "Sudah di-assign ke IT Support lain") + "</div>"
                             : "";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
@@ -8522,9 +8578,10 @@
             }
 
             function syncMoveJoPreviousAssign(order, targetTechnicianId, wrapId, valueId, noticeBoxId) {
+                var context = (wrapId || "").indexOf("Report") >= 0 ? "report" : "main";
                 var isMove = !!(order && (order.IsAlreadyAssigned
-                    || requiresTransferNoteForOrder(order, targetTechnicianId)
-                    || isJobOrderTransferCandidate(order)));
+                    || requiresTransferNoteForOrder(order, targetTechnicianId, context)
+                    || isJobOrderTransfer(order, targetTechnicianId, context)));
                 var name = order ? (order.AssignedTechnicianName || "") : "";
                 var id = getOrderAssignedTechnicianId(order);
                 var schDate = getOrderAssignedSchDate(order);
@@ -8631,14 +8688,12 @@
             }
 
             function closeCreateJoModal() {
+                closeTrainingCustomerPicker();
                 var backdrop = getCreateJoBackdrop();
                 if (backdrop) {
                     backdrop.classList.remove("open");
                 }
                 document.body.classList.remove("assign-create-jo-open");
-                if (window.jQuery) {
-                    $("#modal-training-customer").modal("hide");
-                }
                 hideEditJoPicker();
                 syncCreateJoFormMode("create");
                 setCreateJoFeedback("", false, false);
@@ -8704,6 +8759,44 @@
                     techName: cellTechName || login.techName,
                     schDate: cellDate || schDate
                 };
+            }
+
+            function getTrainingCustomerBackdrop() {
+                return document.getElementById("assignTrainingCustomerBackdrop");
+            }
+
+            function isTrainingCustomerModalOpen() {
+                var backdrop = getTrainingCustomerBackdrop();
+                return !!(backdrop && backdrop.classList.contains("open"));
+            }
+
+            function closeTrainingCustomerPicker() {
+                var backdrop = getTrainingCustomerBackdrop();
+                if (backdrop) {
+                    backdrop.classList.remove("open");
+                }
+            }
+
+            function openTrainingCustomerPicker() {
+                if (createJoFormMode === "edit") {
+                    setCreateJoFeedback("Customer tidak bisa diubah saat edit JO.", true, false);
+                    return;
+                }
+
+                var backdrop = getTrainingCustomerBackdrop();
+                if (!backdrop) {
+                    setCreateJoFeedback("Dialog customer tidak ditemukan.", true, false);
+                    return;
+                }
+
+                var frame = document.getElementById("assignTrainingCustomerFrame");
+                if (frame && !frame.getAttribute("data-loaded")) {
+                    frame.setAttribute("data-loaded", "1");
+                } else if (frame) {
+                    frame.src = "job_training_customer_search.aspx";
+                }
+
+                backdrop.classList.add("open");
             }
 
             function openCreateJoModal() {
@@ -9358,9 +9451,7 @@
                 if (picName) picName.value = cleanDisplayValue(sPICName);
                 if (picPhone) picPhone.value = cleanDisplayValue(sPICPhone);
                 loadCustomerContactExtras(sCustID);
-                if (window.jQuery) {
-                    $("#modal-training-customer").modal("hide");
-                }
+                closeTrainingCustomerPicker();
                 if (isCreateJoModalOpen()) {
                     setCreateJoFeedback("", false, false);
                     refreshCustomerOpenJoNotice(sCustID, "", "assignCreateJoExistingNotice");
@@ -10455,6 +10546,10 @@
                             hideCloseJoModal();
                             return;
                         }
+                        if (isTrainingCustomerModalOpen()) {
+                            closeTrainingCustomerPicker();
+                            return;
+                        }
                         if (isCreateJoModalOpen()) {
                             closeCreateJoModal();
                             return;
@@ -10560,14 +10655,27 @@
                 if (createJoPickCustomerBtn && !createJoPickCustomerBtn.getAttribute("data-bound")) {
                     createJoPickCustomerBtn.addEventListener("click", function (event) {
                         event.preventDefault();
-                        if (createJoFormMode === "edit") {
-                            return;
-                        }
-                        if (window.jQuery) {
-                            $("#modal-training-customer").modal("show");
-                        }
+                        event.stopPropagation();
+                        openTrainingCustomerPicker();
                     });
                     createJoPickCustomerBtn.setAttribute("data-bound", "1");
+                }
+                var trainingCustomerBackdrop = getTrainingCustomerBackdrop();
+                var trainingCustomerCloseBtn = document.getElementById("assignTrainingCustomerCloseBtn");
+                if (trainingCustomerBackdrop && !trainingCustomerBackdrop.getAttribute("data-bound")) {
+                    trainingCustomerBackdrop.addEventListener("click", function (event) {
+                        if (event.target === trainingCustomerBackdrop) {
+                            closeTrainingCustomerPicker();
+                        }
+                    });
+                    trainingCustomerBackdrop.setAttribute("data-bound", "1");
+                }
+                if (trainingCustomerCloseBtn && !trainingCustomerCloseBtn.getAttribute("data-bound")) {
+                    trainingCustomerCloseBtn.addEventListener("click", function (event) {
+                        event.preventDefault();
+                        closeTrainingCustomerPicker();
+                    });
+                    trainingCustomerCloseBtn.setAttribute("data-bound", "1");
                 }
 
                 var editJoBtn = document.getElementById("assignEditJoBtn");
@@ -12290,6 +12398,10 @@
             }
 
             function initAssignInteraction(fromPostBack) {
+                if (fromPostBack) {
+                    assignDocumentEventsBound = false;
+                    assignModalControlsBound = false;
+                }
                 bindAssignEvents();
                 decorateAssignCells();
                 initDetailJoSearch();
