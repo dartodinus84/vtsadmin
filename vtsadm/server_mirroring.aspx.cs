@@ -49,16 +49,7 @@ namespace vtsadm
                 var companies = LoadCompanies();
                 var servers = LoadServers();
                 var rows = LoadConfigurations();
-                var companyActive = companies.Count;
-                var vehicleActive = CountActiveVehicles();
-                var mirroredCompanies = rows.Select(r => r.CompanyId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                var mirroredVehicles = rows.Select(r => r.VehicleId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                var activeServers = rows
-                    .Where(r => string.Equals(r.Status, "active", StringComparison.OrdinalIgnoreCase))
-                    .SelectMany(r => r.MirrorServers ?? new string[0])
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count();
+                var kpi = LoadKpis(companies.Count, servers.Count, rows);
 
                 return new
                 {
@@ -68,12 +59,12 @@ namespace vtsadm
                     rows = rows.Select(ToClientRow).ToList(),
                     kpis = new
                     {
-                        companyMirrored = mirroredCompanies,
-                        companyActive,
-                        vehicleMirrored = mirroredVehicles,
-                        vehicleActive,
-                        serverActive = activeServers,
-                        serverTotal = servers.Count
+                        companyMirrored = kpi.CompanyMirrored,
+                        companyActive = kpi.CompanyActive,
+                        vehicleMirrored = kpi.VehicleMirrored,
+                        vehicleActive = kpi.VehicleActive,
+                        serverActive = kpi.ServerActive,
+                        serverTotal = kpi.ServerTotal
                     }
                 };
             }
@@ -391,6 +382,51 @@ namespace vtsadm
                 .ToList();
         }
 
+        private static MirrorKpi LoadKpis(int companyActiveFallback, int serverTotalFallback, List<MirrorRow> rows)
+        {
+            var kpi = new MirrorKpi
+            {
+                CompanyActive = companyActiveFallback,
+                ServerTotal = serverTotalFallback,
+                CompanyMirrored = rows
+                    .Select(r => r.CompanyId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count(),
+                VehicleMirrored = rows
+                    .Select(r => r.VehicleId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count(),
+                ServerActive = rows
+                    .Where(r => string.Equals(r.Status, "active", StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(r => r.MirrorServers ?? new string[0])
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count(),
+                VehicleActive = CountActiveVehicles()
+            };
+
+            try
+            {
+                var rec = new Recordset();
+                rec.Open("sp_get_server_mirroring_kpi", GetDbConn());
+                if (rec.RecData == null || rec.RecData.Tables.Count == 0 || rec.RecData.Tables[0].Rows.Count == 0)
+                    return kpi;
+
+                var row = rec.RecData.Tables[0].Rows[0];
+                kpi.CompanyMirrored = GetInt(row, "CompanyMirrored", kpi.CompanyMirrored);
+                kpi.CompanyActive = GetInt(row, "CompanyActive", kpi.CompanyActive);
+                kpi.VehicleMirrored = GetInt(row, "VehicleMirrored", kpi.VehicleMirrored);
+                kpi.VehicleActive = GetInt(row, "VehicleActive", kpi.VehicleActive);
+                kpi.ServerActive = GetInt(row, "ServerActive", kpi.ServerActive);
+                kpi.ServerTotal = GetInt(row, "ServerTotal", kpi.ServerTotal);
+            }
+            catch
+            {
+            }
+
+            return kpi;
+        }
+
         private static int CountActiveVehicles()
         {
             try
@@ -408,6 +444,13 @@ namespace vtsadm
             {
             }
             return 0;
+        }
+
+        private static int GetInt(DataRow row, string column, int fallback)
+        {
+            if (row == null || !row.Table.Columns.Contains(column) || row[column] == DBNull.Value)
+                return fallback;
+            return Convert.ToInt32(row[column]);
         }
 
         private static object ToClientRow(MirrorRow row)
@@ -518,6 +561,16 @@ namespace vtsadm
             public bool allVehicles { get; set; }
             public string[] vehicleIds { get; set; }
             public string[] mirrorServers { get; set; }
+        }
+
+        private class MirrorKpi
+        {
+            public int CompanyMirrored { get; set; }
+            public int CompanyActive { get; set; }
+            public int VehicleMirrored { get; set; }
+            public int VehicleActive { get; set; }
+            public int ServerActive { get; set; }
+            public int ServerTotal { get; set; }
         }
     }
 }
