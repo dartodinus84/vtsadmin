@@ -12623,7 +12623,6 @@ ORDER BY
                     + "  FROM trx_job_assign_detail d WITH (NOLOCK) "
                     + "  WHERE LTRIM(RTRIM(ISNULL(d.JobID, ''))) = LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) "
                     + "    AND ISNULL(d.Status, '') NOT IN ('DE') "
-                    + "    AND UPPER(LTRIM(RTRIM(ISNULL(d.Status, '')))) = 'RG' "
                     + "  ORDER BY d.DtmUpd DESC, d.SchDate DESC, d.Seq DESC "
                     + ") ja "
                     + "LEFT JOIN mst_itsupport it WITH (NOLOCK) ON ("

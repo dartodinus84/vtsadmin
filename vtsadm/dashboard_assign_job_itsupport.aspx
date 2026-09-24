@@ -1871,6 +1871,35 @@
             display: block;
         }
 
+        .assign-create-jo-open-wrap {
+            margin: 8px 0 12px;
+        }
+
+        .assign-create-jo-open-summary {
+            margin: 0 0 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #92400e;
+            line-height: 1.45;
+        }
+
+        .assign-create-jo-open-table-wrap {
+            min-height: 0;
+            max-height: 220px;
+            min-width: 0;
+        }
+
+        .assign-create-jo-open-table {
+            min-width: 0;
+        }
+
+        .assign-create-jo-open-hint {
+            margin: 8px 0 0;
+            font-size: 11px;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+
         .assign-actions {
             display: flex;
             justify-content: flex-end;
@@ -3352,12 +3381,15 @@
             background: #f8fafc;
         }
 
-        .assign-jo-table tbody tr.assign-jo-row-transfer {
+        .assign-jo-table tbody tr.assign-jo-row-transfer > td {
             background: #fffbeb;
-            box-shadow: inset 3px 0 0 #d97706;
         }
 
-        .assign-jo-table tbody tr.assign-jo-row-transfer:hover {
+        .assign-jo-table tbody tr.assign-jo-row-transfer {
+            box-shadow: inset 4px 0 0 #d97706;
+        }
+
+        .assign-jo-table tbody tr.assign-jo-row-transfer:hover > td {
             background: #fef3c7;
         }
 
@@ -4535,14 +4567,27 @@
                             <button type="button" class="assign-pick-btn" id="assignCreateJoPickCustomerBtn">Pilih Customer</button>
                             <div class="assign-picked-jo" id="assignPickedCustomerText">Belum ada Customer dipilih</div>
                         </div>
-                        <div class="assign-existing-jo-notice" id="assignCreateJoExistingNotice"></div>
+                        <div class="assign-create-jo-open-wrap" id="assignCreateJoOpenWrap" hidden>
+                            <p class="assign-create-jo-open-summary" id="assignCreateJoOpenSummary"></p>
+                            <div class="assign-jo-table-wrap assign-create-jo-open-table-wrap">
+                                <table class="assign-jo-table assign-create-jo-open-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Category</th>
+                                            <th>Schedule</th>
+                                            <th>Status</th>
+                                            <th>Assigned To</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="assignCreateJoOpenTableBody"></tbody>
+                                </table>
+                            </div>
+                            <p class="assign-create-jo-open-hint">Baris krem amber = JO belum selesai dan sudah di-assign ke IT Support.</p>
+                        </div>
                         <div class="assign-info-item">
                             <span class="assign-info-label">Full Name</span>
                             <span class="assign-info-value" id="assignTrainingCustName">-</span>
-                        </div>
-                        <div class="assign-info-item" id="assignCreateJoPreviousWrap" hidden style="margin-top:8px;">
-                            <span class="assign-info-label">Previously Assigned To</span>
-                            <span class="assign-info-value" id="assignCreateJoPreviousAssign">-</span>
                         </div>
                         <div class="assign-info-item" style="margin-top:8px;">
                             <span class="assign-info-label">Customer Type</span>
@@ -4881,7 +4926,7 @@
                     <input type="text" id="assignJoSearchInput" placeholder="Cari Job ID / Customer / Branch / Remark..." />
                     <button type="button" id="assignJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
-                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi. Ketik <strong>Job ID tepat</strong> untuk pindahkan ke IT Support lain. <strong>Baris krem amber</strong> = JO sudah di-assign ke IT Support lain.</p>
+                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi sampai Anda cari. <strong>Baris krem amber</strong> = JO sudah di-assign. Tombol <strong>Pindah</strong> = assign ke IT Support lain.</p>
                 <div class="assign-jo-filter-wrap">
                     <label for="assignJoBranchFilter">Branch</label>
                     <select id="assignJoBranchFilter">
@@ -5230,6 +5275,8 @@
                 joTotalPages: 1,
                 joTotalRecords: 0,
                 joLoading: false,
+                joPickerTargetTechId: "",
+                joPickerTargetItId: "",
                 isSaving: false,
                 submitAction: "assign"
             };
@@ -5574,9 +5621,69 @@
                     addKey(reportModalState.technicianId);
                 } else {
                     addKey(getTargetAssignTechnicianId("main"));
+                    addKey(assignModalState.joPickerTargetTechId);
+                    addKey(assignModalState.joPickerTargetItId);
                 }
 
                 return keys;
+            }
+
+            function getJoPickerTargetParams(context) {
+                context = context || (joLookupOwner === "report" ? "report" : "main");
+                var techId = (assignModalState.joPickerTargetTechId || "").trim();
+                var itId = (assignModalState.joPickerTargetItId || "").trim();
+                var cell = context === "report"
+                    ? reportModalState.activeCell
+                    : assignModalState.activeCell;
+
+                if (cell) {
+                    techId = techId || (cell.getAttribute("data-tech-id") || "").trim();
+                    itId = itId || (cell.getAttribute("data-it-id") || "").trim();
+                }
+
+                if (context === "report") {
+                    techId = techId || (reportModalState.technicianId || "").trim();
+                }
+
+                return {
+                    techId: techId,
+                    itId: itId
+                };
+            }
+
+            function isJoRowAlreadyAssigned(item) {
+                if (!item) {
+                    return false;
+                }
+                if (toInt(item.TotalAssign, 0) > 0) {
+                    return true;
+                }
+                return !!normalizeTechId(getOrderAssignedTechnicianId(item));
+            }
+
+            function isJoRowAssignedToOther(item, targetTechId, joContext) {
+                if (!item) {
+                    return false;
+                }
+                if (!isJoRowAlreadyAssigned(item)) {
+                    return false;
+                }
+                if (item.IsTransfer === true || item.IsTransfer === "true" || item.IsTransfer === 1) {
+                    return true;
+                }
+                return isJobOrderTransfer(item, targetTechId, joContext);
+            }
+
+            function getJoRowAssignedHint(item, targetTechId, joContext) {
+                if (!isJoRowAlreadyAssigned(item)) {
+                    return "";
+                }
+                if (isJoRowAssignedToOther(item, targetTechId, joContext)) {
+                    return getJobOrderTransferLabel(item, targetTechId, joContext)
+                        || "Sudah di-assign ke IT Support lain";
+                }
+                var itName = (item.AssignedTechnicianName || item.AssignedTechnicianId || "-").toString().trim();
+                return "Sudah di-assign ke IT Support: " + itName;
             }
 
             function isAssignedToTargetIdentity(assignedId, targetKeys) {
@@ -8072,11 +8179,15 @@
                 assignModalState.joLoading = true;
                 showJoLoadingRow();
 
+                var joContext = joLookupOwner === "report" ? "report" : "main";
+                var joTarget = getJoPickerTargetParams(joContext);
                 var url = getAssignPageUrl()
                     + "?action=load_job_order"
                     + "&activeTab=all"
                     + "&searchKeyword=" + encodeURIComponent(assignModalState.joSearchText || "")
                     + "&branchFilter=" + encodeURIComponent(assignModalState.joBranchFilter || "")
+                    + "&targetTechnicianId=" + encodeURIComponent(joTarget.techId || "")
+                    + "&targetItId=" + encodeURIComponent(joTarget.itId || "")
                     + "&pageIndex=" + encodeURIComponent(String(assignModalState.joPage || 1))
                     + "&pageSize=" + encodeURIComponent(String(assignJoPageSize || 20));
 
@@ -8318,18 +8429,19 @@
                         var lastAssign = item.LastAssignDate || "-";
                         var assignDate = item.AssignDate || "-";
                         var slaDays = toInt(item.SlaDays, 0);
-                        var assignedToOther = isJobOrderTransfer(item, targetTechId, joContext);
+                        var alreadyAssigned = isJoRowAlreadyAssigned(item);
+                        var assignedToOther = isJoRowAssignedToOther(item, targetTechId, joContext);
                         var pickLabel = assignedToOther ? "Pindah" : "Pilih";
                         var pickClass = assignedToOther ? "assign-jo-pick-btn assign-jo-transfer-btn" : "assign-jo-pick-btn";
-                        var transferHint = assignedToOther
-                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJobOrderTransferLabel(item, targetTechId, joContext) || "Sudah di-assign ke IT Support lain") + "</div>"
+                        var assignedHint = alreadyAssigned
+                            ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJoRowAssignedHint(item, targetTechId, joContext)) + "</div>"
                             : "";
                         var deviceTypeCell = showDeviceType
                             ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
                             : "";
-                        var rowClass = assignedToOther ? " class=\"assign-jo-row-transfer\"" : "";
+                        var rowClass = alreadyAssigned ? " class=\"assign-jo-row-transfer\"" : "";
                         rows.push("<tr" + rowClass + ">" +
-                            "<td>" + escapeHtml(item.JobID) + transferHint + "</td>" +
+                            "<td>" + escapeHtml(item.JobID) + assignedHint + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(getCustomerDisplayText(item)) + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.BranchName || "-") + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.Address || "-") + "</td>" +
@@ -8389,6 +8501,19 @@
                 if (joLookupOwner === "report") {
                     assignModalState.selectedOrder = reportModalState.selectedOrder;
                     assignModalState.deviceGroupId = reportModalState.deviceGroupId;
+                }
+                var joTargetCell = joLookupOwner === "report"
+                    ? reportModalState.activeCell
+                    : assignModalState.activeCell;
+                assignModalState.joPickerTargetTechId = joTargetCell
+                    ? (joTargetCell.getAttribute("data-tech-id") || "").trim()
+                    : "";
+                assignModalState.joPickerTargetItId = joTargetCell
+                    ? (joTargetCell.getAttribute("data-it-id") || "").trim()
+                    : "";
+                if (joLookupOwner === "report" && reportModalState.technicianId) {
+                    assignModalState.joPickerTargetTechId = assignModalState.joPickerTargetTechId
+                        || (reportModalState.technicianId || "").trim();
                 }
                 assignModalState.joPage = 1;
                 assignModalState.joSearchText = "";
@@ -8601,11 +8726,93 @@
                         + ". Tetap bisa pindah / assign.");
             }
 
-            function refreshCustomerOpenJoNotice(custId, excludeJobId, boxId) {
-                setExistingJoNotice(boxId, "");
-                if (boxId === "assignCreateJoExistingNotice") {
-                    setPreviousAssignField("assignCreateJoPreviousWrap", "assignCreateJoPreviousAssign", "");
+            function isCreateJoOpenJobIncomplete(row) {
+                if (!row) {
+                    return false;
                 }
+                var status = (row.Status || "").toString().trim().toUpperCase();
+                if (status === "CL" || status === "CLOSE" || status === "CLOSED" || status === "DE") {
+                    return false;
+                }
+                return !!(row.AssignedToId || row.AssignedTo || "").toString().trim();
+            }
+
+            function clearCreateJoOpenJobsTable() {
+                var wrap = document.getElementById("assignCreateJoOpenWrap");
+                var body = document.getElementById("assignCreateJoOpenTableBody");
+                var summary = document.getElementById("assignCreateJoOpenSummary");
+                if (body) {
+                    body.innerHTML = "";
+                }
+                if (summary) {
+                    summary.textContent = "";
+                }
+                if (wrap) {
+                    wrap.hidden = true;
+                }
+            }
+
+            function renderCreateJoOpenJobsTable(rows, openCount) {
+                var wrap = document.getElementById("assignCreateJoOpenWrap");
+                var body = document.getElementById("assignCreateJoOpenTableBody");
+                var summary = document.getElementById("assignCreateJoOpenSummary");
+                if (!wrap || !body) {
+                    return;
+                }
+
+                if (!rows || !rows.length) {
+                    clearCreateJoOpenJobsTable();
+                    return;
+                }
+
+                var html = [];
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i] || {};
+                    var assignedText = formatPreviousAssignText(row.AssignedTo, row.AssignedToId, row.AssignedSchDate);
+                    var isIncompleteAssigned = isCreateJoOpenJobIncomplete(row);
+                    var rowClass = isIncompleteAssigned ? " class=\"assign-jo-row-transfer\"" : "";
+                    var assignedCell = assignedText || "Belum di-assign";
+                    html.push("<tr" + rowClass + ">" +
+                        "<td>" + escapeHtml(row.JobID || "-") + "</td>" +
+                        "<td>" + escapeHtml(row.Category || "-") + "</td>" +
+                        "<td>" + escapeHtml(row.SchDate || "-") + "</td>" +
+                        "<td>" + escapeHtml(row.Status || "-") + "</td>" +
+                        "<td>" + escapeHtml(assignedCell) + "</td>" +
+                        "</tr>");
+                }
+
+                body.innerHTML = html.join("");
+                if (summary) {
+                    summary.textContent = "Perusahaan ini punya "
+                        + (openCount || rows.length)
+                        + " JO terbuka. Tetap bisa buat JO baru.";
+                }
+                wrap.hidden = false;
+            }
+
+            function refreshCustomerOpenJoNotice(custId, excludeJobId, boxId) {
+                if (boxId === "assignCreateJoExistingNotice") {
+                    clearCreateJoOpenJobsTable();
+                    if (!custId) {
+                        return;
+                    }
+                    callAssignPageMethod(
+                        "LoadCustomerOpenJobs",
+                        { custId: custId, excludeJobId: excludeJobId || "" },
+                        function (result) {
+                            if (!result || (result.Result || "").toUpperCase() !== "SUCCESS") {
+                                return;
+                            }
+                            var rows = Object.prototype.toString.call(result.Rows) === "[object Array]" ? result.Rows : [];
+                            if (!result.OpenCount || !rows.length) {
+                                return;
+                            }
+                            renderCreateJoOpenJobsTable(rows, result.OpenCount);
+                        });
+                    return;
+                }
+
+                setExistingJoNotice(boxId, "");
                 if (!custId) {
                     return;
                 }
@@ -8621,7 +8828,6 @@
                             return;
                         }
                         var parts = [];
-                        var assignedParts = [];
                         var maxShow = 5;
                         for (var i = 0; i < rows.length && i < maxShow; i++) {
                             var row = rows[i] || {};
@@ -8635,7 +8841,6 @@
                             }
                             if (assignedText) {
                                 piece += " · assigned ke " + assignedText;
-                                assignedParts.push(assignedText);
                             }
                             if (piece) {
                                 parts.push(piece);
@@ -8649,12 +8854,6 @@
                                 + "). Tetap bisa buat / assign JO baru.<br/>"
                                 + escapeHtml(parts.join(" | "))
                                 + extra);
-                        if (boxId === "assignCreateJoExistingNotice" && assignedParts.length) {
-                            setPreviousAssignField(
-                                "assignCreateJoPreviousWrap",
-                                "assignCreateJoPreviousAssign",
-                                assignedParts[0]);
-                        }
                     });
             }
 
@@ -8697,7 +8896,7 @@
                 hideEditJoPicker();
                 syncCreateJoFormMode("create");
                 setCreateJoFeedback("", false, false);
-                setExistingJoNotice("assignCreateJoExistingNotice", "");
+                clearCreateJoOpenJobsTable();
             }
 
             function syncCreateJoFormMode(mode) {
@@ -9065,8 +9264,7 @@
                 if (trainingIdEl) trainingIdEl.value = "";
                 if (pickedTraining) pickedTraining.textContent = "Belum ada JO dipilih";
                 setCustomerLocationFields("", "");
-                setExistingJoNotice("assignCreateJoExistingNotice", "");
-                setPreviousAssignField("assignCreateJoPreviousWrap", "assignCreateJoPreviousAssign", "");
+                clearCreateJoOpenJobsTable();
             }
 
             function cleanDisplayValue(value) {

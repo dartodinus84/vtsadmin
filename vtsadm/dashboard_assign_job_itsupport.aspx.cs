@@ -54,12 +54,21 @@ namespace vtsadm
         int pageSize,
         string branchFilter)
     {
+      string targetTechnicianId = HttpContext.Current != null
+          ? (HttpContext.Current.Request.QueryString["targetTechnicianId"] ?? string.Empty).Trim()
+          : string.Empty;
+      string targetItId = HttpContext.Current != null
+          ? (HttpContext.Current.Request.QueryString["targetItId"] ?? string.Empty).Trim()
+          : string.Empty;
+
       return BuildJobTrainingOrderInformationResponse(
           activeTab,
           searchKeyword,
           pageIndex,
           pageSize,
-          branchFilter);
+          branchFilter,
+          targetTechnicianId,
+          targetItId);
     }
 
     [WebMethod(EnableSession = true)]
@@ -715,25 +724,6 @@ namespace vtsadm
       return filtered;
     }
 
-    private static bool IsExactJobIdSearch(DataTable source, string keyword)
-    {
-      string search = (keyword ?? string.Empty).Trim();
-      if (source == null || source.Rows.Count == 0 || string.IsNullOrWhiteSpace(search))
-      {
-        return false;
-      }
-
-      foreach (DataRow row in source.Rows)
-      {
-        if (GetValue(row, "JobID").Equals(search, StringComparison.OrdinalIgnoreCase))
-        {
-          return true;
-        }
-      }
-
-      return false;
-    }
-
     private static DataTable FilterJobOrderInformationHideAssignedForIts(DataTable source, string keyword)
     {
       if (source == null || source.Rows.Count == 0)
@@ -742,17 +732,13 @@ namespace vtsadm
       }
 
       string search = (keyword ?? string.Empty).Trim();
-      bool allowAssignedTransfer = IsExactJobIdSearch(source, search);
       DataTable filtered = source.Clone();
       foreach (DataRow row in source.Rows)
       {
         int remaining = ParseIntFromColumns(row, "RemainingUnit");
         int assignedTotal = ParseIntFromColumns(row, "TotalAssign");
-        string jobId = GetValue(row, "JobID");
-        bool isExactMatch = !string.IsNullOrWhiteSpace(search)
-            && jobId.Equals(search, StringComparison.OrdinalIgnoreCase);
 
-        if (remaining > 0 || (allowAssignedTransfer && isExactMatch && assignedTotal > 0))
+        if (remaining > 0 || (assignedTotal > 0 && !string.IsNullOrWhiteSpace(search)))
         {
           filtered.ImportRow(row);
         }
@@ -785,12 +771,81 @@ namespace vtsadm
           || text.Equals("yes", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool ItsAssigneeMatches(string assigneeA, string assigneeB)
+    {
+      string idA = (assigneeA ?? string.Empty).Trim();
+      string idB = (assigneeB ?? string.Empty).Trim();
+      if (string.IsNullOrWhiteSpace(idA) || string.IsNullOrWhiteSpace(idB))
+      {
+        return false;
+      }
+
+      if (idA.Equals(idB, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      string itIdA;
+      string msgA;
+      string itIdB;
+      string msgB;
+      bool hasA = TryResolveItsAssignTechnicianId(idA, out itIdA, out msgA)
+          && !string.IsNullOrWhiteSpace(itIdA);
+      bool hasB = TryResolveItsAssignTechnicianId(idB, out itIdB, out msgB)
+          && !string.IsNullOrWhiteSpace(itIdB);
+      if (hasA && hasB && itIdA.Equals(itIdB, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      if (hasA && idB.Equals(itIdA, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      if (hasB && idA.Equals(itIdB, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      return false;
+    }
+
+    private static bool IsAssignedToOtherTarget(
+        string assignedTechnicianId,
+        int assignedTotal,
+        string targetTechnicianId,
+        string targetItId)
+    {
+      if (assignedTotal <= 0 || string.IsNullOrWhiteSpace(assignedTechnicianId))
+      {
+        return false;
+      }
+
+      string targetTech = (targetTechnicianId ?? string.Empty).Trim();
+      string targetIt = (targetItId ?? string.Empty).Trim();
+      if (string.IsNullOrWhiteSpace(targetTech) && string.IsNullOrWhiteSpace(targetIt))
+      {
+        return false;
+      }
+
+      if (ItsAssigneeMatches(assignedTechnicianId, targetTech)
+          || ItsAssigneeMatches(assignedTechnicianId, targetIt))
+      {
+        return false;
+      }
+
+      return true;
+    }
+
     protected static JobOrderInformationResponse BuildJobTrainingOrderInformationResponse(
         string activeTab,
         string searchKeyword,
         int pageIndex,
         int pageSize,
-        string branchFilter)
+        string branchFilter,
+        string targetTechnicianId = "",
+        string targetItId = "")
     {
       JobOrderInformationResponse response = new JobOrderInformationResponse
       {
@@ -959,7 +1014,11 @@ namespace vtsadm
             string assignedTechnicianName = trxStat != null
                 ? FirstNonEmptyStatic(trxStat.TechnicianName, trxStat.TechnicianId)
                 : string.Empty;
-            bool isTransfer = assignedTotal > 0;
+            bool isTransfer = IsAssignedToOtherTarget(
+                assignedTechnicianId,
+                assignedTotal,
+                targetTechnicianId,
+                targetItId);
 
             DataRow target = mapped.NewRow();
             target["JobID"] = jobId;
