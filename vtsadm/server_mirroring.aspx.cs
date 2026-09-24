@@ -207,13 +207,34 @@ namespace vtsadm
                 if (string.IsNullOrWhiteSpace(id)) return Fail("Data tidak ditemukan.");
 
                 var next = string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase) ? "paused" : "active";
+                var vehicleId = ParseVehicleIdFromRowId(id);
+                if (string.IsNullOrWhiteSpace(vehicleId) || IsPlaceholder(vehicleId))
+                    return Fail("Vehicle tidak valid.");
+
+                int isEnabled = next == "active" ? 1 : 0;
+                string usrUpd = GetCurrentUserId();
+
+                var ec = new ExecCommand();
+                int aff = 0;
+                string err = "";
+                string sql = "sp_update_server_mirroring_status '"
+                    + vehicleId.Replace("'", "''") + "',"
+                    + isEnabled.ToString() + ",'"
+                    + usrUpd.Replace("'", "''") + "'";
+
+                if (!ec.Execute(sql, GetDbConn(), ref aff, ref err))
+                {
+                    return Fail(string.IsNullOrWhiteSpace(err)
+                        ? "Gagal mengubah status mirroring."
+                        : err);
+                }
 
                 return new
                 {
-                    success = false,
+                    success = true,
                     message = next == "active"
-                        ? "Aktifkan mirroring sementara dinonaktifkan."
-                        : "Jeda mirroring sementara dinonaktifkan."
+                        ? "Mirroring diaktifkan."
+                        : "Mirroring dijeda."
                 };
             }
             catch (Exception ex)
@@ -485,6 +506,14 @@ namespace vtsadm
         private static string GetDbConn()
         {
             return (HttpContext.Current.Session["ClsTypeDBConnStringSQL"] ?? "").ToString();
+        }
+
+        private static string GetCurrentUserId()
+        {
+            var ctx = HttpContext.Current;
+            if (ctx == null || ctx.Session == null) return "vtsadmin";
+            var userId = (ctx.Session["ClsTypeUserID"] ?? "").ToString().Trim();
+            return string.IsNullOrWhiteSpace(userId) ? "vtsadmin" : userId;
         }
 
         private static string GetColumn(DataRow row, params string[] names)
