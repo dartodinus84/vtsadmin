@@ -227,15 +227,25 @@
     </section>
 
     <script type="text/javascript">
-        function postCustChild(sCustID, sFullName, sCustTypeDesc, sBranchName,sPICName,sPICPhone) {
-            if (sCustID != '') {
-                document.getElementById('ContentPlaceHolder1_txtCustID').value = sCustID;
-                document.getElementById('ContentPlaceHolder1_txtCustFullName').value = sFullName;
-                document.getElementById('ContentPlaceHolder1_txtCustTypeDesc').value = sCustTypeDesc;
-                document.getElementById('ContentPlaceHolder1_txtCustBranchName').value = sBranchName;
-                document.getElementById('ContentPlaceHolder1_txtPICName').value = sPICName;
-                document.getElementById('ContentPlaceHolder1_txtPICPhone').value = sPICPhone;
-                $('#modal-customer').modal('hide');
+        function setJobTrainingField(id, value) {
+            var field = document.getElementById(id);
+            if (field) {
+                field.value = value || "";
+            }
+        }
+
+        function postCustChild(sCustID, sFullName, sCustTypeDesc, sBranchName, sPICName, sPICPhone) {
+            if (!sCustID) {
+                return;
+            }
+            setJobTrainingField("ContentPlaceHolder1_txtCustID", sCustID);
+            setJobTrainingField("ContentPlaceHolder1_txtCustFullName", sFullName);
+            setJobTrainingField("ContentPlaceHolder1_txtCustTypeDesc", sCustTypeDesc);
+            setJobTrainingField("ContentPlaceHolder1_txtCustBranchName", sBranchName);
+            setJobTrainingField("ContentPlaceHolder1_txtPICName", sPICName);
+            setJobTrainingField("ContentPlaceHolder1_txtPICPhone", sPICPhone);
+            if (window.jQuery) {
+                jQuery("#modal-customer").modal("hide");
             }
         }
 

@@ -70,6 +70,30 @@ namespace vtsadm
             ClType.Gv_PageIndexChanging((sender as GridView), e.NewPageIndex, Session["RecListJobTrainingCustomerSearch"], LblPaging);
         }
 
+        private static string ReadRowValue(ClsType clType, DataRowView rowView, params string[] columnNames)
+        {
+            if (rowView == null || rowView.Row == null || columnNames == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (string columnName in columnNames)
+            {
+                if (string.IsNullOrWhiteSpace(columnName) || !rowView.Row.Table.Columns.Contains(columnName))
+                {
+                    continue;
+                }
+
+                string value = CleanGridCellValue(clType, rowView[columnName]);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
+        }
+
         private static string CleanGridCellValue(ClsType clType, object value)
         {
             string raw = HttpUtility.HtmlDecode(Convert.ToString(value) ?? string.Empty).Trim();
@@ -89,44 +113,6 @@ namespace vtsadm
                 {
                     e.Row.Cells[4].Visible = false;
                     e.Row.Cells[5].Visible = false;
-                    DataRowView rowView = e.Row.DataItem as DataRowView;
-                    if (rowView == null)
-                    {
-                        return;
-                    }
-
-                    ClsType clType = new ClsType();
-                    string custId = CleanGridCellValue(clType, rowView["CustID"]);
-                    string fullName = CleanGridCellValue(clType, rowView["FullName"]);
-                    string custTypeDesc = CleanGridCellValue(clType, rowView["CustTypeDesc"]);
-                    string branchName = CleanGridCellValue(clType, rowView["BranchName"]);
-                    string picName = CleanGridCellValue(clType, rowView["PICName1"]);
-                    string picPhone = CleanGridCellValue(clType, rowView["MobilePhone1"]);
-                    if (string.IsNullOrWhiteSpace(picPhone))
-                    {
-                        picPhone = CleanGridCellValue(clType, rowView["OfficePhone1"]);
-                    }
-
-                    LinkButton CmdButton = (LinkButton)e.Row.FindControl("CmdSelect");
-                    if (CmdButton == null)
-                    {
-                        return;
-                    }
-
-                    CmdButton.OnClientClick = string.Format(
-                        "var postCustChildFn=null;"
-                        + "try{{"
-                        + "var w=window;while(w&&!postCustChildFn){{if(w.postCustChild){{postCustChildFn=w.postCustChild;break;}}w=(w!==w.parent)?w.parent:null;}}"
-                        + "if(!postCustChildFn&&window.top&&window.top.postCustChild){{postCustChildFn=window.top.postCustChild;}}"
-                        + "}}catch(ex){{}}"
-                        + "if(postCustChildFn){{postCustChildFn({0},{1},{2},{3},{4},{5});}}"
-                        + "return false;",
-                        JsStringLiteral(custId),
-                        JsStringLiteral(fullName),
-                        JsStringLiteral(custTypeDesc),
-                        JsStringLiteral(branchName),
-                        JsStringLiteral(picName),
-                        JsStringLiteral(picPhone));
                 }
                 else if (e.Row.RowType == DataControlRowType.Header)
                 {

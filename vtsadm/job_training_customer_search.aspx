@@ -48,7 +48,7 @@
             <div class="input-group input-group-sm">
                 <input type="text" id="txtSearchCust" runat="server" class="form-control" placeholder="Search By Full Name ..." />
                 <span class="input-group-btn">
-                    <button id="CmdSearchCust" runat="server" type="button" class="btn btn-block btn-primary btn-xs" onserverclick="CmdSearchCust_Click"><i class="fa fa-search"></i></button>
+                    <asp:LinkButton ID="CmdSearchCust" runat="server" CssClass="btn btn-block btn-primary btn-xs" OnClick="CmdSearchCust_Click" CausesValidation="false" Text="<i class='fa fa-search'></i>" />
                 </span>
             </div>
         </div>
@@ -66,7 +66,7 @@
 
                         <asp:TemplateField ItemStyle-HorizontalAlign="Center">
                             <ItemTemplate>
-                                <asp:LinkButton ID="CmdSelect" runat="server" ToolTip="Select" Text="<i class='fa fa-share'></i>" Enabled="true" CssClass="btn btn-success btn-xs" />
+                                <button type="button" title="Select" class="btn btn-success btn-xs" onclick="<%# "return pickTrainingCustomer('" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("CustID"))) + "','" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("FullName"))) + "','" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("CustTypeDesc"))) + "','" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("BranchName"))) + "','" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("PICName1"))) + "','" + System.Web.HttpUtility.JavaScriptStringEncode(Convert.ToString(Eval("MobilePhone1"))) + "');" %>"><i class="fa fa-share"></i></button>
                             </ItemTemplate>
                         </asp:TemplateField>
                     </Columns>
@@ -81,5 +81,26 @@
             </asp:Panel>
         </div>
     </form>
+    <script type="text/javascript">
+        function pickTrainingCustomer(custId, fullName, custTypeDesc, branchName, picName, picPhone) {
+            var seen = [];
+            var current = window;
+            while (current && seen.indexOf(current) < 0) {
+                seen.push(current);
+                try {
+                    if (typeof current.postCustChild === "function") {
+                        current.postCustChild(custId, fullName, custTypeDesc, branchName, picName, picPhone);
+                        return false;
+                    }
+                } catch (ex) {
+                }
+                if (!current.parent || current.parent === current) {
+                    break;
+                }
+                current = current.parent;
+            }
+            return false;
+        }
+    </script>
 </body>
 </html>

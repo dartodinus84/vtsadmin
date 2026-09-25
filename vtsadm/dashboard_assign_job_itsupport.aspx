@@ -5277,6 +5277,7 @@
                 joLoading: false,
                 joPickerTargetTechId: "",
                 joPickerTargetItId: "",
+                createJoOpenCustId: "",
                 isSaving: false,
                 submitAction: "assign"
             };
@@ -6961,6 +6962,13 @@
                 var selectedStatus = reportModalState.submitAction === "administration"
                     ? "AD"
                     : (reportModalState.targetStatus || "AV").toUpperCase();
+                var currentReportStatus = normalizeStatusCode(reportModalState.activeCell ? (reportModalState.activeCell.getAttribute("data-status") || "") : "");
+                if (reportModalState.submitAction !== "administration"
+                    && hasPickedJobOrder(getCurrentReportOrder())
+                    && selectedStatus !== currentReportStatus) {
+                    alertDeleteJobOrderBeforeStatusChange();
+                    return;
+                }
                 var isAvailableStatus = selectedStatus === "AV";
                 var selectedDeviceGroup = normalizeJoTypeForApi(reportModalState.joType) === "maintenance"
                     ? "GPS"
@@ -8552,6 +8560,17 @@
                 }
             }
 
+            function hasPickedJobOrder(order) {
+                if (!order) {
+                    return false;
+                }
+                return !!((order.JobID || order.JobId || "").toString().trim());
+            }
+
+            function alertDeleteJobOrderBeforeStatusChange() {
+                window.alert("Hapus Job Order terlebih dahulu sebelum ubah status.");
+            }
+
             function setActiveDeviceGroupButton() {
                 var buttons = document.querySelectorAll("#assignDeviceGroupWrap .assign-jo-type-btn");
                 for (var i = 0; i < buttons.length; i++) {
@@ -8792,22 +8811,37 @@
 
             function refreshCustomerOpenJoNotice(custId, excludeJobId, boxId) {
                 if (boxId === "assignCreateJoExistingNotice") {
-                    clearCreateJoOpenJobsTable();
-                    if (!custId) {
+                    var normalizedCustId = (custId || "").trim();
+                    if (!normalizedCustId) {
+                        assignModalState.createJoOpenCustId = "";
+                        clearCreateJoOpenJobsTable();
                         return;
+                    }
+                    var sameCustomer = assignModalState.createJoOpenCustId === normalizedCustId;
+                    assignModalState.createJoOpenCustId = normalizedCustId;
+                    if (!sameCustomer) {
+                        clearCreateJoOpenJobsTable();
                     }
                     callAssignPageMethod(
                         "LoadCustomerOpenJobs",
-                        { custId: custId, excludeJobId: excludeJobId || "" },
+                        { custId: normalizedCustId, excludeJobId: excludeJobId || "" },
                         function (result) {
                             if (!result || (result.Result || "").toUpperCase() !== "SUCCESS") {
                                 return;
                             }
                             var rows = Object.prototype.toString.call(result.Rows) === "[object Array]" ? result.Rows : [];
                             if (!result.OpenCount || !rows.length) {
+                                if (!sameCustomer) {
+                                    clearCreateJoOpenJobsTable();
+                                }
                                 return;
                             }
                             renderCreateJoOpenJobsTable(rows, result.OpenCount);
+                        },
+                        function () {
+                            if (!sameCustomer) {
+                                clearCreateJoOpenJobsTable();
+                            }
                         });
                     return;
                 }
@@ -8896,6 +8930,7 @@
                 hideEditJoPicker();
                 syncCreateJoFormMode("create");
                 setCreateJoFeedback("", false, false);
+                assignModalState.createJoOpenCustId = "";
                 clearCreateJoOpenJobsTable();
             }
 
@@ -8986,13 +9021,6 @@
                 if (!backdrop) {
                     setCreateJoFeedback("Dialog customer tidak ditemukan.", true, false);
                     return;
-                }
-
-                var frame = document.getElementById("assignTrainingCustomerFrame");
-                if (frame && !frame.getAttribute("data-loaded")) {
-                    frame.setAttribute("data-loaded", "1");
-                } else if (frame) {
-                    frame.src = "job_training_customer_search.aspx";
                 }
 
                 backdrop.classList.add("open");
@@ -9264,6 +9292,7 @@
                 if (trainingIdEl) trainingIdEl.value = "";
                 if (pickedTraining) pickedTraining.textContent = "Belum ada JO dipilih";
                 setCustomerLocationFields("", "");
+                assignModalState.createJoOpenCustId = "";
                 clearCreateJoOpenJobsTable();
             }
 
@@ -10455,8 +10484,18 @@
                 var isSuccess = result && (result.Result || "").toUpperCase() === "SUCCESS";
                 var cell = targetCell || findScheduleCell(technicianId, scheduleDate);
                 if (isSuccess) {
+                    var serverValue = (result.DisplayValue || "").toString().trim();
+                    var savedStatus = normalizeStatusCode(fallbackDisplay);
+                    var serverStatus = normalizeStatusCode(serverValue);
+                    var displayValue = serverValue || fallbackDisplay;
+                    if (savedStatus === "AV") {
+                        displayValue = "AV";
+                    } else if ((savedStatus === "OF" || savedStatus === "CT" || savedStatus === "IZ")
+                        && (serverValue === "" || serverStatus === "AV")) {
+                        displayValue = savedStatus;
+                    }
                     updateCellVisualAfterSave(
-                        result.DisplayValue || fallbackDisplay,
+                        displayValue,
                         result.CanAssign,
                         cell,
                         {
@@ -11143,10 +11182,10 @@
                                 setStatusOnlyFeedback(successMessage, false, true);
                                 showAssignToast(successMessage, false);
 
+                                updateCellVisualAfterSave(targetStatus, true, activeCell);
                                 refreshAvailabilityAfterSave(technicianId, scheduleDate, targetStatus, function () {
                                     setStatusOnlySubmitLoading(false);
                                     closeStatusOnlyModal();
-                                    window.location.reload();
                                 }, activeCell);
                             },
                             function (errorMessage) {
@@ -11231,6 +11270,10 @@
                     reportStatusWrap.addEventListener("click", function (event) {
                         var button = closestByClass(event.target, "assign-status-btn");
                         if (!button || button.disabled) {
+                            return;
+                        }
+                        if (hasPickedJobOrder(getCurrentReportOrder())) {
+                            alertDeleteJobOrderBeforeStatusChange();
                             return;
                         }
                         reportModalState.targetStatus = button.getAttribute("data-status-value") || "AV";
@@ -11418,6 +11461,10 @@
                         if (!button || button.disabled) {
                             return;
                         }
+                        if (hasPickedJobOrder(getSelectedOrder())) {
+                            alertDeleteJobOrderBeforeStatusChange();
+                            return;
+                        }
                         assignModalState.targetStatus = button.getAttribute("data-status-value") || "AV";
                         setActiveStatusButton();
                         setFeedback("", false, false);
@@ -11465,6 +11512,11 @@
                         }
 
                         var selectedStatus = (assignModalState.targetStatus || "AV").toUpperCase();
+                        var currentCellStatus = normalizeStatusCode(assignModalState.activeCell ? (assignModalState.activeCell.getAttribute("data-status") || "") : "");
+                        if (hasPickedJobOrder(getSelectedOrder()) && selectedStatus !== currentCellStatus) {
+                            alertDeleteJobOrderBeforeStatusChange();
+                            return;
+                        }
                         var isAvailableStatus = selectedStatus === "AV";
                         var selectedDeviceGroup = normalizeJoTypeForApi(assignModalState.joType) === "maintenance"
                             ? "GPS"
