@@ -57,6 +57,7 @@ namespace vtsadm
             }
 
             ApplyJobOrderRemarkOverride(detail, jobRemark);
+            detail.UpdatedBy = ResolveActingUserId();
             SendNotificationMessage(connString, BuildDetailMessage(detail));
         }
 
@@ -91,6 +92,7 @@ namespace vtsadm
             detail.PreviousTechnicianId = fromTechnicianId.Trim();
             detail.PreviousTechnicianName = ResolveItsSupportName(connString, fromTechnicianId);
             detail.ActionNote = (actionNote ?? string.Empty).Trim();
+            detail.UpdatedBy = ResolveActingUserId();
             SendNotificationMessage(connString, BuildTransferMessage(detail));
         }
 
@@ -112,6 +114,7 @@ namespace vtsadm
             }
 
             detail.ActionNote = (actionNote ?? string.Empty).Trim();
+            detail.UpdatedBy = ResolveActingUserId();
             return detail;
         }
 
@@ -1170,6 +1173,28 @@ namespace vtsadm
             sb.AppendLine("Lokasi : <a href=\"" + EscapeHtml(mapsUrl) + "\">Google Maps</a>");
         }
 
+        private static string ResolveActingUserId()
+        {
+            HttpContext context = HttpContext.Current;
+            if (context == null || context.Session == null)
+            {
+                return string.Empty;
+            }
+
+            return Convert.ToString(context.Session["ClsTypeUserID"] ?? string.Empty).Trim();
+        }
+
+        private static void AppendUserUpdateCreateLine(StringBuilder sb, AssignDetail detail)
+        {
+            string user = FirstNonEmpty(detail == null ? string.Empty : detail.UpdatedBy);
+            if (string.IsNullOrWhiteSpace(user))
+            {
+                return;
+            }
+
+            sb.AppendLine("User Update/Create : <b>" + EscapeHtml(user) + "</b>");
+        }
+
         private static void AppendBotMarketingLine(StringBuilder sb, AssignDetail detail)
         {
             string marketingName = FirstNonEmpty(detail != null ? detail.MarketingName : string.Empty, "-");
@@ -1254,6 +1279,7 @@ namespace vtsadm
             sb.AppendLine();
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             AppendBotCustomerContactSection(sb, detail);
+            AppendUserUpdateCreateLine(sb, detail);
             AppendTelegramUserTag(sb, detail);
 
             return sb.ToString().TrimEnd();
@@ -1287,6 +1313,7 @@ namespace vtsadm
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             AppendBotCustomerContactSection(sb, detail);
             sb.AppendLine("Reason Move : <b>" + EscapeHtml(ResolveActionNoteForMessage(detail)) + "</b>");
+            AppendUserUpdateCreateLine(sb, detail);
             AppendTelegramUserTag(sb, detail);
 
             return sb.ToString().TrimEnd();
@@ -1318,6 +1345,7 @@ namespace vtsadm
             sb.AppendLine("Hari/tanggal : <b>" + EscapeHtml(FormatDayDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
             AppendBotCustomerContactSection(sb, detail);
             sb.AppendLine("Reason Delete : <b>" + EscapeHtml(ResolveActionNoteForMessage(detail)) + "</b>");
+            AppendUserUpdateCreateLine(sb, detail);
             AppendTelegramUserTag(sb, detail);
 
             return sb.ToString().TrimEnd();
@@ -2541,6 +2569,7 @@ namespace vtsadm
             public string RemarkOrder { get; set; }
             public string RemarkTraining { get; set; }
             public string ActionNote { get; set; }
+            public string UpdatedBy { get; set; }
             public string PoId { get; set; }
             public string PoliceNo { get; set; }
             public string NoSn { get; set; }

@@ -186,7 +186,10 @@ namespace vtsadm
         string billableId,
         string schDate,
         string remark,
-        string categoryId)
+        string categoryId,
+        string customerName,
+        string picName,
+        string picPhone)
     {
       return ExecuteUpdateJobTrainingAssign(
           trainingId,
@@ -195,7 +198,10 @@ namespace vtsadm
           billableId,
           schDate,
           remark,
-          categoryId);
+          categoryId,
+          customerName,
+          picName,
+          picPhone);
     }
 
     [WebMethod(EnableSession = true)]
@@ -724,7 +730,11 @@ namespace vtsadm
       return filtered;
     }
 
-    private static DataTable FilterJobOrderInformationHideAssignedForIts(DataTable source, string keyword)
+    private static DataTable FilterJobOrderInformationHideAssignedForIts(
+        DataTable source,
+        string keyword,
+        string targetTechnicianId,
+        string targetItId)
     {
       if (source == null || source.Rows.Count == 0)
       {
@@ -737,6 +747,14 @@ namespace vtsadm
       {
         int remaining = ParseIntFromColumns(row, "RemainingUnit");
         int assignedTotal = ParseIntFromColumns(row, "TotalAssign");
+        string assignedTechnicianId = GetValue(row, "AssignedTechnicianId");
+        bool assignedToThisUser = assignedTotal > 0
+            && (ItsAssigneeMatches(assignedTechnicianId, targetTechnicianId)
+                || ItsAssigneeMatches(assignedTechnicianId, targetItId));
+        if (assignedToThisUser)
+        {
+          continue;
+        }
 
         if (remaining > 0 || (assignedTotal > 0 && !string.IsNullOrWhiteSpace(search)))
         {
@@ -1066,7 +1084,11 @@ namespace vtsadm
         response.BranchOptions = BuildJobOrderBranchOptions(mapped);
         DataTable branchFiltered = FilterJobOrderInformationByBranch(mapped, branchFilter);
         DataTable filtered = FilterJobOrderInformationForIts(branchFiltered, searchKeyword);
-        filtered = FilterJobOrderInformationHideAssignedForIts(filtered, searchKeyword);
+        filtered = FilterJobOrderInformationHideAssignedForIts(
+            filtered,
+            searchKeyword,
+            targetTechnicianId,
+            targetItId);
         response.TotalRecords = filtered.Rows.Count;
         response.TotalPages = Math.Max(1, (int)Math.Ceiling((double)response.TotalRecords / response.PageSize));
         if (response.PageIndex > response.TotalPages)

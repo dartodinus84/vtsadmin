@@ -223,7 +223,7 @@ namespace vtsadm
                                 clear();
                                 Open_GridViewHeader();
                                 div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Submit job training has been successfully</div>";
-                                Bot(jodate,cus, pic, picnumber, tanda);
+                                Bot(jodate, cus, pic, picnumber, tanda, Convert.ToString(Session["ClsTypeUserID"]), false);
                             }
                             else
                             {
@@ -254,7 +254,7 @@ namespace vtsadm
                                 clear();
                                 Open_GridViewHeader();
                                 div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Update job training has been successfully</div>";
-                                Bot(jodate,cus, pic, picnumber, tanda);
+                                Bot(jodate, cus, pic, picnumber, tanda, Convert.ToString(Session["ClsTypeUserID"]), true);
                             }
                             else
                             {
@@ -481,6 +481,11 @@ namespace vtsadm
         }
         protected void Bot(string jodate, string cus, string pic, string picnumber, string tanda)
         {
+            Bot(jodate, cus, pic, picnumber, tanda, string.Empty, false);
+        }
+
+        protected void Bot(string jodate, string cus, string pic, string picnumber, string tanda, string usrUpd, bool isEdit)
+        {
             string apitoken = "";
             string url = "";
             string chatid = "";
@@ -511,7 +516,7 @@ namespace vtsadm
                 string urlString = url;
                 string apiToken = apitoken;
                 string chatId = chatid;
-                string text = BodyTelegram(jodate, cus, pic, picnumber, tanda);
+                string text = BodyTelegram(jodate, cus, pic, picnumber, tanda, usrUpd, isEdit);
                 urlString = String.Format(urlString, apiToken, chatId, text);
 
                 WebClient webclient = new WebClient();
@@ -524,8 +529,13 @@ namespace vtsadm
         }
         private string BodyTelegram(string jodate, string cus, string pic, string picnumber, string tanda)
         {
+            return BodyTelegram(jodate, cus, pic, picnumber, tanda, string.Empty, false);
+        }
+
+        private string BodyTelegram(string jodate, string cus, string pic, string picnumber, string tanda, string usrUpd, bool isEdit)
+        {
             string msg = "";
-            msg += "<b>CREATE JOB ORDER TRAINING</b>\r\n";
+            msg += isEdit ? "<b>UPDATE JOB ORDER TRAINING</b>\r\n" : "<b>CREATE JOB ORDER TRAINING</b>\r\n";
             msg += "<b>Customer</b>\r\n";
             msg += "<b>" + cus + "</b>\r\n";
             msg += "<b>Schedule Date</b>\r\n";
@@ -536,6 +546,8 @@ namespace vtsadm
             msg += "<b>" + picnumber + "</b>\r\n";
             msg += "<b>Remark</b>\r\n";
             msg += "<b>" + tanda + "</b>\r\n";
+            msg += "<b>User Update/Create</b>\r\n";
+            msg += "<b>" + (usrUpd ?? string.Empty) + "</b>\r\n";
             return msg;
         }
     }

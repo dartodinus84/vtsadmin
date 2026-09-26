@@ -234,6 +234,7 @@ namespace vtsadm
             public bool CanAssign { get; set; }
             public int RemainingJo { get; set; }
             public bool HasRemainingJo { get; set; }
+            public int TotalJob { get; set; }
             public string Message { get; set; }
         }
 
@@ -1253,7 +1254,10 @@ namespace vtsadm
                     GetPayloadString(args, "billableId"),
                     GetPayloadString(args, "schDate"),
                     GetPayloadString(args, "remark"),
-                    GetPayloadString(args, "categoryId"));
+                    GetPayloadString(args, "categoryId"),
+                    GetPayloadString(args, "customerName"),
+                    GetPayloadString(args, "picName"),
+                    GetPayloadString(args, "picPhone"));
             }
 
             if (method.Equals("LoadCustomerOpenJobs", StringComparison.OrdinalIgnoreCase))
@@ -1590,6 +1594,10 @@ namespace vtsadm
             {
                 // IT Support filters only by SEMUA / WEST / EAST.
                 Session[RegionalTabSessionKey] = RegionalAllValue;
+                if (!IsAssignAdminSession())
+                {
+                    Session[RegionalGroupTabSessionKey] = RegionalAllValue;
+                }
             }
             else if (Session[RegionalTabSessionKey] == null)
             {
@@ -2375,6 +2383,12 @@ namespace vtsadm
             // IT Support page: only SEMUA / WEST / EAST area-group filters; never scope by regional/suparea.
             if (itsGroupOnlyFilters)
             {
+                if (!IsAssignAdminSession())
+                {
+                    selectedGroup = RegionalAllValue;
+                    Session[RegionalGroupTabSessionKey] = RegionalAllValue;
+                    groupTabs = groupTabs.Clone();
+                }
                 Session[RegionalTabSessionKey] = RegionalAllValue;
                 DataTable emptyRegionalTabs = new DataTable();
                 emptyRegionalTabs.Columns.Add("SupAreaID");
@@ -2382,7 +2396,9 @@ namespace vtsadm
                 ViewState[ViewStateRegionalTabs] = emptyRegionalTabs;
                 if (rptAreaGroupTabs != null)
                 {
-                    rptAreaGroupTabs.DataSource = groupTabs;
+                    bool showAreaGroupFilter = IsAssignAdminSession() && groupTabs.Rows.Count > 0;
+                    rptAreaGroupTabs.Visible = showAreaGroupFilter;
+                    rptAreaGroupTabs.DataSource = showAreaGroupFilter ? groupTabs : groupTabs.Clone();
                     rptAreaGroupTabs.DataBind();
                 }
                 if (rptRegionalTabs != null)
@@ -3318,8 +3334,6 @@ namespace vtsadm
             // which made assigned cells fall back to AV after switching region.
             ApplyTrxJobAssignDetailDayCounts(trainers, periodDate, string.Empty, string.Empty);
             Dictionary<string, string> itsDayStatus = LoadItsDayStatusMap(periodDate);
-            // Total Closed JO Training/Visit columns = job_training.aspx data.
-            ApplyJobTrainingClosedCountsOnly(trainers, periodDate, filterSupArea, filterAreaGroup);
 
             IEnumerable<JobTrainingTrainerSchedule> orderedTrainers = trainers.Values
                 .GroupBy(t => t.TrainerId, StringComparer.OrdinalIgnoreCase)
@@ -3352,7 +3366,7 @@ namespace vtsadm
                     target["RemainingJo"] = remainingJo;
                     target["TotalJobCloseNew"] = day == 1 ? trainer.ClosedTraining : 0;
                     target["TotalJobCloseMaint"] = day == 1 ? trainer.ClosedVisit : 0;
-                    target["TotalJobCloseUnit"] = totalJob > 0 && remainingJo == 0 ? totalJob : 0;
+                    target["TotalJobCloseUnit"] = Math.Max(0, totalJob - Math.Max(0, remainingJo));
                     target["SupAreaID"] = filterSupArea;
                     target["ITID"] = trainer.ItId ?? string.Empty;
                     result.Rows.Add(target);
@@ -3605,6 +3619,8 @@ namespace vtsadm
                 {
                     Array.Clear(trainer.DayOpenCount, 0, trainer.DayOpenCount.Length);
                 }
+                trainer.ClosedTraining = 0;
+                trainer.ClosedVisit = 0;
             }
 
             DateTime monthStart = new DateTime(periodDate.Year, periodDate.Month, 1);
@@ -3666,6 +3682,17 @@ namespace vtsadm
                 if (!isClosed && trainer.DayOpenCount != null && dayNo < trainer.DayOpenCount.Length)
                 {
                     trainer.DayOpenCount[dayNo]++;
+                }
+                if (isClosed)
+                {
+                    if (IsAssignDetailVisitOrMaint(row))
+                    {
+                        trainer.ClosedVisit++;
+                    }
+                    else
+                    {
+                        trainer.ClosedTraining++;
+                    }
                 }
             }
         }
@@ -7416,7 +7443,9 @@ ORDER BY
                     }
                     else if (isJobCount)
                     {
-                        statusCss = ResolveAssignedJobStatusCss(currentDate);
+                        statusCss = UseJobTrainingDataSource
+                            ? "st-split"
+                            : ResolveAssignedJobStatusCss(currentDate);
                         normalizedValue = jobCount.ToString();
                         if (jobCount <= 1)
                         {
@@ -7489,7 +7518,30 @@ ORDER BY
                     }
 
                     string cellDisplayText = normalizedValue;
-                    if (isJobCount && cellDate.Date < DateTime.Today && hasRemainingJo && remainingJo != 0)
+                    string itsFillClass = string.Empty;
+                    string itsFillHtml = null;
+                    if (UseJobTrainingDataSource && totalJob > 0 && isJobCount)
+                    {
+                        int openCount = hasRemainingJo && remainingJo >= 0 ? remainingJo : 0;
+                        int closeCount = Math.Max(0, totalJob - openCount);
+                        bool isLate = cellDate.Date < DateTime.Today;
+                        if (openCount <= 0)
+                        {
+                            itsFillClass = " its-fill its-fill-done";
+                        }
+                        else if (closeCount <= 0)
+                        {
+                            itsFillClass = isLate ? " its-fill its-fill-late" : " its-fill its-fill-open";
+                        }
+                        else
+                        {
+                            itsFillClass = " its-fill its-fill-mix";
+                            string openHalfClass = isLate ? "its-half its-half-late" : "its-half its-half-open";
+                            itsFillHtml = "<span class=\"its-half its-half-close\">" + closeCount.ToString()
+                                + "</span><span class=\"" + openHalfClass + "\">" + openCount.ToString() + "</span>";
+                        }
+                    }
+                    else if (isJobCount && cellDate.Date < DateTime.Today && hasRemainingJo && remainingJo != 0)
                     {
                         cellDisplayText = normalizedValue + "*";
                     }
@@ -7499,7 +7551,7 @@ ORDER BY
                     string interactCss = canAssign
                         ? " assign-cell--clickable"
                         : (isReportClickable ? " assign-cell--report-clickable" : " assign-cell--disabled");
-                    string cellClass = "status-cell assign-cell-trigger " + statusCss + interactCss + (isTodayAvCell ? " day-today-status" : "");
+                    string cellClass = "status-cell assign-cell-trigger " + statusCss + itsFillClass + interactCss + (isTodayAvCell ? " day-today-status" : "");
                     rows.Append("<td class=\"col-day" + (isWeekend ? " day-weekend-cell" : "") + (isTodayAvCell ? " day-today-cell" : "") + "\">");
                     rows.Append("<div class=\"" + cellClass + "\"");
                     rows.Append(" data-tech-id=\"" + HttpUtility.HtmlAttributeEncode(techGroup.Key.TechnicianID) + "\"");
@@ -7511,7 +7563,14 @@ ORDER BY
                     rows.Append(" data-can-assign=\"" + (canAssign ? "1" : "0") + "\"");
                     rows.Append(" role=\"button\" tabindex=\"" + (isInteractiveCell ? "0" : "-1") + "\"");
                     rows.Append(" aria-disabled=\"" + (isInteractiveCell ? "false" : "true") + "\">");
-                    rows.Append(HttpUtility.HtmlEncode(cellDisplayText));
+                    if (!string.IsNullOrEmpty(itsFillHtml))
+                    {
+                        rows.Append(itsFillHtml);
+                    }
+                    else
+                    {
+                        rows.Append(HttpUtility.HtmlEncode(cellDisplayText));
+                    }
                     rows.Append("</div></td>");
                 }
 
@@ -7659,9 +7718,16 @@ ORDER BY
             }
 
             AppendCapacityRow(cap, "Available", "cap-avail", totalDays, available);
-            AppendCapacityRow(cap, "JO 1 Unit", "cap-jo1", totalDays, jo1);
-            AppendCapacityRow(cap, "JO 2 Unit", "cap-jo2", totalDays, jo2);
-            AppendCapacityRow(cap, "JO 3+ Unit", "cap-jo3", totalDays, jo3);
+            if (UseJobTrainingDataSource)
+            {
+                AppendCapacityRow(cap, "Total JO", "cap-jo1", totalDays, assignUnit);
+            }
+            else
+            {
+                AppendCapacityRow(cap, "JO 1 Unit", "cap-jo1", totalDays, jo1);
+                AppendCapacityRow(cap, "JO 2 Unit", "cap-jo2", totalDays, jo2);
+                AppendCapacityRow(cap, "JO 3+ Unit", "cap-jo3", totalDays, jo3);
+            }
             AppendCapacityRow(cap, "Off", "cap-off", totalDays, off);
             AppendCapacityRow(cap, "Cuti", "cap-cuti", totalDays, cuti);
             AppendCapacityRow(cap, "Izin", "cap-izin", totalDays, izin);
@@ -9083,7 +9149,7 @@ ORDER BY
             }
 
             // Only real closed statuses count toward Total Closed JO.
-            if (normalized == "CL" || normalized == "CLOSE" || normalized == "CLOSED")
+            if (normalized == "CL" || normalized == "CLOSE" || normalized == "CLOSED" || normalized == "SELESAI")
             {
                 return "close";
             }
@@ -12778,7 +12844,10 @@ ORDER BY
             string billableId,
             string schDate,
             string remark,
-            string categoryId)
+            string categoryId,
+            string customerName,
+            string picName,
+            string picPhone)
         {
             SaveAssignResponse response = new SaveAssignResponse
             {
@@ -12884,6 +12953,15 @@ ORDER BY
                 response.Result = "SUCCESS";
                 response.AssignID = safeTrainingId;
                 response.Message = "Job Training/Visit berhasil di-update.";
+                SendJobTrainingEditTelegram(
+                    connString,
+                    safeTrainingId,
+                    scheduleDateValue,
+                    customerName,
+                    picName,
+                    picPhone,
+                    safeRemark,
+                    userId);
             }
             catch (Exception ex)
             {
@@ -13784,7 +13862,8 @@ ORDER BY
                     customerName,
                     picName,
                     picPhone,
-                    originalRemark);
+                    originalRemark,
+                    userId);
             }
             catch (Exception ex)
             {
@@ -14216,7 +14295,8 @@ ORDER BY
             string customerName,
             string picName,
             string picPhone,
-            string remark)
+            string remark,
+            string usrUpd)
         {
             string mapsLine = string.Empty;
             string mapsUrl = string.Empty;
@@ -14247,7 +14327,37 @@ ORDER BY
                 + "<b>" + (picPhone ?? string.Empty) + "</b>\r\n"
                 + mapsLine
                 + "<b>Remark</b>\r\n"
-                + "<b>" + (remark ?? string.Empty) + "</b>\r\n";
+                + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
+                + "<b>User Update/Create</b>\r\n"
+                + "<b>" + (usrUpd ?? string.Empty) + "</b>\r\n";
+            SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
+        }
+
+        private static void SendJobTrainingEditTelegram(
+            string connString,
+            string trainingId,
+            DateTime scheduleDate,
+            string customerName,
+            string picName,
+            string picPhone,
+            string remark,
+            string usrUpd)
+        {
+            string msg = "<b>UPDATE JOB ORDER TRAINING</b>\r\n"
+                + "<b>Training ID</b>\r\n"
+                + "<b>" + (trainingId ?? string.Empty) + "</b>\r\n"
+                + "<b>Customer</b>\r\n"
+                + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
+                + "<b>Schedule Date</b>\r\n"
+                + "<b>" + scheduleDate.ToString("dd/MM/yyyy") + "</b>\r\n"
+                + "<b>PIC Name</b>\r\n"
+                + "<b>" + (picName ?? string.Empty) + "</b>\r\n"
+                + "<b>PIC Number</b>\r\n"
+                + "<b>" + (picPhone ?? string.Empty) + "</b>\r\n"
+                + "<b>Remark</b>\r\n"
+                + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
+                + "<b>User Update/Create</b>\r\n"
+                + "<b>" + (usrUpd ?? string.Empty) + "</b>\r\n";
             SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
         }
 
@@ -14485,6 +14595,7 @@ ORDER BY
                 : (totalAssign > 0 ? totalAssign.ToString(CultureInfo.InvariantCulture) : "AV");
             response.HasRemainingJo = true;
             response.RemainingJo = openAssign;
+            response.TotalJob = totalAssign;
             response.CanAssign = canAssign;
             response.Message = "OK";
             return response;

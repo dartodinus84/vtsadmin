@@ -395,25 +395,24 @@
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-            margin-bottom: 14px;
+            gap: 8px;
+            margin-bottom: 10px;
         }
 
         .summary-card {
             background: #fff;
-            border: 1px solid #e5e3df;
-            border-radius: 14px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
-            padding: 16px 18px;
+            border: 1px solid #e7e5e4;
+            border-radius: 12px;
+            box-shadow: none;
+            padding: 10px 12px;
             cursor: pointer;
             position: relative;
-            transition: transform .2s ease, box-shadow .2s ease;
+            transition: border-color .15s ease;
             overflow: hidden;
         }
 
         .summary-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
+            border-color: #0a5c48;
         }
 
         .summary-card:before {
@@ -692,9 +691,155 @@
             margin-top: -1px;
         }
 
+        .its-board {
+            border: 1px solid #e7e5e4;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+        }
+
+        .its-board .section-header {
+            background: #fff;
+            border-bottom: 1px solid #f1f0ee;
+            padding: 14px 16px 10px;
+        }
+
+        .its-board .section-title {
+            font-size: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .its-board .area-filter-wrap {
+            margin-left: auto;
+        }
+
+        .its-board .assign-table-wrap {
+            max-height: calc(100vh - 250px);
+            min-height: 280px;
+            overflow: auto;
+            background: #fafaf9;
+        }
+
+        .its-board .assign-table {
+            width: max-content;
+            min-width: 100%;
+            background: #fff;
+        }
+
+        .its-board .assign-table thead th {
+            top: 0;
+            z-index: 5;
+            background: #fff;
+            color: #78716c;
+            font-size: 10px;
+            border-bottom: 1px solid #e7e5e4;
+        }
+
+        .its-board .assign-table thead th.col-no,
+        .its-board .assign-table thead th.col-name {
+            z-index: 8 !important;
+            background: #fff;
+        }
+
+        .its-board .assign-table tbody td.col-no,
+        .its-board .assign-table tbody td.col-name {
+            z-index: 4 !important;
+            background: #fff;
+        }
+
+        .its-board .assign-table tbody tr:nth-child(even) td.col-no,
+        .its-board .assign-table tbody tr:nth-child(even) td.col-name {
+            background: #fafaf9;
+        }
+
+        .its-board .col-no { width: 36px; min-width: 36px; }
+        .its-board .col-name { width: 168px; min-width: 168px; }
+        .its-board .sticky-name { left: 36px; }
+        .its-board .assign-table th.col-name,
+        .its-board .assign-table td.col-name { left: 36px !important; }
+        .its-board .col-total-assign,
+        .its-board .col-total,
+        .its-board .col-total-maint { width: 64px; min-width: 64px; }
+        .its-board .col-day { width: 48px; min-width: 48px; }
+
+        .its-board .assign-table tbody td {
+            height: 46px;
+            padding: 4px;
+            border-color: #f5f5f4;
+        }
+
+        .its-board .assign-table tbody td.cell-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1c1917;
+        }
+
+        .its-board .assign-day-no { font-size: 11px; }
+        .its-board .assign-day-name { font-size: 8px; }
+        .its-board .assign-day-total-btn {
+            min-width: 0;
+            margin-bottom: 2px;
+            padding: 2px 0;
+            font-size: 10px;
+        }
+
+        .its-board .status-cell {
+            min-height: 36px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .its-board .status-cell.its-fill,
+        .its-board .its-half {
+            min-height: 36px;
+        }
+
+        .its-board .legend {
+            padding: 8px 14px;
+            gap: 8px 14px;
+            background: #fff;
+            border-top: 1px solid #f1f0ee;
+        }
+
+        .its-board .legend-note {
+            flex-basis: 100%;
+            margin: 0;
+        }
+
         .schedule-wrap {
             padding: 0;
             min-width: 0;
+        }
+
+        .schedule-monitor .assign-table-wrap {
+            max-height: calc(100vh - 150px);
+            overflow: auto;
+        }
+
+        .schedule-monitor .assign-table thead th {
+            top: 0;
+            z-index: 5;
+            background: #fafaf8;
+        }
+
+        .schedule-monitor .assign-table thead th.col-no,
+        .schedule-monitor .assign-table thead th.col-name {
+            z-index: 8 !important;
+            background: #fafaf8;
+        }
+
+        .schedule-monitor .assign-table tbody td.col-no,
+        .schedule-monitor .assign-table tbody td.col-name {
+            z-index: 4 !important;
+            background: #fff;
+        }
+
+        .schedule-monitor .assign-table tbody tr:nth-child(even) td.col-no,
+        .schedule-monitor .assign-table tbody tr:nth-child(even) td.col-name {
+            background: #fcfcfb;
+        }
+
+        .schedule-monitor .assign-table tbody td {
+            height: 40px;
         }
 
         .assign-table-wrap {
@@ -772,12 +917,12 @@
             width: 100%;
             min-width: 34px;
             margin: 0 0 4px;
-            padding: 4px 2px;
-            border: 0;
-            border-radius: 5px;
-            background: #0a5c48;
-            color: #fff;
-            font-size: 12px;
+            padding: 3px 2px;
+            border: 1px solid #c9e6dc;
+            border-radius: 999px;
+            background: #f3faf7;
+            color: #0a5c48;
+            font-size: 11px;
             font-weight: 700;
             line-height: 1.2;
             white-space: nowrap;
@@ -805,12 +950,12 @@
         }
 
         .assign-table tbody td {
-            border-bottom: 1px solid #e5e3df;
-            border-right: 1px solid #e5e3df;
+            border-bottom: 1px solid #f0eeea;
+            border-right: 1px solid #f3f1ed;
             color: #1a1a18;
             font-size: 12px;
-            padding: 0;
-            height: 34px;
+            padding: 3px 2px;
+            height: 52px;
             text-align: center;
             white-space: nowrap;
         }
@@ -825,7 +970,7 @@
         .col-total { width: 72px; min-width: 72px; }
         .col-total-maint { width: 72px; min-width: 72px; }
         .col-stock { width: 110px; min-width: 110px; }
-        .col-day { width: 42px; min-width: 42px; }
+        .col-day { width: 72px; min-width: 72px; }
 
         .sticky-no, .sticky-name {
             position: -webkit-sticky;
@@ -965,14 +1110,15 @@
             justify-content: center;
             font-size: 12px;
             font-weight: 700;
-            border-radius: 8px;
-            padding: 2px 4px;
+            border-radius: 10px;
+            padding: 4px 3px;
             line-height: 1;
-            min-height: 30px;
+            min-height: 44px;
+            box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
         }
 
         .day-weekend-cell {
-            background: #fee2e2;
+            background: #fff7f7;
         }
 
         .day-today-cell {
@@ -987,6 +1133,59 @@
             background: #dbeafe !important;
             color: #1e3a8a !important;
             font-weight: 700;
+        }
+
+        .assign-table tbody td.col-day {
+            padding: 4px;
+        }
+
+        .status-cell.its-fill {
+            min-height: 34px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        .status-cell.its-fill-done {
+            background: #16a34a;
+        }
+
+        .status-cell.its-fill-open {
+            background: #ea580c;
+        }
+
+        .status-cell.its-fill-late {
+            background: #dc2626;
+        }
+
+        .status-cell.its-fill-mix {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .its-half {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 34px;
+            color: #fff;
+        }
+
+        .its-half-close {
+            background: #16a34a;
+        }
+
+        .its-half-open {
+            background: #ea580c;
+        }
+
+        .its-half-late {
+            background: #dc2626;
         }
 
         .st-av {
@@ -1142,6 +1341,11 @@
             font-size: 10px;
             font-weight: 700;
         }
+
+        .legend-dot.its-fill-done { background: #16a34a; color: #fff; }
+        .legend-dot.its-fill-open { background: #ea580c; color: #fff; }
+        .legend-dot.its-fill-late { background: #dc2626; color: #fff; }
+        .legend-dot.its-fill-mix { background: linear-gradient(90deg, #16a34a 0 50%, #ea580c 50% 100%); color: #fff; width: 36px; }
 
         .legend-dot.st-av.day-today-status {
             background: #dbeafe;
@@ -1752,10 +1956,86 @@
         }
 
         .assign-pick-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             border: 1px solid #d1d5db;
             border-radius: 10px;
             background: #f9fafb;
             padding: 10px;
+        }
+
+        .assign-pick-row .assign-pick-btn {
+            width: auto;
+            flex: 0 0 auto;
+        }
+
+        .assign-pick-row .assign-picked-jo {
+            margin-top: 0;
+            flex: 1 1 auto;
+        }
+
+        .its-day-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            width: 100%;
+        }
+
+        .its-day-code {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            line-height: 1;
+            color: #64748b;
+        }
+
+        .its-day-pair {
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            gap: 0;
+            width: 100%;
+        }
+
+        .its-day-metric {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1 1 0;
+            min-width: 0;
+            gap: 1px;
+            background: transparent;
+        }
+
+        .its-day-metric + .its-day-metric {
+            border-left: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .its-day-metric b {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .its-day-metric small {
+            font-size: 8px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-transform: lowercase;
+            color: #94a3b8;
+            line-height: 1;
+        }
+
+        .its-day-close b {
+            color: #15803d;
+        }
+
+        .its-day-open b {
+            color: #c2410c;
         }
 
         .assign-pick-btn {
@@ -3393,6 +3673,32 @@
             background: #fef3c7;
         }
 
+        #assignJoInfoBackdrop .assign-jo-action-col {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            min-width: 78px;
+            background: #fff;
+            box-shadow: 1px 0 0 #e5e7eb;
+        }
+
+        #assignJoInfoBackdrop .assign-jo-table thead th.assign-jo-action-col {
+            z-index: 3;
+            background: #f3f4f6;
+        }
+
+        #assignJoInfoBackdrop .assign-jo-table tbody tr:hover > td.assign-jo-action-col {
+            background: #f8fafc;
+        }
+
+        #assignJoInfoBackdrop .assign-jo-table tbody tr.assign-jo-row-transfer > td.assign-jo-action-col {
+            background: #fffbeb;
+        }
+
+        #assignJoInfoBackdrop .assign-jo-table tbody tr.assign-jo-row-transfer:hover > td.assign-jo-action-col {
+            background: #fef3c7;
+        }
+
         .assign-jo-pick-btn {
             border: 1px solid #0a5c48;
             border-radius: 6px;
@@ -4235,7 +4541,7 @@
             </div>
         </div>
 
-        <div class="section-box">
+        <div class="section-box its-board">
             <div class="section-header">
                 <h4 class="section-title">Jadwal Harian <span id="lblScheduleTabTitle" runat="server">IT Support</span></h4>
                 <span id="lblMemberCount" runat="server" class="panel-badge">0 IT Support</span>
@@ -4299,14 +4605,15 @@
                 <div class="legend">
                     <div class="legend-title">Keterangan warna jadwal</div>
                     <div class="legend-item"><span class="legend-dot st-av">AV</span> Available</div>
-                    <div class="legend-item"><span class="legend-dot st-av day-today-status">AV</span> Available hari ini (biru muda)</div>
-                    <div class="legend-item"><span class="legend-dot st-assigned-future">1</span> Assigned hari ini / mendatang (krem amber)</div>
-                    <div class="legend-item"><span class="legend-dot st-assigned-past">1</span> Assigned tanggal lewat (merah)</div>
-                    <div class="legend-item"><span class="legend-dot st-off">OF</span> Off / Libur</div>
+                    <div class="legend-item"><span class="legend-dot st-av day-today-status">AV</span> Available hari ini</div>
+                    <div class="legend-item"><span class="legend-dot its-fill-done">3</span> Semua selesai</div>
+                    <div class="legend-item"><span class="legend-dot its-fill-open">3</span> Semua masih open</div>
+                    <div class="legend-item"><span class="legend-dot its-fill-mix">1|2</span> Kiri sudah close, kanan masih open</div>
+                    <div class="legend-item"><span class="legend-dot its-fill-late">3</span> Tanggal lewat dan masih open</div>
+                    <div class="legend-item"><span class="legend-dot st-off">OF</span> Off</div>
                     <div class="legend-item"><span class="legend-dot st-cuti">CT</span> Cuti</div>
                     <div class="legend-item"><span class="legend-dot st-izin">IZ</span> Izin</div>
-                    <div class="legend-item"><span class="legend-dot st-assigned-past">*</span> Tanggal lewat dan Remaining JO masih ada</div>
-                    <div class="legend-note">Angka pada sel menunjukkan jumlah unit yang di-assign. Kuning = jadwal hari ini atau ke depan. Merah = jadwal sudah lewat. Tanda * berarti masih ada Remaining JO di tanggal lewat.</div>
+                    <div class="legend-note">Angka di tengah sel. Satu warna jika semuanya selesai atau semuanya masih open. Dua warna hanya jika hari itu campur: kiri close, kanan masih open.</div>
                 </div>
             </div>
         </div>
@@ -4937,6 +5244,7 @@
                     <table class="assign-jo-table">
                         <thead>
                             <tr>
+                                <th class="assign-jo-action-col">Action</th>
                                 <th>Job Order</th>
                                 <th>Customer</th>
                                 <th>Branch Name</th>
@@ -4950,7 +5258,6 @@
                                 <th title="Tanggal assign terakhir customer yang sudah close">Last Assign</th>
                                 <th>Tanggal Create JO</th>
                                 <th>SLA Days</th>
-                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="assignJoTableBody"></tbody>
@@ -6261,7 +6568,11 @@
                 return isOwnScheduleCell(cell);
             }
 
-            function resolveAssignedCellStatusClass(cell) {
+            function resolveAssignedCellStatusClass(cell, openJob, hasOpenCount) {
+                var openCount = parseInt(openJob, 10);
+                if (hasOpenCount && !isNaN(openCount) && openCount <= 0) {
+                    return "st-close";
+                }
                 var cellDate = parseIsoDate(cell ? cell.getAttribute("data-date") : "");
                 if (!cellDate) {
                     return "st-assigned-future";
@@ -7856,8 +8167,47 @@
                     value = "AV";
                 }
 
-                cell.textContent = value;
-                cell.setAttribute("data-status", value);
+                var totalJob = remainingJoInfo && remainingJoInfo.totalJob != null
+                    ? parseInt(remainingJoInfo.totalJob, 10)
+                    : (/^\d+$/.test(value) ? parseInt(value, 10) : 0);
+                var openJob = remainingJoInfo && remainingJoInfo.hasRemainingJo
+                    ? parseInt(remainingJoInfo.remainingJo, 10)
+                    : 0;
+                if (isNaN(totalJob) || totalJob < 0) {
+                    totalJob = 0;
+                }
+                if (isNaN(openJob) || openJob < 0) {
+                    openJob = 0;
+                }
+                var upperPreview = normalizeStatusCode(value);
+                var showDayCode = upperPreview === "OF" || upperPreview === "CT" || upperPreview === "IZ";
+                var hasOpenCount = !!(remainingJoInfo && remainingJoInfo.hasRemainingJo);
+                cell.classList.remove("its-fill", "its-fill-done", "its-fill-open", "its-fill-late", "its-fill-mix");
+                if (totalJob > 0 && !showDayCode && hasOpenCount) {
+                    var closeJob = Math.max(0, totalJob - openJob);
+                    var cellDateForSplit = parseIsoDate(cell.getAttribute("data-date"));
+                    var isLate = cellDateForSplit && cellDateForSplit.getTime() < getTodayDateOnly().getTime();
+                    value = String(totalJob);
+                    cell.classList.add("its-fill");
+                    if (openJob <= 0) {
+                        cell.classList.add("its-fill-done");
+                        cell.textContent = value;
+                    } else if (closeJob <= 0) {
+                        cell.classList.add(isLate ? "its-fill-late" : "its-fill-open");
+                        cell.textContent = value;
+                    } else {
+                        cell.classList.add("its-fill-mix");
+                        cell.innerHTML = "<span class=\"its-half its-half-close\">" + closeJob + "</span>"
+                            + "<span class=\"its-half " + (isLate ? "its-half-late" : "its-half-open") + "\">" + openJob + "</span>";
+                    }
+                    cell.setAttribute("data-status", value);
+                } else {
+                    if (totalJob > 0 && !showDayCode) {
+                        value = String(totalJob);
+                    }
+                    cell.textContent = value;
+                    cell.setAttribute("data-status", value);
+                }
 
                 cell.classList.remove(
                     "st-av",
@@ -7866,6 +8216,7 @@
                     "st-unit-done",
                     "st-assigned-future",
                     "st-assigned-past",
+                    "st-split",
                     "st-close",
                     "st-off",
                     "st-cuti",
@@ -7874,8 +8225,10 @@
                     "st-unavailable",
                     "day-today-status");
                 var upperValue = normalizeStatusCode(value);
-                if (/^\d+$/.test(value)) {
-                    cell.classList.add(resolveAssignedCellStatusClass(cell));
+                if (/^\d+$/.test(value) && cell.classList.contains("its-fill")) {
+                    cell.classList.add("st-split");
+                } else if (/^\d+$/.test(value)) {
+                    cell.classList.add(resolveAssignedCellStatusClass(cell, openJob, false));
                 } else if (upperValue === "AV" || upperValue === "AD") {
                     cell.classList.add("st-av");
                 } else if (upperValue === "OF") {
@@ -8449,6 +8802,7 @@
                             : "";
                         var rowClass = alreadyAssigned ? " class=\"assign-jo-row-transfer\"" : "";
                         rows.push("<tr" + rowClass + ">" +
+                            "<td class=\"assign-jo-action-col\"><button type=\"button\" class=\"" + pickClass + "\" data-pick-index=\"" + i + "\">" + pickLabel + "</button></td>" +
                             "<td>" + escapeHtml(item.JobID) + assignedHint + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(getCustomerDisplayText(item)) + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.BranchName || "-") + "</td>" +
@@ -8462,7 +8816,6 @@
                             "<td>" + escapeHtml(lastAssign) + "</td>" +
                             "<td>" + escapeHtml(assignDate) + "</td>" +
                             "<td>" + escapeHtml(slaDays.toString()) + "</td>" +
-                            "<td><button type=\"button\" class=\"" + pickClass + "\" data-pick-index=\"" + i + "\">" + pickLabel + "</button></td>" +
                             "</tr>");
                     }
                     body.innerHTML = rows.join("");
@@ -9567,7 +9920,10 @@
                             billableId: billableId,
                             schDate: schDate,
                             remark: remark,
-                            categoryId: categoryId
+                            categoryId: categoryId,
+                            customerName: customerName,
+                            picName: picName,
+                            picPhone: picPhone
                         },
                         function (result) {
                             createJoSaving = false;
@@ -10500,7 +10856,8 @@
                         cell,
                         {
                             hasRemainingJo: !!result.HasRemainingJo,
-                            remainingJo: parseInt(result.RemainingJo, 10)
+                            remainingJo: parseInt(result.RemainingJo, 10),
+                            totalJob: parseInt(result.TotalJob, 10)
                         });
                     if (result.HasDayTotalJo) {
                         updateDayTotalButtonLabel(scheduleDate, result.DayTotalJo);
