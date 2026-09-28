@@ -12955,8 +12955,13 @@ ORDER BY
                 response.Message = "Job Training/Visit berhasil di-update.";
                 SendJobTrainingEditTelegram(
                     connString,
+                    detailResponse.Row,
                     safeTrainingId,
+                    custId,
+                    requestDateValue,
                     scheduleDateValue,
+                    billableId,
+                    categoryId,
                     customerName,
                     picName,
                     picPhone,
@@ -14334,19 +14339,122 @@ ORDER BY
             SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
         }
 
+        public static TrainingEditJobItem LoadJobTrainingEditItem(string trainingId)
+        {
+            TrainingEditDetailResponse detail = BuildJobTrainingEditDetailResponse(trainingId);
+            return detail == null ? null : detail.Row;
+        }
+
+        public static void NotifyJobTrainingEdited(
+            string connString,
+            TrainingEditJobItem before,
+            string trainingId,
+            string custId,
+            string reqDate,
+            string billableId,
+            string schDate,
+            string remark,
+            string categoryId,
+            string customerName,
+            string picName,
+            string picPhone,
+            string usrUpd)
+        {
+            DateTime requestDateValue;
+            if (!DateTime.TryParse(reqDate, out requestDateValue))
+            {
+                requestDateValue = DateTime.Today;
+            }
+
+            DateTime scheduleDateValue;
+            if (!DateTime.TryParse(schDate, out scheduleDateValue))
+            {
+                scheduleDateValue = DateTime.Today;
+            }
+
+            SendJobTrainingEditTelegram(
+                connString,
+                before,
+                trainingId,
+                custId,
+                requestDateValue,
+                scheduleDateValue,
+                billableId,
+                categoryId,
+                customerName,
+                picName,
+                picPhone,
+                remark,
+                usrUpd);
+        }
+
         private static void SendJobTrainingEditTelegram(
             string connString,
+            TrainingEditJobItem before,
             string trainingId,
+            string custId,
+            DateTime requestDate,
             DateTime scheduleDate,
+            string billableId,
+            string categoryId,
             string customerName,
             string picName,
             string picPhone,
             string remark,
             string usrUpd)
         {
+            if (!IsTrainingJobCurrentlyAssigned(connString, trainingId))
+            {
+                return;
+            }
+
+            string oldPicName = string.Empty;
+            string oldPicPhone = string.Empty;
+            if (before != null && !string.IsNullOrWhiteSpace(before.CustID))
+            {
+                ItsSupportAssignData.CustomerContact oldContact = ItsSupportAssignData.LoadCustomerContact(
+                    before.CustID,
+                    string.Empty,
+                    connString);
+                if (oldContact != null)
+                {
+                    oldPicName = oldContact.PicName ?? string.Empty;
+                    oldPicPhone = FirstNonEmptyStatic(oldContact.MobilePhone1, oldContact.OfficePhone1);
+                }
+            }
+
+            string oldCustomer = before == null
+                ? string.Empty
+                : FirstNonEmptyStatic(before.CustomerName, before.CustID);
+            string newCustomer = FirstNonEmptyStatic(customerName, custId);
+            string oldCategory = before == null
+                ? string.Empty
+                : DescribeTrainCategory(connString, before.CategoryID, before.CategoryDesc);
+            string newCategory = DescribeTrainCategory(connString, categoryId, string.Empty);
+            string oldBillable = before == null
+                ? string.Empty
+                : DescribeBillable(connString, before.BillableID);
+            string newBillable = DescribeBillable(connString, billableId);
+
+            StringBuilder changes = new StringBuilder();
+            AppendTrainingEditChange(changes, "Customer", oldCustomer, newCustomer);
+            AppendTrainingEditDateChange(changes, "Request Date", before == null ? string.Empty : before.ReqDate, requestDate);
+            AppendTrainingEditDateChange(changes, "Schedule Date", before == null ? string.Empty : before.SchDate, scheduleDate);
+            AppendTrainingEditChange(changes, "Billable", oldBillable, newBillable);
+            AppendTrainingEditChange(changes, "Category", oldCategory, newCategory);
+            AppendTrainingEditChange(changes, "Remark", before == null ? string.Empty : before.Remark, remark);
+            AppendTrainingEditChange(changes, "PIC Name", oldPicName, picName);
+            AppendTrainingEditChange(changes, "PIC Number", oldPicPhone, picPhone);
+            if (changes.Length == 0)
+            {
+                changes.Append("<b>Tidak ada perubahan field</b>\r\n");
+            }
+
             string msg = "<b>UPDATE JOB ORDER TRAINING</b>\r\n"
                 + "<b>Training ID</b>\r\n"
                 + "<b>" + (trainingId ?? string.Empty) + "</b>\r\n"
+                + "<b>Changes</b>\r\n"
+                + changes
                 + "<b>Customer</b>\r\n"
                 + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
                 + "<b>Schedule Date</b>\r\n"
@@ -14360,6 +14468,105 @@ ORDER BY
                 + "<b>User Update/Create</b>\r\n"
                 + "<b>" + (usrUpd ?? string.Empty) + "</b>\r\n";
             SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
+        }
+
+        private static bool IsTrainingJobCurrentlyAssigned(string connString, string trainingId)
+        {
+            string id = (trainingId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            string assignedJobId = LookupTrainingSqlValue(
+                connString,
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(JobID, ''))) "
+                    + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(JobID, ''))) = '" + EscapeSqlLiteral(id) + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "AND UPPER(LTRIM(RTRIM(ISNULL(Status, '')))) = 'RG'");
+            return !string.IsNullOrWhiteSpace(assignedJobId);
+        }
+
+        private static void AppendTrainingEditChange(StringBuilder sb, string label, string oldValue, string newValue)
+        {
+            string oldText = string.IsNullOrWhiteSpace(oldValue) ? "-" : oldValue.Trim();
+            string newText = string.IsNullOrWhiteSpace(newValue) ? "-" : newValue.Trim();
+            if (string.Equals(oldText, newText, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            sb.Append("<b>").Append(label).Append("</b>\r\n");
+            sb.Append("<b>").Append(oldText).Append(" -> ").Append(newText).Append("</b>\r\n");
+        }
+
+        private static void AppendTrainingEditDateChange(StringBuilder sb, string label, string oldRaw, DateTime newDate)
+        {
+            DateTime oldDate;
+            bool hasOld = DateTime.TryParse((oldRaw ?? string.Empty).Trim(), out oldDate);
+            if (hasOld && oldDate.Date == newDate.Date)
+            {
+                return;
+            }
+
+            string oldText = hasOld
+                ? oldDate.ToString("dd/MM/yyyy")
+                : (string.IsNullOrWhiteSpace(oldRaw) ? "-" : oldRaw.Trim());
+            sb.Append("<b>").Append(label).Append("</b>\r\n");
+            sb.Append("<b>").Append(oldText).Append(" -> ").Append(newDate.ToString("dd/MM/yyyy")).Append("</b>\r\n");
+        }
+
+        private static string DescribeTrainCategory(string connString, string categoryId, string fallbackDesc)
+        {
+            string id = (categoryId ?? string.Empty).Trim();
+            string desc = string.Empty;
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                desc = LookupTrainingSqlValue(
+                    connString,
+                    "SELECT TOP 1 LTRIM(RTRIM(ISNULL(TrainCategoryDesc, ''))) "
+                        + "FROM ref_train_category WITH (NOLOCK) "
+                        + "WHERE LTRIM(RTRIM(ISNULL(TrainCategoryID, ''))) = '" + EscapeSqlLiteral(id) + "'");
+            }
+
+            return FirstNonEmptyStatic(desc, fallbackDesc, id);
+        }
+
+        private static string DescribeBillable(string connString, string billableId)
+        {
+            string id = (billableId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return string.Empty;
+            }
+
+            string desc = LookupTrainingSqlValue(
+                connString,
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(BillAbleDesc, ''))) "
+                    + "FROM ref_billable_type WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(BillAbleID, ''))) = '" + EscapeSqlLiteral(id) + "'");
+            if (string.IsNullOrWhiteSpace(desc))
+            {
+                desc = LookupTrainingSqlValue(
+                    connString,
+                    "SELECT TOP 1 LTRIM(RTRIM(ISNULL(BillAbleDesc, ''))) "
+                        + "FROM ref_billable WITH (NOLOCK) "
+                        + "WHERE LTRIM(RTRIM(ISNULL(BillAbleID, ''))) = '" + EscapeSqlLiteral(id) + "'");
+            }
+
+            return FirstNonEmptyStatic(desc, id);
+        }
+
+        private static string LookupTrainingSqlValue(string connString, string sql)
+        {
+            DataTable table = ExecuteJobTrainingQuery(sql, connString);
+            if (table == null || table.Rows.Count == 0 || table.Columns.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return Convert.ToString(table.Rows[0][0] ?? string.Empty).Trim();
         }
 
         private static void SendTrainingCustomerCloseTelegram(

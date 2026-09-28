@@ -244,17 +244,32 @@ namespace vtsadm
                             return;
                         }
 
-                        strSQL = "sp_update_job_training '" + txtTrainingID.Text.Trim() + "','" + txtReqDate.Text.Trim() + "','" + txtCustID.Value.Trim() + "'," +
+                        string trainingIdBeforeUpdate = txtTrainingID.Text.Trim();
+                        dashboard_assign_job.TrainingEditJobItem beforeEdit = dashboard_assign_job.LoadJobTrainingEditItem(trainingIdBeforeUpdate);
+                        strSQL = "sp_update_job_training '" + trainingIdBeforeUpdate + "','" + txtReqDate.Text.Trim() + "','" + txtCustID.Value.Trim() + "'," +
                                  "'" + txtScheduleDate.Text.Trim() + "','" + CmbBillAble.SelectedItem.Value.Trim() + "'," +
                                  "'" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                         {
                             if (IsStoredProcedureExecuteSuccess(true, intAff))
                             {
+                                dashboard_assign_job.NotifyJobTrainingEdited(
+                                    Session["ClsTypeDBConnStringSQL"].ToString(),
+                                    beforeEdit,
+                                    trainingIdBeforeUpdate,
+                                    txtCustID.Value.Trim(),
+                                    txtReqDate.Text.Trim(),
+                                    CmbBillAble.SelectedItem.Value.Trim(),
+                                    txtScheduleDate.Text.Trim(),
+                                    tanda,
+                                    CmbTrainCategoryID.SelectedItem.Value.Trim(),
+                                    cus,
+                                    pic,
+                                    picnumber,
+                                    Convert.ToString(Session["ClsTypeUserID"]));
                                 clear();
                                 Open_GridViewHeader();
                                 div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Update job training has been successfully</div>";
-                                Bot(jodate, cus, pic, picnumber, tanda, Convert.ToString(Session["ClsTypeUserID"]), true);
                             }
                             else
                             {
