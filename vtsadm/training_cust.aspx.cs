@@ -1126,6 +1126,8 @@ namespace vtsadm
             msg += "<b>" + jono + "</b>\r\n";
             msg += "<b>Customer</b>\r\n";
             msg += "<b>" + cus + "</b>\r\n";
+            msg += "<b>Online / Onsite</b>\r\n";
+            msg += "<b>" + LookupMeetTypeDesc(jono) + "</b>\r\n";
             msg += "<b>Schedule Date</b>\r\n";
             msg += "<b>" + jodate + "</b>\r\n";
             msg += "<b>Training Date</b>\r\n";
@@ -1135,6 +1137,36 @@ namespace vtsadm
             msg += "<b>Trainers</b>\r\n";
             msg += "<b>" + trainer + "</b>\r\n";
             return msg;
+        }
+
+        private string LookupMeetTypeDesc(string trainingId)
+        {
+            string id = (trainingId ?? string.Empty).Trim().Replace("'", "''");
+            if (id == "")
+            {
+                return "";
+            }
+
+            try
+            {
+                Recordset rec = new Recordset();
+                rec.Open(
+                    "SELECT TOP 1 LTRIM(RTRIM(ISNULL(m.MeetTypeDesc, ''))) AS MeetTypeDesc "
+                        + "FROM trx_training_order t WITH (NOLOCK) "
+                        + "LEFT JOIN ref_meet_type m WITH (NOLOCK) "
+                        + "ON LTRIM(RTRIM(ISNULL(m.MeetTypeID, ''))) = LTRIM(RTRIM(ISNULL(t.MeetTypeID, ''))) "
+                        + "WHERE t.TrainingID = '" + id + "'",
+                    Session["ClsTypeDBConnStringSQL"].ToString());
+                if (rec.RecordCount() > 0)
+                {
+                    return rec.Fields("MeetTypeDesc");
+                }
+            }
+            catch
+            {
+            }
+
+            return "";
         }
     }
 }

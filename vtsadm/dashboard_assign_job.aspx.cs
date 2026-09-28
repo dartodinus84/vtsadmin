@@ -14608,6 +14608,7 @@ ORDER BY
                 ? string.Empty
                 : DescribeBillable(connString, before.BillableID);
             string newBillable = DescribeBillable(connString, billableId);
+            string newMeetType = DescribeMeetType(connString, meetTypeId);
 
             StringBuilder changes = new StringBuilder();
             AppendTrainingEditChange(changes, "Customer", oldCustomer, newCustomer);
@@ -14619,7 +14620,7 @@ ORDER BY
                 changes,
                 "Online / Onsite",
                 before == null ? string.Empty : FirstNonEmptyStatic(before.MeetTypeDesc, DescribeMeetType(connString, before.MeetTypeID)),
-                DescribeMeetType(connString, meetTypeId));
+                newMeetType);
             AppendTrainingEditChange(changes, "Remark", before == null ? string.Empty : before.Remark, remark);
             AppendTrainingEditChange(changes, "PIC Name", oldPicName, picName);
             AppendTrainingEditChange(changes, "PIC Number", oldPicPhone, picPhone);
@@ -14641,6 +14642,8 @@ ORDER BY
                 + "<b>" + (picName ?? string.Empty) + "</b>\r\n"
                 + "<b>PIC Number</b>\r\n"
                 + "<b>" + (picPhone ?? string.Empty) + "</b>\r\n"
+                + "<b>Online / Onsite</b>\r\n"
+                + "<b>" + (newMeetType ?? string.Empty) + "</b>\r\n"
                 + "<b>Remark</b>\r\n"
                 + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
                 + "<b>User Update/Create</b>\r\n"
@@ -14736,6 +14739,22 @@ ORDER BY
             return FirstNonEmptyStatic(desc, id);
         }
 
+        private static string DescribeMeetTypeForTraining(string connString, string trainingId)
+        {
+            string id = (trainingId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return string.Empty;
+            }
+
+            string meetTypeId = LookupTrainingSqlValue(
+                connString,
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) "
+                    + "FROM trx_training_order WITH (NOLOCK) "
+                    + "WHERE TrainingID = '" + EscapeSqlLiteral(id) + "'");
+            return DescribeMeetType(connString, meetTypeId);
+        }
+
         private static string DescribeMeetType(string connString, string meetTypeId)
         {
             string id = (meetTypeId ?? string.Empty).Trim();
@@ -14778,6 +14797,8 @@ ORDER BY
                 + "<b>" + (trainingId ?? string.Empty) + "</b>\r\n"
                 + "<b>Customer</b>\r\n"
                 + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
+                + "<b>Online / Onsite</b>\r\n"
+                + "<b>" + DescribeMeetTypeForTraining(connString, trainingId) + "</b>\r\n"
                 + "<b>Schedule Date</b>\r\n"
                 + "<b>" + FormatDateForTrainingTelegram(schDateText) + "</b>\r\n"
                 + "<b>Training Date</b>\r\n"

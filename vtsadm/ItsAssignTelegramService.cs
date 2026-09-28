@@ -1070,8 +1070,34 @@ namespace vtsadm
                 }
 
                 detail.BranchName = FirstNonEmpty(GetRowString(row, "BranchName"), detail.BranchName);
+                string meetTypeId = GetRowString(row, "MeetTypeID");
+                detail.MeetTypeDesc = FirstNonEmpty(
+                    GetRowString(row, "MeetTypeDesc"),
+                    LookupMeetTypeDesc(connString, meetTypeId),
+                    detail.MeetTypeDesc);
                 break;
             }
+        }
+
+        private static string LookupMeetTypeDesc(string connString, string meetTypeId)
+        {
+            string id = (meetTypeId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return string.Empty;
+            }
+
+            DataTable table = ExecuteBotQuery(
+                connString,
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MeetTypeDesc, ''))) AS MeetTypeDesc "
+                    + "FROM ref_meet_type WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) = '" + EscapeSqlLiteral(id) + "'");
+            if (table == null || table.Rows.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return GetRowString(table.Rows[0], "MeetTypeDesc");
         }
 
         private static string ResolveBotCustomerDisplayName(AssignDetail detail)
@@ -1269,6 +1295,7 @@ namespace vtsadm
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            sb.AppendLine("Online / Onsite : <b>" + EscapeHtml(FirstNonEmpty(detail.MeetTypeDesc, "-")) + "</b>");
             sb.AppendLine();
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
             sb.AppendLine("IT Support : <b>" + EscapeHtml(itSupportName) + "</b>");
@@ -1301,6 +1328,7 @@ namespace vtsadm
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            sb.AppendLine("Online / Onsite : <b>" + EscapeHtml(FirstNonEmpty(detail.MeetTypeDesc, "-")) + "</b>");
             sb.AppendLine();
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
             sb.AppendLine("Dari IT Support : <b>" + EscapeHtml(fromItSupport) + "</b>");
@@ -1334,6 +1362,7 @@ namespace vtsadm
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
+            sb.AppendLine("Online / Onsite : <b>" + EscapeHtml(FirstNonEmpty(detail.MeetTypeDesc, "-")) + "</b>");
             sb.AppendLine();
             sb.AppendLine("Pelanggan : <b>" + EscapeHtml(customerName) + "</b>");
             sb.AppendLine("IT Support : <b>" + EscapeHtml(itSupportName) + "</b>");
@@ -2577,6 +2606,7 @@ namespace vtsadm
             public string JobType { get; set; }
             public string CategoryLabel { get; set; }
             public string TrainCategoryId { get; set; }
+            public string MeetTypeDesc { get; set; }
             public string CompanyLine { get; set; }
             public string BranchName { get; set; }
             public string AreaName { get; set; }
