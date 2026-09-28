@@ -74,6 +74,10 @@
                             <asp:DropDownList ID="CmbTrainCategoryID" runat="server" CssClass="form-control" required="required"></asp:DropDownList>
                         </div>
                         <div class="form-group form-group-sm">
+                            <label>Online / Onsite <span style="color:red">*</span></label>
+                            <asp:DropDownList ID="CmbMeetTypeID" runat="server" CssClass="form-control"></asp:DropDownList>
+                        </div>
+                        <div class="form-group form-group-sm">
                             <label>Schedule Date</label>
                             <asp:TextBox ID="txtScheduleDate" TextMode="Date" runat="server" class="form-control" placeholder="Schedule Date ..."></asp:TextBox>
                         </div>
@@ -116,6 +120,7 @@
                                         <asp:BoundField DataField="sSchDate" HeaderText="Sch Date" ItemStyle-Wrap="false" SortExpression="sSchDate"></asp:BoundField>
                                         <asp:BoundField DataField="TrainingCategoryName" HeaderText="Category" ItemStyle-Wrap="false" SortExpression="TrainingCategoryName"></asp:BoundField>
                                         <asp:BoundField DataField="BillAbleDesc" HeaderText="Billable" ItemStyle-Wrap="false" SortExpression="BillAbleDesc"></asp:BoundField>
+                                        <asp:BoundField DataField="MeetTypeDesc" HeaderText="Online / Onsite" ItemStyle-Wrap="false" SortExpression="MeetTypeDesc"></asp:BoundField>
                                         <asp:BoundField DataField="Status" HeaderText="Status" ItemStyle-Wrap="false" SortExpression="Status"></asp:BoundField>
                                         <asp:ButtonField ControlStyle-CssClass="btn btn-warning btn-xs" Text="<i class='fa fa-edit'></i>" ItemStyle-HorizontalAlign="Center" ItemStyle-ForeColor="White" CommandName="Changes"></asp:ButtonField>
                                         <asp:TemplateField ItemStyle-HorizontalAlign="Center">
@@ -129,6 +134,7 @@
                                         <asp:BoundField DataField="BillAbleID" HeaderText="BillAbleID" ItemStyle-Wrap="false"></asp:BoundField>
                                         <asp:BoundField DataField="TrainCategoryID" HeaderText="TrainCategoryID" ItemStyle-Wrap="false"></asp:BoundField>
                                         <asp:BoundField DataField="Remark" HeaderText="Remark" ItemStyle-Wrap="false"></asp:BoundField>
+                                        <asp:BoundField DataField="MeetTypeID" HeaderText="MeetTypeID" ItemStyle-Wrap="false"></asp:BoundField>
                                     </Columns>
                                     <RowStyle ForeColor="#003481" BackColor="White" />
                                     <SelectedRowStyle BackColor="LightBlue" Font-Bold="True" ForeColor="#6298ff" />
@@ -257,6 +263,11 @@
             var category = document.getElementById('ContentPlaceHolder1_CmbTrainCategoryID');
             if (!category || category.value === '' || category.value === '[Select]') {
                 alert('Please select Category');
+                return false;
+            }
+            var meetType = document.getElementById('ContentPlaceHolder1_CmbMeetTypeID');
+            if (!meetType || meetType.value === '' || meetType.value === '[Select]') {
+                alert('Please select Online / Onsite');
                 return false;
             }
             $("#modal-submit").modal('show');

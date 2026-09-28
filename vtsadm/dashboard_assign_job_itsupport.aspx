@@ -4778,6 +4778,10 @@
                             <span class="assign-info-label">Customer</span>
                             <span class="assign-info-value" id="assignInfoCustomer">-</span>
                         </div>
+                        <div class="assign-info-item">
+                            <span class="assign-info-label">Online / Onsite</span>
+                            <span class="assign-info-value" id="assignInfoMeetType">-</span>
+                        </div>
                         <div class="assign-info-item" id="assignPreviousAssignWrap" hidden>
                             <span class="assign-info-label">Previously Assigned To</span>
                             <span class="assign-info-value" id="assignInfoPreviousAssign">-</span>
@@ -4931,6 +4935,12 @@
                         <div class="assign-field">
                             <label class="assign-field-label" for="assignTrainingCategory">Category</label>
                             <select id="assignTrainingCategory">
+                                <option value="">[Select]</option>
+                            </select>
+                        </div>
+                        <div class="assign-field">
+                            <label class="assign-field-label" for="assignTrainingMeetType">Online / Onsite</label>
+                            <select id="assignTrainingMeetType">
                                 <option value="">[Select]</option>
                             </select>
                         </div>
@@ -5254,6 +5264,7 @@
                                 <th>Marketing</th>
                                 <th>Remark</th>
                                 <th class="assign-jo-device-type-col">Category</th>
+                                <th>Online / Onsite</th>
                                 <th>Total Unit Customer</th>
                                 <th title="Tanggal assign terakhir customer yang sudah close">Last Assign</th>
                                 <th>Tanggal Create JO</th>
@@ -5312,6 +5323,7 @@
                                 <th>Status</th>
                                 <th>FullName</th>
                                 <th>JobID</th>
+                                <th>Online / Onsite</th>
                                 <th>SchDate</th>
                                 <th>Tanggal Assign</th>
                                 <th>Alamat</th>
@@ -5369,6 +5381,10 @@
                         <div class="assign-info-item">
                             <span class="assign-info-label">Customer</span>
                             <span class="assign-info-value" id="assignReportInfoCustomer">-</span>
+                        </div>
+                        <div class="assign-info-item">
+                            <span class="assign-info-label">Online / Onsite</span>
+                            <span class="assign-info-value" id="assignReportInfoMeetType">-</span>
                         </div>
                         <div class="assign-info-item" id="assignReportPreviousAssignWrap" hidden>
                             <span class="assign-info-label">Previously Assigned To</span>
@@ -6707,7 +6723,7 @@
                 }
 
                 if (reportModalState.isLoading) {
-                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"10\">"
+                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"11\">"
                         + "<div class=\"assign-closed-loading\" style=\"min-height:140px;\">"
                         + "<span class=\"assign-closed-loading-spinner\" aria-hidden=\"true\"></span>"
                         + "<span>Memuat data Training/Visit...</span>"
@@ -6717,7 +6733,7 @@
 
                 var rows = reportModalState.rows || [];
                 if (!rows.length) {
-                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"10\">Belum ada data schedule pada tanggal ini.</td></tr>";
+                    reportTableBody.innerHTML = "<tr><td class=\"assign-report-empty\" colspan=\"11\">Belum ada data schedule pada tanggal ini.</td></tr>";
                     return;
                 }
 
@@ -6747,6 +6763,7 @@
                         + "<td><span class=\"" + badgeClass + "\">" + escapeHtml(statusText) + "</span></td>"
                         + "<td class=\"col-customer\">" + escapeHtml(customerName) + "</td>"
                         + "<td>" + escapeHtml(row.JobID || "-") + "</td>"
+                        + "<td>" + escapeHtml(row.MeetTypeDesc || "-") + "</td>"
                         + "<td>" + escapeHtml(formatDisplayDate(row.SchDate || reportModalState.schDate)) + "</td>"
                         + "<td>" + escapeHtml(formatScheduleAssignDate(row.AssignDate)) + "</td>"
                         + "<td class=\"assign-jo-address-col\">" + escapeHtml(row.Address || "-") + "</td>"
@@ -6792,6 +6809,7 @@
                 if (content) {
                     content.innerHTML = ""
                         + "<div><strong>Customer:</strong> " + escapeHtml(customer) + "</div>"
+                        + "<div><strong>Online / Onsite:</strong> " + escapeHtml(((row && row.MeetTypeDesc) || "-").toString()) + "</div>"
                         + "<div><strong>Tanggal Jadwal:</strong> " + escapeHtml(schDate || "-") + "</div>"
                         + "<div><strong>Tanggal Assign:</strong> " + escapeHtml(assignDate || "-") + "</div>"
                         + "<div><strong>Alamat:</strong> " + escapeHtml(address) + "</div>"
@@ -6994,6 +7012,10 @@
                 }
                 if (customer) {
                     customer.textContent = selected ? getCustomerDisplayText(selected) : "-";
+                }
+                var reportMeetType = document.getElementById("assignReportInfoMeetType");
+                if (reportMeetType) {
+                    reportMeetType.textContent = selected ? (selected.MeetTypeDesc || "-") : "-";
                 }
                 syncMoveJoPreviousAssign(
                     selected,
@@ -8470,7 +8492,7 @@
             }
 
             function getJoInfoTableColspan() {
-                return 14;
+                return 15;
             }
 
             function renderJoBranchFilterOptions(branchOptions, selectedValue) {
@@ -8632,6 +8654,7 @@
             function renderOrderInfo() {
                 var selected = getSelectedOrder();
                 var customer = document.getElementById("assignInfoCustomer");
+                var meetType = document.getElementById("assignInfoMeetType");
                 var remainingGps = document.getElementById("assignInfoRemainingGps");
                 var remainingAcs = document.getElementById("assignInfoRemainingAcs");
                 var inputUnit = document.getElementById("assignInputUnit");
@@ -8643,6 +8666,9 @@
                 if (!selected) {
                     if (customer) {
                         customer.textContent = "-";
+                    }
+                    if (meetType) {
+                        meetType.textContent = "-";
                     }
                     if (remainingGps) {
                         remainingGps.textContent = "0";
@@ -8666,6 +8692,9 @@
 
                 if (customer) {
                     customer.textContent = getCustomerDisplayText(selected);
+                }
+                if (meetType) {
+                    meetType.textContent = selected.MeetTypeDesc || "-";
                 }
                 var customerGps = getCustomerGpsCount(selected);
                 var customerAcs = getCustomerAcsCount(selected);
@@ -8811,6 +8840,7 @@
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.MarketingName || "-") + "</td>" +
                             "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.Remark || "-") + "</td>" +
                             deviceTypeCell +
+                            "<td>" + escapeHtml(item.MeetTypeDesc || "-") + "</td>" +
                             "<td>" + escapeHtml(customerGps.toString()) + "</td>" +
                             "<td>" + escapeHtml(lastAssign) + "</td>" +
                             "<td>" + escapeHtml(assignDate) + "</td>" +
@@ -9514,6 +9544,8 @@
                 var billableId = row.BillableID || row.billableId || "";
                 var categoryId = row.CategoryID || row.categoryId || "";
                 var categoryDesc = row.CategoryDesc || row.categoryDesc || "";
+                var meetTypeId = row.MeetTypeID || row.meetTypeId || "";
+                var meetTypeDesc = row.MeetTypeDesc || row.meetTypeDesc || "";
                 var remark = row.Remark || row.remark || "";
 
                 var trainingIdEl = document.getElementById("assignTrainingEditId");
@@ -9551,6 +9583,7 @@
                 if (picPhone) picPhone.value = "";
                 setSelectByIdOrText("assignTrainingBillable", billableId, "");
                 setSelectByIdOrText("assignTrainingCategory", categoryId, categoryDesc);
+                setSelectByIdOrText("assignTrainingMeetType", meetTypeId, meetTypeDesc);
                 loadCustomerContactExtras(custId);
                 hideEditJoPicker();
                 setCreateJoFeedback("", false, false);
@@ -9612,6 +9645,7 @@
                 var schInput = document.getElementById("assignTrainingSchDateInput");
                 var billable = document.getElementById("assignTrainingBillable");
                 var category = document.getElementById("assignTrainingCategory");
+                var meetType = document.getElementById("assignTrainingMeetType");
                 var remark = document.getElementById("assignTrainingRemark");
                 var picName = document.getElementById("assignTrainingPicName");
                 var picPhone = document.getElementById("assignTrainingPicPhone");
@@ -9628,6 +9662,7 @@
                 if (schInput) schInput.value = schDate || "";
                 if (billable) billable.value = "";
                 if (category) category.value = "";
+                if (meetType) meetType.value = "";
                 if (remark) remark.value = "";
                 if (picName) picName.value = "";
                 if (picPhone) picPhone.value = "";
@@ -9797,7 +9832,9 @@
                     var categories = readLookupList(result, "Categories", "categories");
                     var billables = readLookupList(result, "Billables", "billables");
                     var businessFields = readLookupList(result, "BusinessFields", "businessFields");
+                    var meetTypes = readLookupList(result, "MeetTypes", "meetTypes");
                     var categoryCount = fillTrainingSelect("assignTrainingCategory", categories);
+                    fillTrainingSelect("assignTrainingMeetType", meetTypes);
                     fillTrainingSelect("assignCloseJoCategory", categories);
                     fillTrainingSelect("assignCloseJoBusinessField", businessFields);
                     if (closeJoPickedBusinessFieldId) {
@@ -9862,6 +9899,7 @@
                     || "";
                 var billableId = (document.getElementById("assignTrainingBillable") || {}).value || "";
                 var categoryId = (document.getElementById("assignTrainingCategory") || {}).value || "";
+                var meetTypeId = (document.getElementById("assignTrainingMeetType") || {}).value || "";
                 var remark = ((document.getElementById("assignTrainingRemark") || {}).value || "").trim();
                 var itUserId = (document.getElementById("assignTrainingItUserId") || {}).value || "";
                 var itUserName = (document.getElementById("assignTrainingItUserName") || {}).value || "";
@@ -9887,6 +9925,10 @@
                 }
                 if (!billableId || billableId === "[Select]") {
                     setCreateJoFeedback("Billable wajib dipilih.", true, false);
+                    return true;
+                }
+                if (!meetTypeId || meetTypeId === "[Select]") {
+                    setCreateJoFeedback("Online / Onsite wajib dipilih.", true, false);
                     return true;
                 }
                 if (!schDate) {
@@ -9918,7 +9960,8 @@
                             categoryId: categoryId,
                             customerName: customerName,
                             picName: picName,
-                            picPhone: picPhone
+                            picPhone: picPhone,
+                            meetTypeId: meetTypeId
                         },
                         function (result) {
                             createJoSaving = false;
@@ -9971,7 +10014,8 @@
                         itUserName: itUserName,
                         customerName: customerName === "-" ? "" : customerName,
                         picName: picName,
-                        picPhone: picPhone
+                        picPhone: picPhone,
+                        meetTypeId: meetTypeId
                     },
                     function (result) {
                         createJoSaving = false;

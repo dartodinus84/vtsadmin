@@ -189,7 +189,8 @@ namespace vtsadm
         string categoryId,
         string customerName,
         string picName,
-        string picPhone)
+        string picPhone,
+        string meetTypeId = "")
     {
       return ExecuteUpdateJobTrainingAssign(
           trainingId,
@@ -201,7 +202,8 @@ namespace vtsadm
           categoryId,
           customerName,
           picName,
-          picPhone);
+          picPhone,
+          meetTypeId);
     }
 
     [WebMethod(EnableSession = true)]
@@ -217,7 +219,8 @@ namespace vtsadm
         string itUserName,
         string customerName = "",
         string picName = "",
-        string picPhone = "")
+        string picPhone = "",
+        string meetTypeId = "")
     {
       return ExecuteSaveJobTrainingAssign(
           custId,
@@ -230,7 +233,8 @@ namespace vtsadm
           itUserName,
           customerName,
           picName,
-          picPhone);
+          picPhone,
+          meetTypeId);
     }
 
     [WebMethod(EnableSession = true)]
@@ -720,7 +724,8 @@ namespace vtsadm
             + GetValue(row, "CustomerNumber") + " "
             + GetValue(row, "Remark") + " "
             + GetValue(row, "MarketingName") + " "
-            + GetValue(row, "DeviceTypeDesc")).ToLowerInvariant();
+            + GetValue(row, "DeviceTypeDesc") + " "
+            + GetValue(row, "MeetTypeDesc")).ToLowerInvariant();
         if (merged.Contains(search.ToLowerInvariant()))
         {
           filtered.ImportRow(row);
@@ -912,6 +917,7 @@ namespace vtsadm
         mapped.Columns.Add("DefaultAreaId");
         mapped.Columns.Add("DeviceTypeID");
         mapped.Columns.Add("DeviceTypeDesc");
+        mapped.Columns.Add("MeetTypeDesc");
         mapped.Columns.Add("TotalAssign", typeof(int));
         mapped.Columns.Add("TotalAssignGps", typeof(int));
         mapped.Columns.Add("TotalAssignAcs", typeof(int));
@@ -1054,6 +1060,9 @@ namespace vtsadm
                 categoryName,
                 GetValue(row, "TrainCategoryDesc"),
                 isVisit ? "Visit" : "Training");
+            target["MeetTypeDesc"] = FirstNonEmptyStatic(
+                GetValue(row, "MeetTypeDesc"),
+                GetValue(row, "MeetTypeID"));
             target["TotalAssign"] = assignedTotal;
             target["TotalAssignGps"] = assignGps;
             target["TotalAssignAcs"] = assignAcs;
@@ -1113,6 +1122,7 @@ namespace vtsadm
             DefaultAreaId = GetValue(row, "DefaultAreaId"),
             DeviceTypeID = GetValue(row, "DeviceTypeID"),
             DeviceTypeDesc = GetValue(row, "DeviceTypeDesc"),
+            MeetTypeDesc = GetValue(row, "MeetTypeDesc"),
             TotalAssign = ParseIntFromColumns(row, "TotalAssign"),
             TotalAssignGps = ParseIntFromColumns(row, "TotalAssignGps"),
             TotalAssignAcs = ParseIntFromColumns(row, "TotalAssignAcs"),

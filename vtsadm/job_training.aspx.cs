@@ -73,6 +73,37 @@ namespace vtsadm
             return categoryId != "" && categoryId != "[Select]";
         }
 
+        private bool IsValidMeetTypeSelected()
+        {
+            if (CmbMeetTypeID.SelectedItem == null)
+            {
+                return false;
+            }
+
+            string meetTypeId = CmbMeetTypeID.SelectedItem.Value.Trim();
+            return meetTypeId != "" && meetTypeId != "[Select]";
+        }
+
+        private void BindMeetTypeDropdown()
+        {
+            CmbMeetTypeID.Items.Clear();
+            CmbMeetTypeID.Items.Add(new ListItem("[Select]", "[Select]"));
+            foreach (dashboard_assign_job.TrainingLookupItem item in dashboard_assign_job.ListMeetTypes())
+            {
+                if (item == null || string.IsNullOrWhiteSpace(item.Value))
+                {
+                    continue;
+                }
+
+                CmbMeetTypeID.Items.Add(new ListItem(string.IsNullOrWhiteSpace(item.Text) ? item.Value : item.Text, item.Value));
+            }
+
+            if (CmbMeetTypeID.Items.FindByValue("[Select]") != null)
+            {
+                CmbMeetTypeID.SelectedValue = "[Select]";
+            }
+        }
+
         private void clear()
         {
             try
@@ -88,6 +119,7 @@ namespace vtsadm
                 CmbBillAble.SelectedValue = "[Select]";
                 ClType.Open_Combos(CmbTrainCategoryID, Session["ClsTypeDBConnStringSQL"].ToString(), "", "sp_list_training_category");
                 CmbTrainCategoryID.SelectedValue = "[Select]";
+                BindMeetTypeDropdown();
                 txtScheduleDate.Text = "";
                 txtRemark.Text = "";
                 txtSearch.Value = "";
@@ -152,6 +184,10 @@ namespace vtsadm
                     return;
                 }
 
+                if (ds.Tables.Count > 0)
+                {
+                    dashboard_assign_job.FillMeetTypeColumns(ds.Tables[0], Session["ClsTypeDBConnStringSQL"].ToString());
+                }
                 GridView1.DataSource = ds;
                 GridView1.DataBind();
                 Session["RecCreateJobTrainingHeader"] = ds;
@@ -200,6 +236,12 @@ namespace vtsadm
                         return;
                     }
 
+                    if (!IsValidMeetTypeSelected())
+                    {
+                        div_comment.InnerHtml = "<div class='alert alert-danger' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Failed!</strong> Please select Online / Onsite</div>";
+                        return;
+                    }
+
                     if (CmdSubmit.Text.ToUpper() == "SUBMIT")
                     {
                         strSQL = "sp_submit_job_training '" + txtCustID.Value.Trim() + "','" + txtReqDate.Text.Trim() + "','" + CmbBillAble.SelectedItem.Value.Trim() + "','" + txtScheduleDate.Text.Trim() + "','" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
@@ -220,10 +262,18 @@ namespace vtsadm
                                     Convert.ToDateTime(txtScheduleDate.Text),
                                     CmbTrainCategoryID.SelectedItem.Value.Trim(),
                                     tanda);
+                                string meetTypeError = dashboard_assign_job.SaveCreatedTrainingMeetType(
+                                    Session["ClsTypeDBConnStringSQL"].ToString(),
+                                    txtCustID.Value.Trim(),
+                                    Session["ClsTypeUserID"].ToString(),
+                                    Convert.ToDateTime(txtScheduleDate.Text),
+                                    CmbMeetTypeID.SelectedItem.Value.Trim());
+                                string meetTypeDesc = CmbMeetTypeID.SelectedItem.Text.Trim();
                                 clear();
                                 Open_GridViewHeader();
-                                div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Submit job training has been successfully</div>";
-                                Bot(jodate, cus, pic, picnumber, tanda, Convert.ToString(Session["ClsTypeUserID"]), false);
+                                string meetTypeNote = string.IsNullOrWhiteSpace(meetTypeError) ? "" : " Online/Onsite tidak tersimpan: " + HttpUtility.HtmlEncode(meetTypeError);
+                                div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Submit job training has been successfully" + meetTypeNote + "</div>";
+                                Bot(jodate, cus, pic, picnumber, tanda, Convert.ToString(Session["ClsTypeUserID"]), false, meetTypeDesc);
                             }
                             else
                             {
@@ -266,10 +316,16 @@ namespace vtsadm
                                     cus,
                                     pic,
                                     picnumber,
+                                    CmbMeetTypeID.SelectedItem.Value.Trim(),
                                     Convert.ToString(Session["ClsTypeUserID"]));
+                                string meetTypeError = dashboard_assign_job.SaveTrainingMeetType(
+                                    Session["ClsTypeDBConnStringSQL"].ToString(),
+                                    trainingIdBeforeUpdate,
+                                    CmbMeetTypeID.SelectedItem.Value.Trim());
                                 clear();
                                 Open_GridViewHeader();
-                                div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Update job training has been successfully</div>";
+                                string meetTypeNote = string.IsNullOrWhiteSpace(meetTypeError) ? "" : " Online/Onsite tidak tersimpan: " + HttpUtility.HtmlEncode(meetTypeError);
+                                div_comment.InnerHtml = "<div class='alert alert-success' role='alert'><button type = 'button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button><strong>Success!</strong> Update job training has been successfully" + meetTypeNote + "</div>";
                             }
                             else
                             {
@@ -338,27 +394,27 @@ namespace vtsadm
         {
             try
             {
-                if (e.Row.Cells.Count < 15)
+                if (e.Row.Cells.Count < 17)
                 {
                     return;
                 }
 
                 if (e.Row.RowType == DataControlRowType.Header)
                 {
-                    for (int i = 9; i <= 14; i++)
+                    for (int i = 10; i <= 16; i++)
                     {
                         e.Row.Cells[i].Visible = false;
                     }
                 }
                 else if (e.Row.RowType == DataControlRowType.DataRow)
                 {
-                    e.Row.Cells[7].ToolTip = "Edit";
-                    LinkButton CmdButton = (LinkButton)e.Row.Cells[8].FindControl("CmdDelete");
+                    e.Row.Cells[8].ToolTip = "Edit";
+                    LinkButton CmdButton = (LinkButton)e.Row.Cells[9].FindControl("CmdDelete");
                     if (CmdButton != null)
                     {
-                        CmdButton.OnClientClick = "confirmDelete('" + e.Row.Cells[0].Text.ToString() + "','" + e.Row.Cells[6].Text.ToString() + "'); return false;";
+                        CmdButton.OnClientClick = "confirmDelete('" + e.Row.Cells[0].Text.ToString() + "','" + e.Row.Cells[7].Text.ToString() + "'); return false;";
                     }
-                    for (int i = 9; i <= 14; i++)
+                    for (int i = 10; i <= 16; i++)
                     {
                         e.Row.Cells[i].Visible = false;
                     }
@@ -426,13 +482,14 @@ namespace vtsadm
                 sFullName = (e.CommandSource as GridView).Rows[iRow].Cells[2].Text.Trim();
                 sSchDate = (e.CommandSource as GridView).Rows[iRow].Cells[3].Text.Trim();
                 sBillableDesc = (e.CommandSource as GridView).Rows[iRow].Cells[5].Text.Trim();
-                sStatus = (e.CommandSource as GridView).Rows[iRow].Cells[6].Text.Trim();
-                sCustID = (e.CommandSource as GridView).Rows[iRow].Cells[9].Text.Trim();
-                sCustType = (e.CommandSource as GridView).Rows[iRow].Cells[10].Text.Trim();
-                sBranchName = (e.CommandSource as GridView).Rows[iRow].Cells[11].Text.Trim();
-                sBillableID = (e.CommandSource as GridView).Rows[iRow].Cells[12].Text.Trim();
-                sTrainCategoryID = (e.CommandSource as GridView).Rows[iRow].Cells[13].Text.Trim();
-                sRemark = (e.CommandSource as GridView).Rows[iRow].Cells[14].Text.Trim();
+                sStatus = (e.CommandSource as GridView).Rows[iRow].Cells[7].Text.Trim();
+                sCustID = (e.CommandSource as GridView).Rows[iRow].Cells[10].Text.Trim();
+                sCustType = (e.CommandSource as GridView).Rows[iRow].Cells[11].Text.Trim();
+                sBranchName = (e.CommandSource as GridView).Rows[iRow].Cells[12].Text.Trim();
+                sBillableID = (e.CommandSource as GridView).Rows[iRow].Cells[13].Text.Trim();
+                sTrainCategoryID = (e.CommandSource as GridView).Rows[iRow].Cells[14].Text.Trim();
+                sRemark = (e.CommandSource as GridView).Rows[iRow].Cells[15].Text.Trim();
+                string sMeetTypeID = (e.CommandSource as GridView).Rows[iRow].Cells[16].Text.Trim();
                 switch (e.CommandName.ToUpper())
                 {
                     case "CHANGES":
@@ -455,6 +512,15 @@ namespace vtsadm
                             else
                             {
                                 CmbTrainCategoryID.SelectedValue = "[Select]";
+                            }
+                            string meetTypeId = ClType.CheckNbsp(sMeetTypeID);
+                            if (!string.IsNullOrWhiteSpace(meetTypeId) && CmbMeetTypeID.Items.FindByValue(meetTypeId) != null)
+                            {
+                                CmbMeetTypeID.SelectedValue = meetTypeId;
+                            }
+                            else if (CmbMeetTypeID.Items.FindByValue("[Select]") != null)
+                            {
+                                CmbMeetTypeID.SelectedValue = "[Select]";
                             }
 
                             Button2.Style.Add("disabled", "disabled");
@@ -496,10 +562,15 @@ namespace vtsadm
         }
         protected void Bot(string jodate, string cus, string pic, string picnumber, string tanda)
         {
-            Bot(jodate, cus, pic, picnumber, tanda, string.Empty, false);
+            Bot(jodate, cus, pic, picnumber, tanda, string.Empty, false, string.Empty);
         }
 
         protected void Bot(string jodate, string cus, string pic, string picnumber, string tanda, string usrUpd, bool isEdit)
+        {
+            Bot(jodate, cus, pic, picnumber, tanda, usrUpd, isEdit, string.Empty);
+        }
+
+        protected void Bot(string jodate, string cus, string pic, string picnumber, string tanda, string usrUpd, bool isEdit, string meetTypeDesc)
         {
             string apitoken = "";
             string url = "";
@@ -531,7 +602,7 @@ namespace vtsadm
                 string urlString = url;
                 string apiToken = apitoken;
                 string chatId = chatid;
-                string text = BodyTelegram(jodate, cus, pic, picnumber, tanda, usrUpd, isEdit);
+                string text = BodyTelegram(jodate, cus, pic, picnumber, tanda, usrUpd, isEdit, meetTypeDesc);
                 urlString = String.Format(urlString, apiToken, chatId, text);
 
                 WebClient webclient = new WebClient();
@@ -544,10 +615,15 @@ namespace vtsadm
         }
         private string BodyTelegram(string jodate, string cus, string pic, string picnumber, string tanda)
         {
-            return BodyTelegram(jodate, cus, pic, picnumber, tanda, string.Empty, false);
+            return BodyTelegram(jodate, cus, pic, picnumber, tanda, string.Empty, false, string.Empty);
         }
 
         private string BodyTelegram(string jodate, string cus, string pic, string picnumber, string tanda, string usrUpd, bool isEdit)
+        {
+            return BodyTelegram(jodate, cus, pic, picnumber, tanda, usrUpd, isEdit, string.Empty);
+        }
+
+        private string BodyTelegram(string jodate, string cus, string pic, string picnumber, string tanda, string usrUpd, bool isEdit, string meetTypeDesc)
         {
             string msg = "";
             msg += isEdit ? "<b>UPDATE JOB ORDER TRAINING</b>\r\n" : "<b>CREATE JOB ORDER TRAINING</b>\r\n";
@@ -559,6 +635,8 @@ namespace vtsadm
             msg += "<b>" + pic + "</b>\r\n";
             msg += "<b>PIC Number</b>\r\n";
             msg += "<b>" + picnumber + "</b>\r\n";
+            msg += "<b>Online / Onsite</b>\r\n";
+            msg += "<b>" + (meetTypeDesc ?? string.Empty) + "</b>\r\n";
             msg += "<b>Remark</b>\r\n";
             msg += "<b>" + tanda + "</b>\r\n";
             msg += "<b>User Update/Create</b>\r\n";

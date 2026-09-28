@@ -28,6 +28,7 @@ namespace vtsadm
             public string BranchName { get; set; }
             public string DeviceTypeID { get; set; }
             public string DeviceTypeDesc { get; set; }
+            public string MeetTypeDesc { get; set; }
             public int TotalAssign { get; set; }
             public int TotalAssignGps { get; set; }
             public int TotalAssignAcs { get; set; }
@@ -91,6 +92,7 @@ namespace vtsadm
             public List<TrainingLookupItem> Categories { get; set; }
             public List<TrainingLookupItem> Billables { get; set; }
             public List<TrainingLookupItem> BusinessFields { get; set; }
+            public List<TrainingLookupItem> MeetTypes { get; set; }
         }
 
         public class TrainingPictureUploadResponse
@@ -134,6 +136,8 @@ namespace vtsadm
             public string BillableID { get; set; }
             public string CategoryID { get; set; }
             public string CategoryDesc { get; set; }
+            public string MeetTypeID { get; set; }
+            public string MeetTypeDesc { get; set; }
             public string Remark { get; set; }
             public string Status { get; set; }
         }
@@ -372,6 +376,7 @@ namespace vtsadm
             public string StatusCode { get; set; }
             public string StatusText { get; set; }
             public string Remark { get; set; }
+            public string MeetTypeDesc { get; set; }
             public bool CanDelete { get; set; }
         }
 
@@ -1227,7 +1232,8 @@ namespace vtsadm
                     GetPayloadString(args, "itUserName"),
                     GetPayloadString(args, "customerName"),
                     GetPayloadString(args, "picName"),
-                    GetPayloadString(args, "picPhone"));
+                    GetPayloadString(args, "picPhone"),
+                    GetPayloadString(args, "meetTypeId"));
             }
 
             if (method.Equals("LoadOpenTrainingJobs", StringComparison.OrdinalIgnoreCase))
@@ -1257,7 +1263,8 @@ namespace vtsadm
                     GetPayloadString(args, "categoryId"),
                     GetPayloadString(args, "customerName"),
                     GetPayloadString(args, "picName"),
-                    GetPayloadString(args, "picPhone"));
+                    GetPayloadString(args, "picPhone"),
+                    GetPayloadString(args, "meetTypeId"));
             }
 
             if (method.Equals("LoadCustomerOpenJobs", StringComparison.OrdinalIgnoreCase))
@@ -2646,7 +2653,9 @@ namespace vtsadm
                 throw new InvalidOperationException(procedureName + ": " + openError);
             }
 
-            return rec.DataRecord() ?? new DataTable();
+            DataTable table = rec.DataRecord() ?? new DataTable();
+            FillMeetTypeColumns(table, connString);
+            return table;
         }
 
         private DataTable MapTrxJobAssignDetailRowsToAssignList(
@@ -12277,7 +12286,8 @@ ORDER BY
                 Message = string.Empty,
                 Categories = new List<TrainingLookupItem>(),
                 Billables = new List<TrainingLookupItem>(),
-                BusinessFields = new List<TrainingLookupItem>()
+                BusinessFields = new List<TrainingLookupItem>(),
+                MeetTypes = new List<TrainingLookupItem>()
             };
 
             try
@@ -12285,6 +12295,7 @@ ORDER BY
                 response.Categories = LoadTrainingCategoryLookups();
                 response.Billables = LoadBillableLookups();
                 response.BusinessFields = LoadBusinessFieldLookups();
+                response.MeetTypes = LoadMeetTypeLookups();
                 if (response.Categories == null || response.Categories.Count == 0)
                 {
                     response.Message = "Category Training/Visit tidak ditemukan.";
@@ -12356,6 +12367,128 @@ ORDER BY
             }
 
             return items;
+        }
+
+        public static List<TrainingLookupItem> ListMeetTypes()
+        {
+            return LoadMeetTypeLookups();
+        }
+
+        private static List<TrainingLookupItem> LoadMeetTypeLookups()
+        {
+            return MapLookupTable(TryLoadLookupTable(
+                "SELECT MeetTypeID, MeetTypeDesc FROM ref_meet_type WITH (NOLOCK) WHERE ISNULL(Status, 'RG') IN ('RG', 'OP', 'AC') ORDER BY MeetTypeDesc",
+                "SELECT MeetTypeID, MeetTypeDesc FROM ref_meet_type WITH (NOLOCK) ORDER BY MeetTypeDesc"));
+        }
+
+        public static void FillMeetTypeColumns(DataTable table, string connString)
+        {
+            if (table == null)
+            {
+                return;
+            }
+
+            if (!table.Columns.Contains("MeetTypeID"))
+            {
+                table.Columns.Add("MeetTypeID", typeof(string));
+            }
+
+            if (!table.Columns.Contains("MeetTypeDesc"))
+            {
+                table.Columns.Add("MeetTypeDesc", typeof(string));
+            }
+
+            if (table.Rows.Count == 0 || string.IsNullOrWhiteSpace(connString) || !table.Columns.Contains("TrainingID"))
+            {
+                return;
+            }
+
+            try
+            {
+                DataTable lookup = ExecuteJobTrainingQuery(
+                    "SELECT LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) AS TrainingID, "
+                        + "LTRIM(RTRIM(ISNULL(t.MeetTypeID, ''))) AS MeetTypeID, "
+                        + "LTRIM(RTRIM(ISNULL(m.MeetTypeDesc, ''))) AS MeetTypeDesc "
+                        + "FROM trx_training_order t WITH (NOLOCK) "
+                        + "LEFT JOIN ref_meet_type m WITH (NOLOCK) ON LTRIM(RTRIM(ISNULL(m.MeetTypeID, ''))) = LTRIM(RTRIM(ISNULL(t.MeetTypeID, '')))",
+                    connString);
+                Dictionary<string, string[]> map = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                if (lookup != null)
+                {
+                    foreach (DataRow row in lookup.Rows)
+                    {
+                        string trainingId = GetValue(row, "TrainingID").Trim();
+                        if (string.IsNullOrWhiteSpace(trainingId) || map.ContainsKey(trainingId))
+                        {
+                            continue;
+                        }
+
+                        map[trainingId] = new string[]
+                        {
+                            GetValue(row, "MeetTypeID").Trim(),
+                            GetValue(row, "MeetTypeDesc").Trim()
+                        };
+                    }
+                }
+
+                foreach (DataRow row in table.Rows)
+                {
+                    string trainingId = GetValue(row, "TrainingID").Trim();
+                    string[] values;
+                    if (string.IsNullOrWhiteSpace(trainingId) || !map.TryGetValue(trainingId, out values))
+                    {
+                        continue;
+                    }
+
+                    row["MeetTypeID"] = values[0];
+                    row["MeetTypeDesc"] = values[1];
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        public static string SaveTrainingMeetType(string connString, string trainingId, string meetTypeId)
+        {
+            string safeTrainingId = (trainingId ?? string.Empty).Trim();
+            string safeMeetTypeId = (meetTypeId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(connString) || string.IsNullOrWhiteSpace(safeTrainingId) || string.IsNullOrWhiteSpace(safeMeetTypeId))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                ExecuteAdHocSqlNonQuery(
+                    "UPDATE trx_training_order SET MeetTypeID = '"
+                        + EscapeSqlLiteral(safeMeetTypeId)
+                        + "' WHERE LTRIM(RTRIM(ISNULL(TrainingID, ''))) = '"
+                        + EscapeSqlLiteral(safeTrainingId)
+                        + "'",
+                    connString);
+                return string.Empty;
+            }
+            catch (Exception ex)
+            {
+                return ex.Message ?? string.Empty;
+            }
+        }
+
+        public static string SaveCreatedTrainingMeetType(
+            string connString,
+            string custId,
+            string userId,
+            DateTime schDate,
+            string meetTypeId)
+        {
+            string jobId = LookupLatestCreatedTrainingId(connString, custId, userId, schDate);
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                return "Training ID baru tidak ditemukan.";
+            }
+
+            return SaveTrainingMeetType(connString, jobId, meetTypeId);
         }
 
         private static List<TrainingLookupItem> LoadBusinessFieldLookups()
@@ -12682,6 +12815,8 @@ ORDER BY
                 BillableID = FirstNonEmptyStatic(GetValue(row, "BillAbleID"), GetValue(row, "BillableID"), GetValue(row, "BillableId")),
                 CategoryID = FirstNonEmptyStatic(GetValue(row, "TrainCategoryID"), GetValue(row, "CategoryID")),
                 CategoryDesc = FirstNonEmptyStatic(GetValue(row, "TrainCategoryDesc"), GetValue(row, "CategoryDesc")),
+                MeetTypeID = GetValue(row, "MeetTypeID"),
+                MeetTypeDesc = GetValue(row, "MeetTypeDesc"),
                 Remark = GetValue(row, "Remark"),
                 Status = FirstNonEmptyStatic(GetValue(row, "Status"), GetValue(row, "StatusCode"))
             };
@@ -12847,7 +12982,8 @@ ORDER BY
             string categoryId,
             string customerName,
             string picName,
-            string picPhone)
+            string picPhone,
+            string meetTypeId = "")
         {
             SaveAssignResponse response = new SaveAssignResponse
             {
@@ -12893,6 +13029,12 @@ ORDER BY
             if (string.IsNullOrWhiteSpace(billableId) || billableId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
             {
                 response.Message = "Billable wajib dipilih.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(meetTypeId) || meetTypeId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                response.Message = "Online / Onsite wajib dipilih.";
                 return response;
             }
 
@@ -12953,6 +13095,11 @@ ORDER BY
                 response.Result = "SUCCESS";
                 response.AssignID = safeTrainingId;
                 response.Message = "Job Training/Visit berhasil di-update.";
+                string meetTypeError = SaveTrainingMeetType(connString, safeTrainingId, meetTypeId);
+                if (!string.IsNullOrWhiteSpace(meetTypeError))
+                {
+                    response.Message += " Online/Onsite tidak tersimpan: " + meetTypeError;
+                }
                 SendJobTrainingEditTelegram(
                     connString,
                     detailResponse.Row,
@@ -12962,6 +13109,7 @@ ORDER BY
                     scheduleDateValue,
                     billableId,
                     categoryId,
+                    meetTypeId,
                     customerName,
                     picName,
                     picPhone,
@@ -13743,7 +13891,8 @@ ORDER BY
             string itUserName,
             string customerName = "",
             string picName = "",
-            string picPhone = "")
+            string picPhone = "",
+            string meetTypeId = "")
         {
             SaveAssignResponse response = new SaveAssignResponse
             {
@@ -13782,6 +13931,12 @@ ORDER BY
             if (string.IsNullOrWhiteSpace(billableId) || billableId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
             {
                 response.Message = "Billable wajib dipilih.";
+                return response;
+            }
+
+            if (string.IsNullOrWhiteSpace(meetTypeId) || meetTypeId.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                response.Message = "Online / Onsite wajib dipilih.";
                 return response;
             }
 
@@ -13844,6 +13999,12 @@ ORDER BY
                     userId,
                     scheduleDateValue,
                     originalRemark);
+                string meetTypeError = SaveCreatedTrainingMeetType(
+                    connString,
+                    custId.Trim(),
+                    userId,
+                    scheduleDateValue,
+                    meetTypeId);
                 string assignedTechnicianId;
                 if (TryAutoAssignCreatedTrainingJob(
                     connString,
@@ -13861,6 +14022,11 @@ ORDER BY
                         + assignedTechnicianId + ".";
                 }
 
+                if (!string.IsNullOrWhiteSpace(meetTypeError))
+                {
+                    response.Message += " Online/Onsite tidak tersimpan: " + meetTypeError;
+                }
+
                 SendJobTrainingCreateTelegram(
                     connString,
                     custId.Trim(),
@@ -13869,7 +14035,8 @@ ORDER BY
                     picName,
                     picPhone,
                     originalRemark,
-                    userId);
+                    userId,
+                    meetTypeId);
             }
             catch (Exception ex)
             {
@@ -14302,7 +14469,8 @@ ORDER BY
             string picName,
             string picPhone,
             string remark,
-            string usrUpd)
+            string usrUpd,
+            string meetTypeId)
         {
             string mapsLine = string.Empty;
             string mapsUrl = string.Empty;
@@ -14331,6 +14499,8 @@ ORDER BY
                 + "<b>" + (picName ?? string.Empty) + "</b>\r\n"
                 + "<b>PIC Number</b>\r\n"
                 + "<b>" + (picPhone ?? string.Empty) + "</b>\r\n"
+                + "<b>Online / Onsite</b>\r\n"
+                + "<b>" + DescribeMeetType(connString, meetTypeId) + "</b>\r\n"
                 + mapsLine
                 + "<b>Remark</b>\r\n"
                 + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
@@ -14358,6 +14528,7 @@ ORDER BY
             string customerName,
             string picName,
             string picPhone,
+            string meetTypeId,
             string usrUpd)
         {
             DateTime requestDateValue;
@@ -14381,6 +14552,7 @@ ORDER BY
                 scheduleDateValue,
                 billableId,
                 categoryId,
+                meetTypeId,
                 customerName,
                 picName,
                 picPhone,
@@ -14397,6 +14569,7 @@ ORDER BY
             DateTime scheduleDate,
             string billableId,
             string categoryId,
+            string meetTypeId,
             string customerName,
             string picName,
             string picPhone,
@@ -14442,6 +14615,11 @@ ORDER BY
             AppendTrainingEditDateChange(changes, "Schedule Date", before == null ? string.Empty : before.SchDate, scheduleDate);
             AppendTrainingEditChange(changes, "Billable", oldBillable, newBillable);
             AppendTrainingEditChange(changes, "Category", oldCategory, newCategory);
+            AppendTrainingEditChange(
+                changes,
+                "Online / Onsite",
+                before == null ? string.Empty : FirstNonEmptyStatic(before.MeetTypeDesc, DescribeMeetType(connString, before.MeetTypeID)),
+                DescribeMeetType(connString, meetTypeId));
             AppendTrainingEditChange(changes, "Remark", before == null ? string.Empty : before.Remark, remark);
             AppendTrainingEditChange(changes, "PIC Name", oldPicName, picName);
             AppendTrainingEditChange(changes, "PIC Number", oldPicPhone, picPhone);
@@ -14555,6 +14733,22 @@ ORDER BY
                         + "WHERE LTRIM(RTRIM(ISNULL(BillAbleID, ''))) = '" + EscapeSqlLiteral(id) + "'");
             }
 
+            return FirstNonEmptyStatic(desc, id);
+        }
+
+        private static string DescribeMeetType(string connString, string meetTypeId)
+        {
+            string id = (meetTypeId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return string.Empty;
+            }
+
+            string desc = LookupTrainingSqlValue(
+                connString,
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MeetTypeDesc, ''))) "
+                    + "FROM ref_meet_type WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) = '" + EscapeSqlLiteral(id) + "'");
             return FirstNonEmptyStatic(desc, id);
         }
 
@@ -15114,6 +15308,16 @@ ORDER BY
                 bool isVisit = IsVisitCategory(categoryName, categoryId);
                 row.JobType = isVisit ? "Visit" : "Training";
                 row.Remark = FirstNonEmptyStatic(GetValue(orderRow, "Remark"), row.Remark);
+                string meetTypeId = GetValue(orderRow, "MeetTypeID");
+                string connString = string.Empty;
+                HttpContext meetContext = HttpContext.Current;
+                if (meetContext != null && meetContext.Session != null)
+                {
+                    connString = Convert.ToString(meetContext.Session["ClsTypeDBConnStringSQL"]);
+                }
+                row.MeetTypeDesc = FirstNonEmptyStatic(
+                    GetValue(orderRow, "MeetTypeDesc"),
+                    DescribeMeetType(connString, meetTypeId));
                 break;
             }
         }
