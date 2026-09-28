@@ -7273,10 +7273,9 @@
                 var selectedStatus = reportModalState.submitAction === "administration"
                     ? "AD"
                     : (reportModalState.targetStatus || "AV").toUpperCase();
-                var currentReportStatus = normalizeStatusCode(reportModalState.activeCell ? (reportModalState.activeCell.getAttribute("data-status") || "") : "");
                 if (reportModalState.submitAction !== "administration"
                     && hasPickedJobOrder(getCurrentReportOrder())
-                    && selectedStatus !== currentReportStatus) {
+                    && isStatusOnlyStatus(selectedStatus)) {
                     alertDeleteJobOrderBeforeStatusChange();
                     return;
                 }
@@ -11628,7 +11627,8 @@
                         if (!button || button.disabled) {
                             return;
                         }
-                        if (hasPickedJobOrder(getCurrentReportOrder())) {
+                        var nextReportStatus = button.getAttribute("data-status-value") || "AV";
+                        if (hasPickedJobOrder(getCurrentReportOrder()) && isStatusOnlyStatus(nextReportStatus)) {
                             alertDeleteJobOrderBeforeStatusChange();
                             return;
                         }
@@ -11817,7 +11817,8 @@
                         if (!button || button.disabled) {
                             return;
                         }
-                        if (hasPickedJobOrder(getSelectedOrder())) {
+                        var nextAssignStatus = button.getAttribute("data-status-value") || "AV";
+                        if (hasPickedJobOrder(getSelectedOrder()) && isStatusOnlyStatus(nextAssignStatus)) {
                             alertDeleteJobOrderBeforeStatusChange();
                             return;
                         }
@@ -11868,8 +11869,7 @@
                         }
 
                         var selectedStatus = (assignModalState.targetStatus || "AV").toUpperCase();
-                        var currentCellStatus = normalizeStatusCode(assignModalState.activeCell ? (assignModalState.activeCell.getAttribute("data-status") || "") : "");
-                        if (hasPickedJobOrder(getSelectedOrder()) && selectedStatus !== currentCellStatus) {
+                        if (hasPickedJobOrder(getSelectedOrder()) && isStatusOnlyStatus(selectedStatus)) {
                             alertDeleteJobOrderBeforeStatusChange();
                             return;
                         }

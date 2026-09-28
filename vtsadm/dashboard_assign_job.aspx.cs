@@ -13482,7 +13482,8 @@ ORDER BY
                     trainingDateValue,
                     GetPayloadString(payload, "customerName"),
                     safeRemark,
-                    safeTrainers);
+                    safeTrainers,
+                    userId);
             }
             catch (Exception ex)
             {
@@ -14368,7 +14369,8 @@ ORDER BY
             DateTime trainingDate,
             string customerName,
             string remark,
-            string trainers)
+            string trainers,
+            string usrUpd)
         {
             string msg = "<b>JOB ORDER CUSTOMER TRAINING SUCCESS</b>\r\n"
                 + "<b>Training Job Order</b>\r\n"
@@ -14382,7 +14384,10 @@ ORDER BY
                 + "<b>Remark</b>\r\n"
                 + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
                 + "<b>Trainers</b>\r\n"
-                + "<b>" + (trainers ?? string.Empty) + "</b>\r\n";
+                + "<b>" + (trainers ?? string.Empty) + "</b>\r\n"
+                + "<b>User Update/Create</b>\r\n"
+                + "<b>" + (usrUpd ?? string.Empty) + "</b>\r\n";
+            SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
             SendLegacyTrainingTelegram(connString, "TelegramChatID2", msg);
         }
 
