@@ -9311,7 +9311,7 @@
                     editWrap.hidden = createJoFormMode !== "edit";
                 }
                 if (pickCustomerBtn) {
-                    pickCustomerBtn.disabled = createJoFormMode === "edit";
+                    pickCustomerBtn.disabled = false;
                 }
             }
 
@@ -9365,11 +9365,7 @@
             }
 
             function openTrainingCustomerPicker() {
-                if (createJoFormMode === "edit") {
-                    setCreateJoFeedback("Customer tidak bisa diubah saat edit JO.", true, false);
-                    return;
-                }
-
+                hideEditJoPicker();
                 var backdrop = getTrainingCustomerBackdrop();
                 if (!backdrop) {
                     setCreateJoFeedback("Dialog customer tidak ditemukan.", true, false);
@@ -10037,7 +10033,10 @@
                 closeTrainingCustomerPicker();
                 if (isCreateJoModalOpen()) {
                     setCreateJoFeedback("", false, false);
-                    refreshCustomerOpenJoNotice(sCustID, "", "assignCreateJoExistingNotice");
+                    var excludeJobId = createJoFormMode === "edit"
+                        ? (((document.getElementById("assignTrainingEditId") || {}).value || "").trim())
+                        : "";
+                    refreshCustomerOpenJoNotice(sCustID, excludeJobId, "assignCreateJoExistingNotice");
                 } else {
                     setFeedback("", false, false);
                 }
