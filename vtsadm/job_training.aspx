@@ -109,6 +109,7 @@
                     </div>
                     <div class="box-body">
                         <div id="div_list_alert" runat="server" class="form-group form-group-sm" visible="false"></div>
+                        <p style="margin:0 0 8px;font-size:12px;color:#92400e;">Baris krem = JO sudah di-assign ke IT Support.</p>
                         <div class="form-group form-group-sm">
                             <asp:Panel runat="server" ScrollBars="Auto">
                                 <asp:GridView ID="GridView1" runat="server" BackColor="WhiteSmoke" AllowSorting="true" Font-Size="Small" CssClass="table table-bordered" CellPadding="2" Width="100%" AutoGenerateColumns="False" Font-Bold="False" CellSpacing="1" EmptyDataText="No items to display" ForeColor="#003481" GridLines="None" BorderWidth="0px" AllowPaging="True" PageSize="5" OnRowDeleting="GridView1_RowDeleting" OnPageIndexChanging="GridView1_PageIndexChanging" OnRowEditing="GridView1_RowEditing" OnRowDataBound="GridView1_RowDataBound" OnRowCommand="GridView1_RowCommand" OnSorting="GridView1_Sorting" >

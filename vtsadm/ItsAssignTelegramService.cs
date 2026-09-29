@@ -43,7 +43,8 @@ namespace vtsadm
             string custId,
             string technicianId,
             DateTime schDate,
-            string jobRemark = "")
+            string jobRemark = "",
+            string meetTypeLabel = "")
         {
             AssignDetail detail = ResolveAssignNotificationDetail(
                 connString,
@@ -57,6 +58,7 @@ namespace vtsadm
             }
 
             ApplyJobOrderRemarkOverride(detail, jobRemark);
+            ApplyKnownMeetTypeLabel(connString, detail, meetTypeLabel);
             detail.UpdatedBy = ResolveActingUserId();
             SendNotificationMessage(connString, BuildDetailMessage(detail));
         }
@@ -68,7 +70,8 @@ namespace vtsadm
             string fromTechnicianId,
             string toTechnicianId,
             DateTime schDate,
-            string actionNote = "")
+            string actionNote = "",
+            string meetTypeLabel = "")
         {
             if (string.IsNullOrWhiteSpace(connString)
                 || string.IsNullOrWhiteSpace(jobId)
@@ -92,6 +95,7 @@ namespace vtsadm
             detail.PreviousTechnicianId = fromTechnicianId.Trim();
             detail.PreviousTechnicianName = ResolveItsSupportName(connString, fromTechnicianId);
             detail.ActionNote = (actionNote ?? string.Empty).Trim();
+            ApplyKnownMeetTypeLabel(connString, detail, meetTypeLabel);
             detail.UpdatedBy = ResolveActingUserId();
             SendNotificationMessage(connString, BuildTransferMessage(detail));
         }
@@ -1070,13 +1074,69 @@ namespace vtsadm
                 }
 
                 detail.BranchName = FirstNonEmpty(GetRowString(row, "BranchName"), detail.BranchName);
-                string meetTypeId = GetRowString(row, "MeetTypeID");
-                detail.MeetTypeDesc = FirstNonEmpty(
-                    GetRowString(row, "MeetTypeDesc"),
-                    LookupMeetTypeDesc(connString, meetTypeId),
-                    detail.MeetTypeDesc);
                 break;
             }
+
+            ApplyStoredMeetType(connString, detail);
+        }
+
+        private static void ApplyKnownMeetTypeLabel(string connString, AssignDetail detail, string meetTypeLabel)
+        {
+            if (detail == null)
+            {
+                return;
+            }
+
+            ApplyStoredMeetType(connString, detail);
+            string known = (meetTypeLabel ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(known) || known == "-" || known.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            detail.MeetTypeDesc = FirstNonEmpty(LookupMeetTypeDesc(connString, known), known, detail.MeetTypeDesc);
+        }
+
+        private static void ApplyStoredMeetType(string connString, AssignDetail detail)
+        {
+            if (detail == null || string.IsNullOrWhiteSpace(detail.JobId))
+            {
+                return;
+            }
+
+            string jobId = EscapeSqlLiteral(detail.JobId.Trim());
+            DataTable table = ExecuteBotQuery(
+                connString,
+                "SELECT TOP 1 "
+                    + "LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), t.MeetTypeID), ''))) AS MeetTypeID, "
+                    + "LTRIM(RTRIM(ISNULL(m.MeetTypeDesc, ''))) AS MeetTypeDesc "
+                    + "FROM trx_training_order t WITH (NOLOCK) "
+                    + "LEFT JOIN ref_meet_type m WITH (NOLOCK) "
+                    + "ON LTRIM(RTRIM(ISNULL(m.MeetTypeID, ''))) = LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), t.MeetTypeID), ''))) "
+                    + "OR LTRIM(RTRIM(ISNULL(m.MeetTypeDesc, ''))) = LTRIM(RTRIM(ISNULL(CONVERT(varchar(50), t.MeetTypeID), ''))) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = '" + jobId + "'");
+            if (table == null || table.Rows.Count == 0)
+            {
+                return;
+            }
+
+            string meetTypeId = GetRowString(table.Rows[0], "MeetTypeID");
+            string meetTypeDesc = FirstNonEmpty(
+                GetRowString(table.Rows[0], "MeetTypeDesc"),
+                LookupMeetTypeDesc(connString, meetTypeId),
+                IsReadableMeetTypeLabel(meetTypeId) ? meetTypeId : string.Empty);
+            detail.MeetTypeDesc = FirstNonEmpty(meetTypeDesc, detail.MeetTypeDesc);
+        }
+
+        private static bool IsReadableMeetTypeLabel(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(text) || text == "-" || text.Equals("[Select]", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return text.IndexOf("MET", StringComparison.OrdinalIgnoreCase) != 0;
         }
 
         private static string LookupMeetTypeDesc(string connString, string meetTypeId)
@@ -1091,7 +1151,8 @@ namespace vtsadm
                 connString,
                 "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MeetTypeDesc, ''))) AS MeetTypeDesc "
                     + "FROM ref_meet_type WITH (NOLOCK) "
-                    + "WHERE LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) = '" + EscapeSqlLiteral(id) + "'");
+                    + "WHERE LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) = '" + EscapeSqlLiteral(id) + "' "
+                    + "OR LTRIM(RTRIM(ISNULL(MeetTypeDesc, ''))) = '" + EscapeSqlLiteral(id) + "'");
             if (table == null || table.Rows.Count == 0)
             {
                 return string.Empty;

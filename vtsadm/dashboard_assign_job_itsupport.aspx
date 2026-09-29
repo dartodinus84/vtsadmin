@@ -5243,7 +5243,7 @@
                     <input type="text" id="assignJoSearchInput" placeholder="Cari Job ID / Customer / Branch / Remark..." />
                     <button type="button" id="assignJoSearchBtn" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
-                <p class="assign-jo-search-hint">JO yang sudah di-assign tersembunyi sampai Anda cari. <strong>Baris krem amber</strong> = JO sudah di-assign. Tombol <strong>Pindah</strong> = assign ke IT Support lain.</p>
+                <p class="assign-jo-search-hint"><strong>Baris krem amber</strong> = JO sudah di-assign ke IT Support lain. Tombol <strong>Pindah</strong> = pindahkan ke IT Support yang sedang dipilih.</p>
                 <div class="assign-jo-filter-wrap">
                     <label for="assignJoBranchFilter">Branch</label>
                     <select id="assignJoBranchFilter">
@@ -7371,7 +7371,8 @@
                             areaId: selectedAreaId,
                             targetStatus: selectedStatus,
                             insDeviceTypeId: getInsDeviceTypeId(reportModalState.joType, selectedOrder),
-                            assignRemark: assignRemark
+                            assignRemark: assignRemark,
+                            meetTypeDesc: selectedOrder ? (selectedOrder.MeetTypeDesc || "") : ""
                         },
                         function (result) {
                             var success = (result && result.Result ? result.Result : "").toUpperCase() === "SUCCESS";
@@ -11971,7 +11972,8 @@
                                     areaId: selectedAreaId,
                                     targetStatus: selectedStatus,
                                     insDeviceTypeId: getInsDeviceTypeId(assignModalState.joType, order),
-                                    assignRemark: assignRemark
+                                    assignRemark: assignRemark,
+                                    meetTypeDesc: order ? (order.MeetTypeDesc || "") : ""
                                 },
                                 function (result) {
                                     var isSuccess = (result.Result || "").toUpperCase() === "SUCCESS";

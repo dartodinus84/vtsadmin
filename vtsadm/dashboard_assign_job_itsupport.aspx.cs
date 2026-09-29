@@ -746,7 +746,6 @@ namespace vtsadm
         return new DataTable();
       }
 
-      string search = (keyword ?? string.Empty).Trim();
       DataTable filtered = source.Clone();
       foreach (DataRow row in source.Rows)
       {
@@ -761,7 +760,8 @@ namespace vtsadm
           continue;
         }
 
-        if (remaining > 0 || (assignedTotal > 0 && !string.IsNullOrWhiteSpace(search)))
+        bool assignedToOtherUser = assignedTotal > 0;
+        if (remaining > 0 || assignedToOtherUser)
         {
           filtered.ImportRow(row);
         }

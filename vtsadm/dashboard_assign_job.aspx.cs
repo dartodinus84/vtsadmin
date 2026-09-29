@@ -1114,7 +1114,8 @@ namespace vtsadm
                     GetPayloadString(args, "areaId"),
                     GetPayloadString(args, "targetStatus"),
                     GetPayloadString(args, "insDeviceTypeId"),
-                    GetPayloadString(args, "assignRemark"));
+                    GetPayloadString(args, "assignRemark"),
+                    FirstNonEmptyStatic(GetPayloadString(args, "meetTypeDesc"), GetPayloadString(args, "meetTypeId")));
             }
 
             if (method.Equals("DeleteScheduleAssign", StringComparison.OrdinalIgnoreCase))
@@ -9610,7 +9611,7 @@ ORDER BY
 
         [WebMethod(EnableSession = true)]
         [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
-        public static SaveAssignResponse SaveAssignJob(string assignId, string jobId, string custId, string technicianId, string schDate, int qtyAssign, string deviceGroupId, string areaId, string targetStatus, string insDeviceTypeId, string assignRemark = "")
+        public static SaveAssignResponse SaveAssignJob(string assignId, string jobId, string custId, string technicianId, string schDate, int qtyAssign, string deviceGroupId, string areaId, string targetStatus, string insDeviceTypeId, string assignRemark = "", string meetTypeDesc = "")
         {
             SaveAssignResponse response = new SaveAssignResponse
             {
@@ -9856,7 +9857,8 @@ ORDER BY
                                 previousTechnicianId,
                                 technicianId,
                                 schDateValue,
-                                assignRemark);
+                                assignRemark,
+                                meetTypeDesc);
                         }
                         else
                         {
@@ -9865,7 +9867,9 @@ ORDER BY
                                 jobId,
                                 custId,
                                 technicianId,
-                                schDateValue);
+                                schDateValue,
+                                string.Empty,
+                                meetTypeDesc);
                         }
                     }
                     catch
@@ -11062,6 +11066,7 @@ ORDER BY
             mapped.Columns.Add("Remark");
             mapped.Columns.Add("QtyGPS", typeof(int));
             mapped.Columns.Add("ScheduleDate");
+            mapped.Columns.Add("JobDate");
             mapped.Columns.Add("AreaName");
 
             DateTime dayStart = scheduleDate.Date;
@@ -11122,14 +11127,131 @@ ORDER BY
                 target["FullName"] = customerName;
                 target["JobType"] = isVisit ? "Visit" : "Training";
                 target["Status"] = FirstNonEmptyStatic(GetValue(row, "Status"), GetValue(row, "StatusCode"));
-                target["Remark"] = FirstNonEmptyStatic(GetValue(row, "Remark"), GetValue(row, "TechnicianID"));
+                target["Remark"] = GetValue(row, "Remark");
                 target["QtyGPS"] = qtyGps;
                 target["ScheduleDate"] = schDate.ToString("yyyy-MM-dd");
+                target["JobDate"] = string.Empty;
                 target["AreaName"] = FirstNonEmptyStatic(GetValue(row, "AreaName"), GetValue(row, "BranchName"));
                 mapped.Rows.Add(target);
             }
 
+            EnrichJobTrainingDayTotalRows(mapped);
             return mapped;
+        }
+
+        private static void EnrichJobTrainingDayTotalRows(DataTable mapped)
+        {
+            if (mapped == null || mapped.Rows.Count == 0)
+            {
+                return;
+            }
+
+            string connString = string.Empty;
+            HttpContext context = HttpContext.Current;
+            if (context != null && context.Session != null)
+            {
+                connString = Convert.ToString(context.Session["ClsTypeDBConnStringSQL"]);
+            }
+
+            foreach (DataRow row in mapped.Rows)
+            {
+                string jobId = GetValue(row, "JobID").Trim();
+                if (!IsFilledDayTotalValue(jobId))
+                {
+                    continue;
+                }
+
+                string safeJobId = EscapeSqlLiteral(jobId);
+                string[] queries =
+                {
+                    "SELECT TOP 1 "
+                        + "LTRIM(RTRIM(ISNULL(t.CustID, ''))) AS CustID, "
+                        + "LTRIM(RTRIM(ISNULL(t.Remark, ''))) AS Remark, "
+                        + "CONVERT(varchar(10), t.ReqDate, 120) AS ReqDate, "
+                        + "LTRIM(RTRIM(ISNULL(t.BranchName, ''))) AS BranchName, "
+                        + "LTRIM(RTRIM(ISNULL(c.FullName, ''))) AS FullName "
+                        + "FROM trx_training_order t WITH (NOLOCK) "
+                        + "LEFT JOIN mst_customer c WITH (NOLOCK) ON LTRIM(RTRIM(ISNULL(c.CustID, ''))) = LTRIM(RTRIM(ISNULL(t.CustID, ''))) "
+                        + "WHERE LTRIM(RTRIM(ISNULL(t.TrainingID, ''))) = '" + safeJobId + "'",
+                    "SELECT TOP 1 * FROM trx_training_order WITH (NOLOCK) "
+                        + "WHERE LTRIM(RTRIM(ISNULL(TrainingID, ''))) = '" + safeJobId + "'"
+                };
+
+                DataRow orderRow = null;
+                foreach (string sql in queries)
+                {
+                    DataTable table = ExecuteJobTrainingQuery(sql, connString);
+                    if (table != null && table.Rows.Count > 0)
+                    {
+                        orderRow = table.Rows[0];
+                        break;
+                    }
+                }
+
+                string custId = FirstNonEmptyStatic(
+                    GetValue(row, "CustID"),
+                    orderRow == null ? string.Empty : GetValue(orderRow, "CustID"));
+                ItsSupportAssignData.CustomerContact contact = ItsSupportAssignData.LoadCustomerContact(
+                    custId,
+                    jobId,
+                    connString);
+                string fullName = FirstNonEmptyStatic(
+                    orderRow == null ? string.Empty : GetValue(orderRow, "FullName"),
+                    orderRow == null ? string.Empty : GetValue(orderRow, "CustomerName"),
+                    contact == null ? string.Empty : contact.FullName,
+                    IsFilledDayTotalValue(GetValue(row, "CustomerName")) ? GetValue(row, "CustomerName") : string.Empty,
+                    IsFilledDayTotalValue(GetValue(row, "FullName")) ? GetValue(row, "FullName") : string.Empty);
+                if (IsFilledDayTotalValue(fullName) && !fullName.Equals(custId, StringComparison.OrdinalIgnoreCase))
+                {
+                    row["CustomerName"] = fullName;
+                    row["FullName"] = fullName;
+                }
+                else if (!IsFilledDayTotalValue(GetValue(row, "CustomerName")) && IsFilledDayTotalValue(fullName))
+                {
+                    row["CustomerName"] = fullName;
+                    row["FullName"] = fullName;
+                }
+
+                if (IsFilledDayTotalValue(custId))
+                {
+                    row["CustID"] = custId;
+                }
+
+                string area = FirstNonEmptyStatic(
+                    IsFilledDayTotalValue(GetValue(row, "AreaName")) ? GetValue(row, "AreaName") : string.Empty,
+                    orderRow == null ? string.Empty : GetValue(orderRow, "BranchName"),
+                    contact == null ? string.Empty : contact.BranchName);
+                if (IsFilledDayTotalValue(area))
+                {
+                    row["AreaName"] = area;
+                }
+
+                string remark = FirstNonEmptyStatic(
+                    orderRow == null ? string.Empty : GetValue(orderRow, "Remark"),
+                    IsFilledDayTotalValue(GetValue(row, "Remark")) ? GetValue(row, "Remark") : string.Empty);
+                if (IsFilledDayTotalValue(remark))
+                {
+                    row["Remark"] = remark;
+                }
+
+                string jobDate = FirstNonEmptyStatic(
+                    orderRow == null ? string.Empty : GetValue(orderRow, "ReqDate"),
+                    orderRow == null ? string.Empty : GetValue(orderRow, "sReqDate"),
+                    orderRow == null ? string.Empty : GetValue(orderRow, "DtmAdd"),
+                    orderRow == null ? string.Empty : GetValue(orderRow, "DtmUpd"));
+                if (IsFilledDayTotalValue(jobDate))
+                {
+                    row["JobDate"] = jobDate;
+                }
+            }
+        }
+
+        private static bool IsFilledDayTotalValue(string value)
+        {
+            string text = (value ?? string.Empty).Trim();
+            return text.Length > 0
+                && text != "-"
+                && !text.Equals("&nbsp;", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int CountDistinctJobIds(DataTable source)
@@ -14014,6 +14136,7 @@ ORDER BY
                     categoryId.Trim(),
                     originalRemark,
                     itUserId,
+                    meetTypeId,
                     out assignedTechnicianId))
                 {
                     response.TechnicianId = assignedTechnicianId;
@@ -14215,6 +14338,7 @@ ORDER BY
                 categoryId,
                 remark,
                 string.Empty,
+                string.Empty,
                 out assignedTechnicianId);
         }
 
@@ -14319,6 +14443,7 @@ ORDER BY
             string categoryId,
             string remark,
             string itUserId,
+            string meetTypeId,
             out string assignedTechnicianId)
         {
             assignedTechnicianId = string.Empty;
@@ -14376,7 +14501,8 @@ ORDER BY
                         custId,
                         technicianId,
                         schDate,
-                        remark);
+                        remark,
+                        DescribeMeetType(connString, meetTypeId));
                 }
                 catch
                 {
@@ -14751,7 +14877,7 @@ ORDER BY
                 connString,
                 "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) "
                     + "FROM trx_training_order WITH (NOLOCK) "
-                    + "WHERE TrainingID = '" + EscapeSqlLiteral(id) + "'");
+                    + "WHERE LTRIM(RTRIM(ISNULL(TrainingID, ''))) = '" + EscapeSqlLiteral(id) + "'");
             return DescribeMeetType(connString, meetTypeId);
         }
 
@@ -14767,7 +14893,8 @@ ORDER BY
                 connString,
                 "SELECT TOP 1 LTRIM(RTRIM(ISNULL(MeetTypeDesc, ''))) "
                     + "FROM ref_meet_type WITH (NOLOCK) "
-                    + "WHERE LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) = '" + EscapeSqlLiteral(id) + "'");
+                    + "WHERE LTRIM(RTRIM(ISNULL(MeetTypeID, ''))) = '" + EscapeSqlLiteral(id) + "' "
+                    + "OR LTRIM(RTRIM(ISNULL(MeetTypeDesc, ''))) = '" + EscapeSqlLiteral(id) + "'");
             return FirstNonEmptyStatic(desc, id);
         }
 

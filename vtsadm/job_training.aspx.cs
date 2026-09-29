@@ -390,6 +390,49 @@ namespace vtsadm
             }
         }
 
+        private HashSet<string> assignedTrainingIds;
+
+        private bool IsTrainingJobAssigned(string trainingId)
+        {
+            string id = (trainingId ?? string.Empty).Trim();
+            if (id == "")
+            {
+                return false;
+            }
+
+            if (assignedTrainingIds == null)
+            {
+                assignedTrainingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    string err = "";
+                    Recordset rec = new Recordset();
+                    rec.Open(
+                        "SELECT DISTINCT LTRIM(RTRIM(ISNULL(JobID, ''))) AS JobID "
+                            + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                            + "WHERE UPPER(LTRIM(RTRIM(ISNULL(Status, '')))) = 'RG'",
+                        Session["ClsTypeDBConnStringSQL"].ToString(),
+                        ref err);
+                    if (string.IsNullOrEmpty(err) && rec.RecData != null && rec.RecData.Tables.Count > 0)
+                    {
+                        foreach (System.Data.DataRow row in rec.RecData.Tables[0].Rows)
+                        {
+                            string jobId = Convert.ToString(row[0]).Trim();
+                            if (jobId != "")
+                            {
+                                assignedTrainingIds.Add(jobId);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return assignedTrainingIds.Contains(id);
+        }
+
         protected void GridView1_RowDataBound(object sender, GridViewRowEventArgs e)
         {
             try
@@ -408,6 +451,17 @@ namespace vtsadm
                 }
                 else if (e.Row.RowType == DataControlRowType.DataRow)
                 {
+                    string trainingId = (e.Row.Cells[0].Text ?? string.Empty).Replace("&nbsp;", string.Empty).Trim();
+                    if (IsTrainingJobAssigned(trainingId))
+                    {
+                        System.Drawing.Color assignedColor = System.Drawing.ColorTranslator.FromHtml("#fff3cd");
+                        e.Row.BackColor = assignedColor;
+                        e.Row.ToolTip = "JO sudah di-assign ke IT Support";
+                        for (int cellIndex = 0; cellIndex < e.Row.Cells.Count; cellIndex++)
+                        {
+                            e.Row.Cells[cellIndex].BackColor = assignedColor;
+                        }
+                    }
                     e.Row.Cells[8].ToolTip = "Edit";
                     LinkButton CmdButton = (LinkButton)e.Row.Cells[9].FindControl("CmdDelete");
                     if (CmdButton != null)
