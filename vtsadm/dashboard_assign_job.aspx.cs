@@ -13195,7 +13195,8 @@ ORDER BY
                     + EscapeSqlLiteral(billableId.Trim()) + "','"
                     + EscapeSqlLiteral(safeRemark) + "','"
                     + EscapeSqlLiteral(categoryId.Trim()) + "','"
-                    + EscapeSqlLiteral((userId ?? string.Empty).Trim()) + "'";
+                    + EscapeSqlLiteral((userId ?? string.Empty).Trim()) + "','"
+                    + EscapeSqlLiteral(meetTypeId.Trim()) + "'";
 
                 ExecCommand ec = new ExecCommand();
                 int affected = 0;
@@ -14093,7 +14094,8 @@ ORDER BY
                     + EscapeSqlLiteral(scheduleDateValue.ToString("yyyy-MM-dd")) + "','"
                     + EscapeSqlLiteral(safeRemark) + "','"
                     + EscapeSqlLiteral(categoryId.Trim()) + "','"
-                    + EscapeSqlLiteral((userId ?? string.Empty).Trim()) + "'";
+                    + EscapeSqlLiteral((userId ?? string.Empty).Trim()) + "','"
+                    + EscapeSqlLiteral(meetTypeId.Trim()) + "'";
 
                 ExecCommand ec = new ExecCommand();
                 int affected = 0;
@@ -14533,20 +14535,21 @@ ORDER BY
                     + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "' "
                     + "AND CONVERT(date, ScheduleDate) = '" + schIso + "' "
                     + "AND ISNULL(Status, '') NOT IN ('DE') "
-                    + "AND LTRIM(RTRIM(ISNULL(UsrCrt, ISNULL(UsrUpd, '')))) = '" + safeUserId + "' "
-                    + "ORDER BY DtmCrt DESC, TrainingID DESC",
+                    + "AND LTRIM(RTRIM(ISNULL(UsrUpd, ISNULL(UsrCrt, '')))) = '" + safeUserId + "' "
+                    + "ORDER BY ISNULL(DtmUpd, DtmCrt) DESC, TrainingID DESC",
+                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(TrainingID, ''))) AS TrainingID "
+                    + "FROM trx_training_order WITH (NOLOCK) "
+                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "' "
+                    + "AND ISNULL(Status, '') NOT IN ('DE') "
+                    + "AND LTRIM(RTRIM(ISNULL(UsrUpd, ISNULL(UsrCrt, '')))) = '" + safeUserId + "' "
+                    + "AND ISNULL(DtmUpd, DtmCrt) >= DATEADD(minute, -10, GETDATE()) "
+                    + "ORDER BY ISNULL(DtmUpd, DtmCrt) DESC, TrainingID DESC",
                 "SELECT TOP 1 LTRIM(RTRIM(ISNULL(TrainingID, ''))) AS TrainingID "
                     + "FROM trx_training_order WITH (NOLOCK) "
                     + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "' "
                     + "AND CONVERT(date, ScheduleDate) = '" + schIso + "' "
                     + "AND ISNULL(Status, '') NOT IN ('DE') "
-                    + "ORDER BY TrainingID DESC",
-                "SELECT TOP 1 LTRIM(RTRIM(ISNULL(TrainingID, ''))) AS TrainingID "
-                    + "FROM trx_training_order WITH (NOLOCK) "
-                    + "WHERE LTRIM(RTRIM(ISNULL(CustID, ''))) = '" + safeCustId + "' "
-                    + "AND ISNULL(Status, '') NOT IN ('DE') "
-                    + "AND DtmCrt >= DATEADD(minute, -10, GETDATE()) "
-                    + "ORDER BY DtmCrt DESC, TrainingID DESC"
+                    + "ORDER BY TrainingID DESC"
             };
 
             foreach (string sql in queries)

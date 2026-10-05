@@ -244,7 +244,7 @@ namespace vtsadm
 
                     if (CmdSubmit.Text.ToUpper() == "SUBMIT")
                     {
-                        strSQL = "sp_submit_job_training '" + txtCustID.Value.Trim() + "','" + txtReqDate.Text.Trim() + "','" + CmbBillAble.SelectedItem.Value.Trim() + "','" + txtScheduleDate.Text.Trim() + "','" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
+                        strSQL = "sp_submit_job_training '" + txtCustID.Value.Trim() + "','" + txtReqDate.Text.Trim() + "','" + CmbBillAble.SelectedItem.Value.Trim() + "','" + txtScheduleDate.Text.Trim() + "','" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "','" + CmbMeetTypeID.SelectedItem.Value.Trim() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                         {
                             if (IsStoredProcedureExecuteSuccess(true, intAff))
@@ -298,7 +298,7 @@ namespace vtsadm
                         dashboard_assign_job.TrainingEditJobItem beforeEdit = dashboard_assign_job.LoadJobTrainingEditItem(trainingIdBeforeUpdate);
                         strSQL = "sp_update_job_training '" + trainingIdBeforeUpdate + "','" + txtReqDate.Text.Trim() + "','" + txtCustID.Value.Trim() + "'," +
                                  "'" + txtScheduleDate.Text.Trim() + "','" + CmbBillAble.SelectedItem.Value.Trim() + "'," +
-                                 "'" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "'";
+                                 "'" + txtRemark.Text.Trim() + "','" + CmbTrainCategoryID.SelectedItem.Value.Trim() + "','" + Session["ClsTypeUserID"].ToString() + "','" + CmbMeetTypeID.SelectedItem.Value.Trim() + "'";
                         if (ec.Execute(strSQL, Session["ClsTypeDBConnStringSQL"].ToString().Trim(), ref intAff, ref sErr))
                         {
                             if (IsStoredProcedureExecuteSuccess(true, intAff))
