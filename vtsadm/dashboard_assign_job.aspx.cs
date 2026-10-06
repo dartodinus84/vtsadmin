@@ -1426,7 +1426,76 @@ namespace vtsadm
             return defaultValue;
         }
 
-        private static JobOrderInformationResponse BuildJobOrderInformationResponse(string activeTab, string searchKeyword, int pageIndex, int pageSize)
+        private sealed class ActiveJobAssignSnapshot
+        {
+            public string TechnicianId { get; set; }
+            public string SchDate { get; set; }
+        }
+
+        private static Dictionary<string, ActiveJobAssignSnapshot> LoadLatestActiveAssignByJob()
+        {
+            Dictionary<string, ActiveJobAssignSnapshot> map =
+                new Dictionary<string, ActiveJobAssignSnapshot>(StringComparer.OrdinalIgnoreCase);
+            DataTable details = ExecuteJobTrainingQuery(
+                "SELECT JobID, TechnicianID, CONVERT(varchar(10), SchDate, 120) AS SchDate "
+                + "FROM trx_job_assign_detail WITH (NOLOCK) "
+                + "WHERE ISNULL(Status, '') NOT IN ('DE') "
+                + "ORDER BY SchDate DESC");
+            if (details == null)
+            {
+                return map;
+            }
+
+            foreach (DataRow row in details.Rows)
+            {
+                string jobId = GetValue(row, "JobID").Trim();
+                if (string.IsNullOrWhiteSpace(jobId) || map.ContainsKey(jobId))
+                {
+                    continue;
+                }
+
+                map[jobId] = new ActiveJobAssignSnapshot
+                {
+                    TechnicianId = GetValue(row, "TechnicianID").Trim(),
+                    SchDate = NormalizeScheduleDateKey(GetValue(row, "SchDate"))
+                };
+            }
+
+            return map;
+        }
+
+        protected static string NormalizeScheduleDateKey(string raw)
+        {
+            string text = (raw ?? string.Empty).Trim();
+            if (text.Length >= 10 && text[4] == '-' && text[7] == '-')
+            {
+                return text.Substring(0, 10);
+            }
+
+            DateTime parsed;
+            if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed)
+                || DateTime.TryParse(text, out parsed))
+            {
+                return parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+
+            return text;
+        }
+
+        protected static bool SameScheduleDate(string left, string right)
+        {
+            string a = NormalizeScheduleDateKey(left);
+            string b = NormalizeScheduleDateKey(right);
+            return a.Length > 0 && a.Equals(b, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static JobOrderInformationResponse BuildJobOrderInformationResponse(
+            string activeTab,
+            string searchKeyword,
+            int pageIndex,
+            int pageSize,
+            string targetTechnicianId = "",
+            string targetSchDate = "")
         {
             JobOrderInformationResponse response = new JobOrderInformationResponse
             {
@@ -1446,6 +1515,34 @@ namespace vtsadm
                     : BindJobOrderMaintenance();
 
                 DataTable filtered = FilterJobOrderInformation(source, searchKeyword);
+                Dictionary<string, ActiveJobAssignSnapshot> assigns = LoadLatestActiveAssignByJob();
+                string pickerTech = (targetTechnicianId ?? string.Empty).Trim();
+                string pickerDate = NormalizeScheduleDateKey(targetSchDate);
+                bool searching = !string.IsNullOrWhiteSpace(searchKeyword);
+                DataTable visible = filtered.Clone();
+                foreach (DataRow sourceRow in filtered.Rows)
+                {
+                    string jobId = GetValue(sourceRow, "JobID").Trim();
+                    ActiveJobAssignSnapshot assign = null;
+                    if (!string.IsNullOrWhiteSpace(jobId))
+                    {
+                        assigns.TryGetValue(jobId, out assign);
+                    }
+                    if (!searching && assign != null && !string.IsNullOrWhiteSpace(assign.TechnicianId))
+                    {
+                        bool sameUser = assign.TechnicianId.Equals(pickerTech, StringComparison.OrdinalIgnoreCase);
+                        bool sameDate = !string.IsNullOrWhiteSpace(pickerDate)
+                            && SameScheduleDate(assign.SchDate, pickerDate);
+                        if (sameUser && sameDate)
+                        {
+                            continue;
+                        }
+                    }
+
+                    visible.ImportRow(sourceRow);
+                }
+
+                filtered = visible;
                 response.TotalRecords = filtered.Rows.Count;
                 response.TotalPages = Math.Max(1, (int)Math.Ceiling((double)response.TotalRecords / response.PageSize));
 
@@ -1471,6 +1568,21 @@ namespace vtsadm
                     int totalAssignLegacy = ParseIntFromColumns(row, "TotalAssign");
                     int totalUnitLegacy = ParseIntFromColumns(row, "TotalUnit");
                     int remainingUnitLegacy = ParseIntFromColumns(row, "RemainingUnit");
+                    string rowJobId = GetValue(row, "JobID").Trim();
+                    ActiveJobAssignSnapshot rowAssign = null;
+                    assigns.TryGetValue(rowJobId, out rowAssign);
+                    bool rowHasAssign = rowAssign != null
+                        && !string.IsNullOrWhiteSpace(rowAssign.TechnicianId);
+                    bool rowSameUser = rowHasAssign
+                        && rowAssign.TechnicianId.Equals(pickerTech, StringComparison.OrdinalIgnoreCase);
+                    bool rowSameDate = rowHasAssign
+                        && !string.IsNullOrWhiteSpace(pickerDate)
+                        && SameScheduleDate(rowAssign.SchDate, pickerDate);
+                    bool searchingRow = !string.IsNullOrWhiteSpace(searchKeyword);
+                    bool rowMoved = rowHasAssign
+                        && (searchingRow
+                            || !rowSameUser
+                            || (!string.IsNullOrWhiteSpace(pickerDate) && !rowSameDate));
 
                     response.Rows.Add(new JobOrderInformationItem
                     {
@@ -1491,7 +1603,10 @@ namespace vtsadm
                         TotalUnitGps = totalUnitGps,
                         TotalUnitAcs = totalUnitAcs,
                         TotalUnitGpsDone = totalUnitGpsDone,
-                        TotalUnitAcsDone = totalUnitAcsDone
+                        TotalUnitAcsDone = totalUnitAcsDone,
+                        IsTransfer = rowMoved,
+                        AssignedTechnicianId = rowHasAssign ? rowAssign.TechnicianId : string.Empty,
+                        AssignedSchDate = rowHasAssign ? rowAssign.SchDate : string.Empty
                     });
                 }
             }
@@ -9049,7 +9164,20 @@ ORDER BY
             int pageSize,
             string branchFilter)
         {
-            return BuildJobOrderInformationResponse(activeTab, searchKeyword, pageIndex, pageSize);
+            HttpContext context = HttpContext.Current;
+            string targetTechnicianId = context == null
+                ? string.Empty
+                : (context.Request.QueryString["targetTechnicianId"] ?? string.Empty).Trim();
+            string targetSchDate = context == null
+                ? string.Empty
+                : (context.Request.QueryString["targetSchDate"] ?? string.Empty).Trim();
+            return BuildJobOrderInformationResponse(
+                activeTab,
+                searchKeyword,
+                pageIndex,
+                pageSize,
+                targetTechnicianId,
+                targetSchDate);
         }
 
         private static DataTable BindJobOrderInstallation()
@@ -9108,6 +9236,8 @@ ORDER BY
                     GetValue(row, "JobID") + " "
                     + GetValue(row, "CustID") + " "
                     + GetValue(row, "CustomerName") + " "
+                    + GetValue(row, "FullName") + " "
+                    + GetValue(row, "CustName") + " "
                     + GetValue(row, "BranchName") + " "
                     + GetValue(row, "DeviceTypeDesc")).ToLowerInvariant();
                 if (merged.Contains(search.ToLowerInvariant()))

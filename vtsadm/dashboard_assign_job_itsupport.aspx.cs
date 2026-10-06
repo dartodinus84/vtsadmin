@@ -60,6 +60,9 @@ namespace vtsadm
       string targetItId = HttpContext.Current != null
           ? (HttpContext.Current.Request.QueryString["targetItId"] ?? string.Empty).Trim()
           : string.Empty;
+      string targetSchDate = HttpContext.Current != null
+          ? (HttpContext.Current.Request.QueryString["targetSchDate"] ?? string.Empty).Trim()
+          : string.Empty;
 
       return BuildJobTrainingOrderInformationResponse(
           activeTab,
@@ -68,7 +71,8 @@ namespace vtsadm
           pageSize,
           branchFilter,
           targetTechnicianId,
-          targetItId);
+          targetItId,
+          targetSchDate);
     }
 
     [WebMethod(EnableSession = true)]
@@ -581,7 +585,7 @@ namespace vtsadm
           new Dictionary<string, JobTrxAssignStats>(StringComparer.OrdinalIgnoreCase);
       Dictionary<string, string> itSupportNames = ItsSupportAssignData.LoadItSupportNameMap();
       DataTable details = ExecuteJobTrainingQuery(
-          "SELECT TechnicianID, SchDate, JobID, AssignID, Seq, Status, DeviceGroupID, QtyGPS, QtyACS "
+          "SELECT TechnicianID, CONVERT(varchar(10), SchDate, 120) AS SchDate, JobID, AssignID, Seq, Status, DeviceGroupID "
           + "FROM trx_job_assign_detail WITH (NOLOCK) "
           + "WHERE ISNULL(Status, '') NOT IN ('DE') "
           + "ORDER BY SchDate DESC");
@@ -616,12 +620,7 @@ namespace vtsadm
           string technicianId = FirstNonEmptyStatic(GetValue(row, "TechnicianID")).Trim();
           stats.TechnicianId = technicianId;
           stats.TechnicianName = ItsSupportAssignData.ResolveItSupportName(technicianId, itSupportNames);
-          string assignedSchDate = GetValue(row, "SchDate").Trim();
-          if (assignedSchDate.Length > 10)
-          {
-            assignedSchDate = assignedSchDate.Substring(0, 10);
-          }
-          stats.SchDate = assignedSchDate;
+          stats.SchDate = NormalizeScheduleDateKey(GetValue(row, "SchDate"));
         }
 
         string deviceGroup = NormalizeDeviceGroupId(
@@ -739,32 +738,32 @@ namespace vtsadm
         DataTable source,
         string keyword,
         string targetTechnicianId,
-        string targetItId)
+        string targetItId,
+        string targetSchDate)
     {
       if (source == null || source.Rows.Count == 0)
       {
         return new DataTable();
       }
 
+      string pickerDate = NormalizeScheduleDateKey(targetSchDate);
+      bool searching = !string.IsNullOrWhiteSpace(keyword);
       DataTable filtered = source.Clone();
       foreach (DataRow row in source.Rows)
       {
-        int remaining = ParseIntFromColumns(row, "RemainingUnit");
         int assignedTotal = ParseIntFromColumns(row, "TotalAssign");
         string assignedTechnicianId = GetValue(row, "AssignedTechnicianId");
         bool assignedToThisUser = assignedTotal > 0
             && (ItsAssigneeMatches(assignedTechnicianId, targetTechnicianId)
                 || ItsAssigneeMatches(assignedTechnicianId, targetItId));
-        if (assignedToThisUser)
+        bool sameDate = !string.IsNullOrWhiteSpace(pickerDate)
+            && SameScheduleDate(GetValue(row, "AssignedSchDate"), pickerDate);
+        if (!searching && assignedToThisUser && sameDate)
         {
           continue;
         }
 
-        bool assignedToOtherUser = assignedTotal > 0;
-        if (remaining > 0 || assignedToOtherUser)
-        {
-          filtered.ImportRow(row);
-        }
+        filtered.ImportRow(row);
       }
 
       return filtered;
@@ -868,7 +867,8 @@ namespace vtsadm
         int pageSize,
         string branchFilter,
         string targetTechnicianId = "",
-        string targetItId = "")
+        string targetItId = "",
+        string targetSchDate = "")
     {
       JobOrderInformationResponse response = new JobOrderInformationResponse
       {
@@ -1038,11 +1038,16 @@ namespace vtsadm
             string assignedTechnicianName = trxStat != null
                 ? FirstNonEmptyStatic(trxStat.TechnicianName, trxStat.TechnicianId)
                 : string.Empty;
-            bool isTransfer = IsAssignedToOtherTarget(
-                assignedTechnicianId,
-                assignedTotal,
-                targetTechnicianId,
-                targetItId);
+            bool assignedToThisUser = assignedTotal > 0
+                && (ItsAssigneeMatches(assignedTechnicianId, targetTechnicianId)
+                    || ItsAssigneeMatches(assignedTechnicianId, targetItId));
+            string assignedSchDate = trxStat != null
+                ? NormalizeScheduleDateKey(trxStat.SchDate)
+                : string.Empty;
+            bool sameSlot = assignedToThisUser
+                && !string.IsNullOrWhiteSpace(targetSchDate)
+                && SameScheduleDate(assignedSchDate, targetSchDate);
+            bool isTransfer = assignedTotal > 0 && !sameSlot;
 
             DataRow target = mapped.NewRow();
             target["JobID"] = jobId;
@@ -1085,7 +1090,7 @@ namespace vtsadm
             target["IsTransfer"] = isTransfer;
             target["AssignedTechnicianId"] = assignedTechnicianId;
             target["AssignedTechnicianName"] = assignedTechnicianName;
-            target["AssignedSchDate"] = trxStat != null ? FirstNonEmptyStatic(trxStat.SchDate) : string.Empty;
+            target["AssignedSchDate"] = assignedSchDate;
             mapped.Rows.Add(target);
           }
         }
@@ -1097,7 +1102,8 @@ namespace vtsadm
             filtered,
             searchKeyword,
             targetTechnicianId,
-            targetItId);
+            targetItId,
+            targetSchDate);
         response.TotalRecords = filtered.Rows.Count;
         response.TotalPages = Math.Max(1, (int)Math.Ceiling((double)response.TotalRecords / response.PageSize));
         if (response.PageIndex > response.TotalPages)

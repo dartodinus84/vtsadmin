@@ -3662,15 +3662,17 @@
         }
 
         .assign-jo-table tbody tr.assign-jo-row-transfer > td {
-            background: #fffbeb;
+            background: #ffe14a !important;
+            box-shadow: inset 0 0 0 9999px #ffe14a;
         }
 
-        .assign-jo-table tbody tr.assign-jo-row-transfer {
-            box-shadow: inset 4px 0 0 #d97706;
+        .assign-jo-table tbody tr.assign-jo-row-transfer > td:first-child {
+            box-shadow: inset 4px 0 0 #b45309, inset 0 0 0 9999px #ffe14a;
         }
 
         .assign-jo-table tbody tr.assign-jo-row-transfer:hover > td {
-            background: #fef3c7;
+            background: #ffd000 !important;
+            box-shadow: inset 0 0 0 9999px #ffd000;
         }
 
         #assignJoInfoBackdrop .assign-jo-action-col {
@@ -3692,11 +3694,13 @@
         }
 
         #assignJoInfoBackdrop .assign-jo-table tbody tr.assign-jo-row-transfer > td.assign-jo-action-col {
-            background: #fffbeb;
+            background: #ffe14a !important;
+            box-shadow: inset 4px 0 0 #b45309, inset 0 0 0 9999px #ffe14a;
         }
 
         #assignJoInfoBackdrop .assign-jo-table tbody tr.assign-jo-row-transfer:hover > td.assign-jo-action-col {
-            background: #fef3c7;
+            background: #ffd000 !important;
+            box-shadow: inset 4px 0 0 #b45309, inset 0 0 0 9999px #ffd000;
         }
 
         .assign-jo-pick-btn {
@@ -5969,9 +5973,20 @@
                     techId = techId || (reportModalState.technicianId || "").trim();
                 }
 
+                var schDate = "";
+                if (cell) {
+                    schDate = (cell.getAttribute("data-date") || "").trim();
+                }
+                if (context === "report") {
+                    schDate = schDate || (reportModalState.schDate || "").trim();
+                } else if (assignModalState.activeCell) {
+                    schDate = schDate || (assignModalState.activeCell.getAttribute("data-date") || "").trim();
+                }
+
                 return {
                     techId: techId,
-                    itId: itId
+                    itId: itId,
+                    schDate: schDate
                 };
             }
 
@@ -6002,12 +6017,18 @@
                 if (!isJoRowAlreadyAssigned(item)) {
                     return "";
                 }
+                var who = (item.AssignedTechnicianName || item.AssignedTechnicianId || "").toString().trim();
+                var when = (item.AssignedSchDate || "").toString().trim();
+                if (who || when) {
+                    return "Sudah di-assign"
+                        + (who ? " ke " + who : "")
+                        + (when ? " · " + when : "");
+                }
                 if (isJoRowAssignedToOther(item, targetTechId, joContext)) {
                     return getJobOrderTransferLabel(item, targetTechId, joContext)
                         || "Sudah di-assign ke IT Support lain";
                 }
-                var itName = (item.AssignedTechnicianName || item.AssignedTechnicianId || "-").toString().trim();
-                return "Sudah di-assign ke IT Support: " + itName;
+                return "Sudah di-assign";
             }
 
             function isAssignedToTargetIdentity(assignedId, targetKeys) {
@@ -8571,6 +8592,7 @@
                     + "&branchFilter=" + encodeURIComponent(assignModalState.joBranchFilter || "")
                     + "&targetTechnicianId=" + encodeURIComponent(joTarget.techId || "")
                     + "&targetItId=" + encodeURIComponent(joTarget.itId || "")
+                    + "&targetSchDate=" + encodeURIComponent(joTarget.schDate || "")
                     + "&pageIndex=" + encodeURIComponent(String(assignModalState.joPage || 1))
                     + "&pageSize=" + encodeURIComponent(String(assignJoPageSize || 20));
 
@@ -8819,33 +8841,36 @@
                         var lastAssign = item.LastAssignDate || "-";
                         var assignDate = item.AssignDate || "-";
                         var slaDays = toInt(item.SlaDays, 0);
-                        var alreadyAssigned = isJoRowAlreadyAssigned(item);
+                        var transferFlag = item.IsTransfer !== undefined ? item.IsTransfer : item.isTransfer;
+                        var moved = transferFlag === true || transferFlag === "true" || transferFlag === 1 || transferFlag === "1";
+                        var alreadyAssigned = isJoRowAlreadyAssigned(item) || moved;
                         var assignedToOther = isJoRowAssignedToOther(item, targetTechId, joContext);
                         var pickLabel = assignedToOther ? "Pindah" : "Pilih";
                         var pickClass = assignedToOther ? "assign-jo-pick-btn assign-jo-transfer-btn" : "assign-jo-pick-btn";
                         var assignedHint = alreadyAssigned
                             ? "<div class=\"assign-jo-transfer-hint\">" + escapeHtml(getJoRowAssignedHint(item, targetTechId, joContext)) + "</div>"
                             : "";
-                        var deviceTypeCell = showDeviceType
-                            ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
-                            : "";
                         var rowClass = alreadyAssigned ? " class=\"assign-jo-row-transfer\"" : "";
+                        var paint = alreadyAssigned ? " style=\"background-color:#ffe14a;\"" : "";
+                        var deviceTypeCellPainted = showDeviceType
+                            ? "<td class=\"assign-jo-device-type-col\"" + paint + ">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
+                            : "";
                         rows.push("<tr" + rowClass + ">" +
-                            "<td class=\"assign-jo-action-col\"><button type=\"button\" class=\"" + pickClass + "\" data-pick-index=\"" + i + "\">" + pickLabel + "</button></td>" +
-                            "<td>" + escapeHtml(item.JobID) + assignedHint + "</td>" +
-                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(getCustomerDisplayText(item)) + "</td>" +
-                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.BranchName || "-") + "</td>" +
-                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.Address || "-") + "</td>" +
-                            "<td>" + escapeHtml(item.PicName || "-") + "</td>" +
-                            "<td>" + escapeHtml(item.CustomerNumber || item.PicPhone || "-") + "</td>" +
-                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.MarketingName || "-") + "</td>" +
-                            "<td class=\"assign-jo-text-col\">" + renderJoExpandableText(item.Remark || "-") + "</td>" +
-                            deviceTypeCell +
-                            "<td>" + escapeHtml(item.MeetTypeDesc || "-") + "</td>" +
-                            "<td>" + escapeHtml(customerGps.toString()) + "</td>" +
-                            "<td>" + escapeHtml(lastAssign) + "</td>" +
-                            "<td>" + escapeHtml(assignDate) + "</td>" +
-                            "<td>" + escapeHtml(slaDays.toString()) + "</td>" +
+                            "<td class=\"assign-jo-action-col\"" + paint + "><button type=\"button\" class=\"" + pickClass + "\" data-pick-index=\"" + i + "\">" + pickLabel + "</button></td>" +
+                            "<td" + paint + ">" + escapeHtml(item.JobID) + assignedHint + "</td>" +
+                            "<td class=\"assign-jo-text-col\"" + paint + ">" + renderJoExpandableText(getCustomerDisplayText(item)) + "</td>" +
+                            "<td class=\"assign-jo-text-col\"" + paint + ">" + renderJoExpandableText(item.BranchName || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\"" + paint + ">" + renderJoExpandableText(item.Address || "-") + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(item.PicName || "-") + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(item.CustomerNumber || item.PicPhone || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\"" + paint + ">" + renderJoExpandableText(item.MarketingName || "-") + "</td>" +
+                            "<td class=\"assign-jo-text-col\"" + paint + ">" + renderJoExpandableText(item.Remark || "-") + "</td>" +
+                            deviceTypeCellPainted +
+                            "<td" + paint + ">" + escapeHtml(item.MeetTypeDesc || "-") + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(customerGps.toString()) + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(lastAssign) + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(assignDate) + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(slaDays.toString()) + "</td>" +
                             "</tr>");
                     }
                     body.innerHTML = rows.join("");

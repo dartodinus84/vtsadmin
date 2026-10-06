@@ -2910,6 +2910,28 @@
             background: #f8fafc;
         }
 
+        .assign-jo-table tbody tr.assign-jo-row-transfer > td {
+            background: #ffe14a !important;
+            box-shadow: inset 0 0 0 9999px #ffe14a;
+        }
+
+        .assign-jo-table tbody tr.assign-jo-row-transfer > td:first-child {
+            box-shadow: inset 4px 0 0 #b45309, inset 0 0 0 9999px #ffe14a;
+        }
+
+        .assign-jo-table tbody tr.assign-jo-row-transfer:hover > td {
+            background: #ffd000 !important;
+            box-shadow: inset 0 0 0 9999px #ffd000;
+        }
+
+        .assign-jo-transfer-hint {
+            margin-top: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #92400e;
+            line-height: 1.3;
+        }
+
         .assign-jo-pick-btn {
             border: 1px solid #0a5c48;
             border-radius: 6px;
@@ -6438,10 +6460,21 @@
                 assignModalState.joLoading = true;
                 showJoLoadingRow();
 
+                var joCell = joLookupOwner === "report"
+                    ? reportModalState.activeCell
+                    : assignModalState.activeCell;
+                var targetTechId = joCell ? (joCell.getAttribute("data-tech-id") || "").trim() : "";
+                var targetSchDate = joCell ? (joCell.getAttribute("data-date") || "").trim() : "";
+                if (joLookupOwner === "report") {
+                    targetTechId = targetTechId || (reportModalState.technicianId || "").trim();
+                    targetSchDate = targetSchDate || (reportModalState.schDate || "").trim();
+                }
                 var url = getAssignPageUrl()
                     + "?action=load_job_order"
                     + "&activeTab=" + encodeURIComponent(normalizeJoTypeForApi(assignModalState.joType))
                     + "&searchKeyword=" + encodeURIComponent(assignModalState.joSearchText || "")
+                    + "&targetTechnicianId=" + encodeURIComponent(targetTechId)
+                    + "&targetSchDate=" + encodeURIComponent(targetSchDate)
                     + "&pageIndex=" + encodeURIComponent(String(assignModalState.joPage || 1))
                     + "&pageSize=" + encodeURIComponent(String(assignJoPageSize || 5));
 
@@ -6669,18 +6702,33 @@
                         var item = rowsData[i];
                         var remainingGps = toInt(item.RemainingUnitGps, 0);
                         var remainingAcs = toInt(item.RemainingUnitAcs, 0);
-                        var deviceTypeCell = showDeviceType
-                            ? "<td class=\"assign-jo-device-type-col\">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
+                        var transferFlag = item.IsTransfer !== undefined ? item.IsTransfer : item.isTransfer;
+                        var moved = transferFlag === true || transferFlag === "true" || transferFlag === 1 || transferFlag === "1";
+                        var assignedCount = toInt(item.TotalAssign, 0) + toInt(item.TotalAssignGps, 0) + toInt(item.TotalAssignAcs, 0);
+                        var assigneeId = (item.AssignedTechnicianId || item.assignedTechnicianId || "").toString().trim();
+                        var highlight = moved || assignedCount > 0 || !!assigneeId;
+                        var paint = highlight ? " style=\"background-color:#ffe14a;\"" : "";
+                        var movedHint = "";
+                        if (highlight && (assigneeId || item.AssignedSchDate || item.assignedSchDate)) {
+                            var movedWho = assigneeId || "user lain";
+                            var movedWhen = item.AssignedSchDate || item.assignedSchDate || "";
+                            movedHint = "<div class=\"assign-jo-transfer-hint\">Sudah di-assign"
+                                + (movedWho ? " ke " + escapeHtml(movedWho) : "")
+                                + (movedWhen ? " · " + escapeHtml(movedWhen) : "")
+                                + "</div>";
+                        }
+                        var deviceTypeCellPainted = showDeviceType
+                            ? "<td class=\"assign-jo-device-type-col\"" + paint + ">" + escapeHtml(item.DeviceTypeDesc || "-") + "</td>"
                             : "";
-                        rows.push("<tr>" +
-                            "<td>" + escapeHtml(item.JobID) + "</td>" +
-                            "<td>" + escapeHtml(getCustomerDisplayText(item)) + "</td>" +
-                            "<td>" + escapeHtml(item.BranchName) + "</td>" +
-                            deviceTypeCell +
-                            "<td>" + escapeHtml(remainingGps.toString()) + "</td>" +
-                            "<td>" + escapeHtml(remainingAcs.toString()) + "</td>" +
-                            "<td>" + escapeHtml(item.LastAssignDate) + "</td>" +
-                            "<td><button type=\"button\" class=\"assign-jo-pick-btn\" data-pick-index=\"" + i + "\">Pilih</button></td>" +
+                        rows.push("<tr" + (highlight ? " class=\"assign-jo-row-transfer\"" : "") + ">" +
+                            "<td" + paint + ">" + escapeHtml(item.JobID) + movedHint + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(getCustomerDisplayText(item)) + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(item.BranchName) + "</td>" +
+                            deviceTypeCellPainted +
+                            "<td" + paint + ">" + escapeHtml(remainingGps.toString()) + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(remainingAcs.toString()) + "</td>" +
+                            "<td" + paint + ">" + escapeHtml(item.LastAssignDate) + "</td>" +
+                            "<td" + paint + "><button type=\"button\" class=\"assign-jo-pick-btn\" data-pick-index=\"" + i + "\">Pilih</button></td>" +
                             "</tr>");
                     }
                     body.innerHTML = rows.join("");
