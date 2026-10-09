@@ -156,6 +156,12 @@
             border-bottom: 2px solid #dbe4ec;
         }
 
+        .stok-total-row td {
+            background: #eef6fc !important;
+            border-top: 2px solid #c9e2f4 !important;
+            font-weight: 700;
+        }
+
         a.qty-link {
             display: inline-block;
             min-width: 42px;
@@ -460,12 +466,19 @@
                         <div class="box-header with-border">
                             <h3 class="box-title">
                                 <i class="fa fa-wrench"></i> Detail Stok Alat per Teknisi
-                                <span class="stok-box-help">Filter lalu Tampilkan. Klik Qty untuk daftar unit.</span>
+                                <span class="stok-box-help">Pilih Branch dulu (mengisi daftar Teknisi), lalu filter & Tampilkan. Klik Qty / TOTAL untuk detail unit.</span>
                             </h3>
                         </div>
                         <div class="box-body">
                             <div class="filter-panel">
                                 <div class="row">
+                                    <div class="col-sm-4">
+                                        <div class="form-group form-group-sm">
+                                            <label>Branch</label>
+                                            <asp:DropDownList ID="ddlBranchAlat" runat="server" CssClass="form-control"
+                                                AutoPostBack="true" OnSelectedIndexChanged="ddlBranchAlat_SelectedIndexChanged"></asp:DropDownList>
+                                        </div>
+                                    </div>
                                     <div class="col-sm-4">
                                         <div class="form-group form-group-sm">
                                             <label>Teknisi</label>
@@ -478,10 +491,18 @@
                                             <asp:DropDownList ID="ddlTypeAlat" runat="server" CssClass="form-control"></asp:DropDownList>
                                         </div>
                                     </div>
+                                </div>
+                                <div class="row">
                                     <div class="col-sm-4">
                                         <div class="form-group form-group-sm">
                                             <label>Status Stok</label>
                                             <asp:DropDownList ID="ddlStatusBucket" runat="server" CssClass="form-control"></asp:DropDownList>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <div class="form-group form-group-sm">
+                                            <label>Status Device</label>
+                                            <asp:DropDownList ID="ddlStatusDevice" runat="server" CssClass="form-control"></asp:DropDownList>
                                         </div>
                                     </div>
                                 </div>
@@ -497,6 +518,7 @@
                                             <th>Teknisi</th>
                                             <th>Type Alat</th>
                                             <th>Status</th>
+                                            <th>Status Device</th>
                                             <th class="text-right">Qty</th>
                                         </tr>
                                     </thead>
@@ -513,13 +535,20 @@
                         <div class="box-header with-border">
                             <h3 class="box-title">
                                 <i class="fa fa-cubes"></i> Detail Stok Aksesoris per Teknisi
-                                <span class="stok-box-help">Pilih teknisi atau tampilkan seluruh stok. Klik Masuk / Terpakai / Sisa.</span>
+                                <span class="stok-box-help">Pilih Branch dulu, lalu Teknisi (atau SEMUA). Klik Masuk / Terpakai / Sisa untuk detail unit.</span>
                             </h3>
                         </div>
                         <div class="box-body">
                             <div class="filter-panel">
                                 <div class="row">
-                                    <div class="col-sm-8">
+                                    <div class="col-sm-6">
+                                        <div class="form-group form-group-sm">
+                                            <label>Branch</label>
+                                            <asp:DropDownList ID="ddlBranchAksesoris" runat="server" CssClass="form-control"
+                                                AutoPostBack="true" OnSelectedIndexChanged="ddlBranchAksesoris_SelectedIndexChanged"></asp:DropDownList>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
                                         <div class="form-group form-group-sm">
                                             <label>Teknisi Request</label>
                                             <asp:DropDownList ID="ddlTeknisiAksesoris" runat="server" CssClass="form-control"></asp:DropDownList>
@@ -529,7 +558,7 @@
                             </div>
                             <div class="box-filter-actions">
                                 <asp:Button ID="btnTampilAksesoris" runat="server" CssClass="btn btn-primary btn-sm" Text="Tampilkan" OnClick="btnTampilAksesoris_Click" OnClientClick="showStokTeknisiLoader('Memuat filter stok aksesoris...'); return true;" />
-                                <asp:Button ID="btnTampilSeluruhStokAksesoris" runat="server" CssClass="btn btn-warning btn-sm" Text="Seluruh Stok" OnClick="btnTampilSeluruhStokAksesoris_Click" OnClientClick="showStokTeknisiLoader('Memuat seluruh stok aksesoris...'); return true;" />
+                                <asp:Button ID="btnTampilSisaAksesoris" runat="server" CssClass="btn btn-warning btn-sm" Text="Tampilkan Sisa Stok" OnClick="btnTampilSisaAksesoris_Click" OnClientClick="showStokTeknisiLoader('Memuat sisa stok aksesoris...'); return true;" ToolTip="Hanya baris dengan Sisa &gt; 0" />
                                 <asp:Button ID="btnExportAksesorisXls" runat="server" CssClass="btn btn-success btn-sm" Text="Export XLS" OnClick="btnExportAksesorisXls_Click" OnClientClick="showStokTeknisiLoader('Menyiapkan export XLS...'); setTimeout(function(){ hideStokTeknisiLoader(); }, 2500); return true;" />
                             </div>
                             <div class="table-responsive table-scroll-detail">
@@ -697,6 +726,8 @@
                 deviceTypeId: '',
                 statusBucket: '',
                 metric: '',
+                deviceStatus: '',
+                branchId: '',
                 title: '',
                 page: 1,
                 pageSize: 10,
@@ -841,15 +872,28 @@
             }
 
             function downloadHtmlAsXls(html, fileName) {
-                var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
-                var url = window.URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = fileName || ('detail_unit_' + Date.now() + '.xls');
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
+                if (!html) {
+                    setError('Konten export kosong.');
+                    return false;
+                }
+                try {
+                    var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName || ('detail_unit_' + Date.now() + '.xls');
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.setTimeout(function () {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 500);
+                    return true;
+                } catch (e) {
+                    setError('Browser menolak download file. Coba browser lain / izinkan download.');
+                    return false;
+                }
             }
 
             function parseAjaxError(xhr, fallback) {
@@ -861,53 +905,74 @@
                     if (xhr && xhr.responseText) {
                         var parsed = JSON.parse(xhr.responseText);
                         if (parsed && parsed.Message) return parsed.Message;
+                        if (parsed && parsed.d && parsed.d.message) return parsed.d.message;
                     }
                 } catch (e) { }
-                if (xhr && xhr.statusText === 'timeout') {
-                    return 'Request timeout. Coba lagi.';
+                if (xhr && (xhr.statusText === 'timeout' || xhr.status === 0)) {
+                    return 'Request timeout / terputus. Coba lagi.';
                 }
                 return msg;
             }
 
             function exportDetailXls() {
-                if (state.loading) return;
                 if (!state.panel) {
                     setError('Tidak ada data detail untuk di-export.');
                     return;
                 }
 
+                // Jangan blokir export meski list masih loading
                 setError('');
                 setModalLoading(true);
+                clearPageLoaders();
 
                 var payload = {
                     panel: state.panel,
                     technicianId: state.technicianId || 'ALL',
                     deviceTypeId: state.deviceTypeId || 'ALL',
                     statusBucket: state.statusBucket || '',
-                    metric: state.metric || ''
+                    metric: state.metric || '',
+                    deviceStatus: state.deviceStatus || 'ALL',
+                    branchId: state.branchId || 'ALL'
                 };
 
+                var requestUrl = apiUrl('unit_export');
                 $.ajax({
                     type: 'POST',
-                    url: apiUrl('unit_export'),
+                    url: requestUrl,
                     data: JSON.stringify(payload),
                     contentType: 'application/json; charset=utf-8',
-                    dataType: 'json',
+                    dataType: 'text',
+                    cache: false,
                     timeout: 120000,
-                    success: function (response) {
+                    success: function (raw) {
                         setModalLoading(false);
-                        var data = response && response.d ? response.d : null;
+                        clearPageLoaders();
+                        var data = null;
+                        try {
+                            var text = String(raw || '').replace(/^\uFEFF/, '').trim();
+                            if (!text || text.charAt(0) === '<') {
+                                throw new Error('Response export bukan JSON. Refresh halaman lalu coba lagi.');
+                            }
+                            var response = JSON.parse(text);
+                            data = response && typeof response.d !== 'undefined' ? response.d : response;
+                        } catch (parseErr) {
+                            setError((parseErr && parseErr.message) || 'Gagal parse response export.');
+                            return;
+                        }
                         if (!data || !data.success) {
                             setError((data && data.message) || 'Gagal export detail unit.');
                             return;
                         }
-                        downloadHtmlAsXls(data.html || '', data.fileName || 'detail_unit.xls');
+                        if (!downloadHtmlAsXls(data.html || '', data.fileName || 'detail_unit.xls')) {
+                            return;
+                        }
                         if (data.truncated) {
                             setError(data.message || 'Export berhasil (data terpotong batas maksimum).');
                         }
                     },
                     error: function (xhr) {
                         setModalLoading(false);
+                        clearPageLoaders();
                         setError(parseAjaxError(xhr, 'Gagal export detail unit.'));
                     }
                 });
@@ -979,6 +1044,8 @@
                     deviceTypeId: state.deviceTypeId || 'ALL',
                     statusBucket: state.statusBucket || '',
                     metric: state.metric || '',
+                    deviceStatus: state.deviceStatus || 'ALL',
+                    branchId: state.branchId || 'ALL',
                     pageNumber: state.page,
                     pageSize: state.pageSize
                 };
@@ -1049,6 +1116,8 @@
                 state.deviceTypeId = link.getAttribute('data-type') || 'ALL';
                 state.statusBucket = link.getAttribute('data-bucket') || '';
                 state.metric = link.getAttribute('data-metric') || '';
+                state.deviceStatus = link.getAttribute('data-devstatus') || 'ALL';
+                state.branchId = link.getAttribute('data-branch') || 'ALL';
                 state.title = link.getAttribute('data-title') || 'Detail Unit';
                 state.page = 1;
                 state.totalCount = 0;

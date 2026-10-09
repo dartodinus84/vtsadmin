@@ -20,13 +20,16 @@ namespace vtsadm
         private const string SessionDeviceDetailExport = "RecStokTeknisiDeviceDetail";
         private const string SessionAksesorisDetailExport = "RecStokTeknisiAksesorisDetail";
 
+        protected DropDownList ddlBranchAlat;
         protected DropDownList ddlTeknisi;
         protected DropDownList ddlTypeAlat;
         protected DropDownList ddlStatusBucket;
+        protected DropDownList ddlStatusDevice;
+        protected DropDownList ddlBranchAksesoris;
         protected DropDownList ddlTeknisiAksesoris;
         protected Button btnTampilkanAlat;
         protected Button btnTampilAksesoris;
-        protected Button btnTampilSeluruhStokAksesoris;
+        protected Button btnTampilSisaAksesoris;
         protected Button btnExportAlatXls;
         protected Button btnExportAksesorisXls;
 
@@ -73,6 +76,8 @@ namespace vtsadm
                         GetPayloadString(payload, "deviceTypeId"),
                         GetPayloadString(payload, "statusBucket"),
                         GetPayloadString(payload, "metric"),
+                        GetPayloadString(payload, "deviceStatus"),
+                        GetPayloadString(payload, "branchId"),
                         GetPayloadInt(payload, "pageNumber", 1),
                         GetPayloadInt(payload, "pageSize", 10));
                     WriteRawJsonAndEnd(SerializeToJson(new Dictionary<string, object> { { "d", result } }));
@@ -84,7 +89,9 @@ namespace vtsadm
                     GetPayloadString(payload, "technicianId"),
                     GetPayloadString(payload, "deviceTypeId"),
                     GetPayloadString(payload, "statusBucket"),
-                    GetPayloadString(payload, "metric"));
+                    GetPayloadString(payload, "metric"),
+                    GetPayloadString(payload, "deviceStatus"),
+                    GetPayloadString(payload, "branchId"));
                 WriteRawJsonAndEnd(SerializeToJson(new Dictionary<string, object> { { "d", exportResult } }));
                 return true;
             }
@@ -94,15 +101,32 @@ namespace vtsadm
             }
             catch (Exception ex)
             {
-                var error = new UnitDetailPageResponse
+                object error;
+                if (action.Equals("unit_export", StringComparison.OrdinalIgnoreCase))
                 {
-                    success = false,
-                    message = ex.Message ?? "Gagal memproses detail unit.",
-                    totalCount = 0,
-                    pageNumber = 1,
-                    pageSize = 10,
-                    rows = new List<UnitDetailItem>()
-                };
+                    error = new UnitDetailExportResponse
+                    {
+                        success = false,
+                        message = ex.Message ?? "Gagal export detail unit.",
+                        fileName = string.Empty,
+                        html = string.Empty,
+                        truncated = false,
+                        exportedCount = 0,
+                        totalCount = 0
+                    };
+                }
+                else
+                {
+                    error = new UnitDetailPageResponse
+                    {
+                        success = false,
+                        message = ex.Message ?? "Gagal memproses detail unit.",
+                        totalCount = 0,
+                        pageNumber = 1,
+                        pageSize = 10,
+                        rows = new List<UnitDetailItem>()
+                    };
+                }
                 WriteRawJsonAndEnd(SerializeToJson(new Dictionary<string, object> { { "d", error } }));
                 return true;
             }
@@ -203,12 +227,22 @@ namespace vtsadm
         {
             DeviceSummaryRowsHtml = EmptyRow(2);
             AksesorisSummaryRowsHtml = EmptyRow(2);
-            DeviceDetailRowsHtml = EmptyRow(4, "Belum ada data. Silakan atur filter lalu klik Tampilkan.");
-            AksesorisDetailRowsHtml = EmptyRow(7, "Pilih teknisi lalu klik Tampilkan, atau klik Seluruh Stok.");
+            DeviceDetailRowsHtml = EmptyRow(5, "Belum ada data. Silakan atur filter lalu klik Tampilkan.");
+            AksesorisDetailRowsHtml = EmptyRow(7, "Pilih teknisi request (atau SEMUA TEKNISI) lalu klik Tampilkan.");
             ErrorMessage = string.Empty;
 
             try
             {
+                // Export XLS butuh full postback (bukan async UpdatePanel), kalau tidak file tidak ter-download
+                SiteMaster siteMaster = this.Master as SiteMaster;
+                if (siteMaster != null)
+                {
+                    if (btnExportAlatXls != null)
+                        siteMaster.RegisterPostBackTrigger(btnExportAlatXls);
+                    if (btnExportAksesorisXls != null)
+                        siteMaster.RegisterPostBackTrigger(btnExportAksesorisXls);
+                }
+
                 ClsType clType = new ClsType();
 
                 if (Session["ClsTypeAccessMenu"] == null ||
@@ -252,7 +286,7 @@ namespace vtsadm
             catch (Exception ex)
             {
                 ErrorMessage = HttpUtility.HtmlEncode(ex.Message);
-                DeviceDetailRowsHtml = EmptyRow(4);
+                DeviceDetailRowsHtml = EmptyRow(5);
             }
         }
 
@@ -261,19 +295,7 @@ namespace vtsadm
             try
             {
                 ErrorMessage = string.Empty;
-                string technicianId = GetSelectedValue(ddlTeknisiAksesoris);
-                if (string.IsNullOrWhiteSpace(technicianId))
-                {
-                    ViewState["AksesorisMode"] = null;
-                    ViewState["AksesorisTech"] = null;
-                    Session[SessionAksesorisDetailExport] = null;
-                    AksesorisDetailRowsHtml = EmptyRow(7, "Pilih teknisi request terlebih dahulu.");
-                    return;
-                }
-
-                ViewState["AksesorisMode"] = "ONE";
-                ViewState["AksesorisTech"] = technicianId;
-                LoadAksesorisDetail(technicianId, showAll: false);
+                LoadAksesorisFromFilter(onlySisa: false);
             }
             catch (Exception ex)
             {
@@ -282,20 +304,41 @@ namespace vtsadm
             }
         }
 
-        protected void btnTampilSeluruhStokAksesoris_Click(object sender, EventArgs e)
+        protected void btnTampilSisaAksesoris_Click(object sender, EventArgs e)
         {
             try
             {
                 ErrorMessage = string.Empty;
-                ViewState["AksesorisMode"] = "ALL";
-                ViewState["AksesorisTech"] = "ALL";
-                LoadAksesorisDetail("ALL", showAll: true);
+                LoadAksesorisFromFilter(onlySisa: true);
             }
             catch (Exception ex)
             {
                 ErrorMessage = HttpUtility.HtmlEncode(ex.Message);
                 AksesorisDetailRowsHtml = EmptyRow(7);
             }
+        }
+
+        private void LoadAksesorisFromFilter(bool onlySisa)
+        {
+            string technicianId = GetSelectedValue(ddlTeknisiAksesoris);
+            string branchId = NormalizeFilterId(GetSelectedValue(ddlBranchAksesoris), "ALL");
+            if (string.IsNullOrWhiteSpace(technicianId))
+            {
+                ViewState["AksesorisMode"] = null;
+                ViewState["AksesorisTech"] = null;
+                ViewState["AksesorisBranch"] = null;
+                ViewState["AksesorisOnlySisa"] = null;
+                Session[SessionAksesorisDetailExport] = null;
+                AksesorisDetailRowsHtml = EmptyRow(7, "Pilih teknisi request (atau SEMUA TEKNISI).");
+                return;
+            }
+
+            bool showAll = string.Equals(technicianId, "ALL", StringComparison.OrdinalIgnoreCase);
+            ViewState["AksesorisMode"] = showAll ? "ALL" : "ONE";
+            ViewState["AksesorisTech"] = showAll ? "ALL" : technicianId;
+            ViewState["AksesorisBranch"] = branchId;
+            ViewState["AksesorisOnlySisa"] = onlySisa ? "1" : "0";
+            LoadAksesorisDetail(showAll ? "ALL" : technicianId, showAll: showAll, onlySisa: onlySisa, branchId: branchId);
         }
 
         protected void btnExportAlatXls_Click(object sender, EventArgs e)
@@ -356,37 +399,79 @@ namespace vtsadm
         private void RestoreAksesorisDetailIfNeeded()
         {
             string mode = Convert.ToString(ViewState["AksesorisMode"] ?? string.Empty);
+            bool onlySisa = string.Equals(Convert.ToString(ViewState["AksesorisOnlySisa"] ?? "0"), "1", StringComparison.OrdinalIgnoreCase);
+            string branchId = Convert.ToString(ViewState["AksesorisBranch"] ?? "ALL");
             if (string.Equals(mode, "ALL", StringComparison.OrdinalIgnoreCase))
             {
-                LoadAksesorisDetail("ALL", showAll: true);
+                LoadAksesorisDetail("ALL", showAll: true, onlySisa: onlySisa, branchId: branchId);
             }
             else if (string.Equals(mode, "ONE", StringComparison.OrdinalIgnoreCase))
             {
                 string tech = Convert.ToString(ViewState["AksesorisTech"] ?? string.Empty);
                 if (!string.IsNullOrWhiteSpace(tech))
-                    LoadAksesorisDetail(tech, showAll: false);
+                    LoadAksesorisDetail(tech, showAll: false, onlySisa: onlySisa, branchId: branchId);
             }
         }
 
         private void BindFilters()
         {
-            // Dropdown source SPs already filter Status <> 'DE'
-            BindTechnicianDropdown(ddlTeknisi, includeAll: true, allText: "SEMUA TEKNISI");
-            BindTechnicianDropdown(ddlTeknisiAksesoris, includeAll: false, allText: "-- Pilih Teknisi Request --");
+            BindBranchDropdown(ddlBranchAlat);
+            BindBranchDropdown(ddlBranchAksesoris);
+            BindTechnicianDropdown(ddlTeknisi, GetSelectedValue(ddlBranchAlat), includeAll: true, allText: "SEMUA TEKNISI");
+            BindTechnicianDropdown(ddlTeknisiAksesoris, GetSelectedValue(ddlBranchAksesoris), includeAll: true, allText: "SEMUA TEKNISI");
             BindDeviceTypeDropdown();
             BindStatusBucketDropdown();
+            BindStatusDeviceDropdown();
         }
 
-        private void BindTechnicianDropdown(DropDownList ddl, bool includeAll, string allText)
+        protected void ddlBranchAlat_SelectedIndexChanged(object sender, EventArgs e)
         {
+            BindTechnicianDropdown(ddlTeknisi, GetSelectedValue(ddlBranchAlat), includeAll: true, allText: "SEMUA TEKNISI");
+        }
+
+        protected void ddlBranchAksesoris_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            BindTechnicianDropdown(ddlTeknisiAksesoris, GetSelectedValue(ddlBranchAksesoris), includeAll: true, allText: "SEMUA TEKNISI");
+        }
+
+        private void BindBranchDropdown(DropDownList ddl)
+        {
+            if (ddl == null)
+                return;
+
+            ddl.Items.Clear();
+            ddl.Items.Add(new ListItem("SEMUA BRANCH", "ALL"));
+
+            DataTable dt = ExecSp("sp_rpt_stok_teknisi_filter_branch");
+            if (dt == null)
+                return;
+
+            foreach (DataRow row in dt.Rows)
+            {
+                string id = ToSafeString(row, "BranchID");
+                string name = ToSafeString(row, "BranchName");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+                ddl.Items.Add(new ListItem(name, id));
+            }
+        }
+
+        private void BindTechnicianDropdown(DropDownList ddl, string branchId, bool includeAll, string allText)
+        {
+            if (ddl == null)
+                return;
+
             ddl.Items.Clear();
             if (includeAll)
                 ddl.Items.Add(new ListItem(allText, "ALL"));
             else
                 ddl.Items.Add(new ListItem(allText, string.Empty));
 
-            // sp_rpt_stok_teknisi_filter_technician: WHERE ISNULL(Status,'') <> 'DE'
-            DataTable dt = ExecSp("sp_rpt_stok_teknisi_filter_technician");
+            string branch = NormalizeFilterId(branchId, "ALL");
+            string sql = string.Format(
+                "sp_rpt_stok_teknisi_filter_technician '{0}'",
+                EscapeSqlLiteral(branch));
+            DataTable dt = ExecSp(sql);
             if (dt == null)
                 return;
 
@@ -397,7 +482,6 @@ namespace vtsadm
                 if (string.IsNullOrWhiteSpace(id))
                     continue;
 
-                // Defense in depth if Status column ever returned
                 if (row.Table.Columns.Contains("Status") &&
                     string.Equals(ToSafeString(row, "Status"), "DE", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -451,6 +535,21 @@ namespace vtsadm
             ddlStatusBucket.SelectedValue = "STOK DITEKNISI";
         }
 
+        private void BindStatusDeviceDropdown()
+        {
+            if (ddlStatusDevice == null)
+                return;
+
+            // Posisi di teknisi: mst_device.Status bisa MT / MQ / DS / BR
+            ddlStatusDevice.Items.Clear();
+            ddlStatusDevice.Items.Add(new ListItem("SEMUA (MT/MQ/DS/BR)", "ALL"));
+            ddlStatusDevice.Items.Add(new ListItem("MT - Stok di Teknisi", "MT"));
+            ddlStatusDevice.Items.Add(new ListItem("MQ - Mutasi QC", "MQ"));
+            ddlStatusDevice.Items.Add(new ListItem("DS - Hilang", "DS"));
+            ddlStatusDevice.Items.Add(new ListItem("BR - Broken", "BR"));
+            ddlStatusDevice.SelectedValue = "ALL";
+        }
+
         private void LoadSummaries()
         {
             DataTable deviceSummary = ExecSp("sp_rpt_stok_teknisi_device_summary 'GPS'");
@@ -462,32 +561,48 @@ namespace vtsadm
 
         private void LoadDeviceDetail()
         {
+            string branchId = NormalizeFilterId(GetSelectedValue(ddlBranchAlat), "ALL");
             string technicianId = NormalizeFilterId(GetSelectedValue(ddlTeknisi), "ALL");
             string deviceTypeId = NormalizeFilterId(GetSelectedValue(ddlTypeAlat), "ALL");
             string statusBucket = string.IsNullOrWhiteSpace(GetSelectedValue(ddlStatusBucket))
                 ? "STOK DITEKNISI"
                 : GetSelectedValue(ddlStatusBucket);
+            string deviceStatus = NormalizeFilterId(GetSelectedValue(ddlStatusDevice), "ALL");
 
             string sql = string.Format(
-                "sp_rpt_stok_teknisi_device_detail '{0}','{1}','{2}','GPS'",
+                "sp_rpt_stok_teknisi_device_detail '{0}','{1}','{2}','GPS','{3}','{4}'",
                 EscapeSqlLiteral(technicianId),
                 EscapeSqlLiteral(deviceTypeId),
-                EscapeSqlLiteral(statusBucket));
+                EscapeSqlLiteral(statusBucket),
+                EscapeSqlLiteral(deviceStatus),
+                EscapeSqlLiteral(branchId));
 
             DataTable dt = ExecSp(sql);
             DataTable exportDt = BuildDeviceDetailExportTable(dt);
             Session[SessionDeviceDetailExport] = exportDt;
-            DeviceDetailRowsHtml = BuildDeviceDetailRows(dt);
+            DeviceDetailRowsHtml = BuildDeviceDetailRows(dt, technicianId, deviceTypeId, statusBucket, deviceStatus, branchId);
         }
 
-        private void LoadAksesorisDetail(string technicianId, bool showAll)
+        private void LoadAksesorisDetail(string technicianId, bool showAll, bool onlySisa = false, string branchId = "ALL")
         {
             string sql = string.Format(
-                "sp_rpt_stok_teknisi_aksesoris_detail '{0}', {1}",
+                "sp_rpt_stok_teknisi_aksesoris_detail '{0}', {1}, '{2}'",
                 EscapeSqlLiteral(NormalizeFilterId(technicianId, "ALL")),
-                showAll ? "1" : "0");
+                showAll ? "1" : "0",
+                EscapeSqlLiteral(NormalizeFilterId(branchId, "ALL")));
 
             DataTable dt = ExecSp(sql);
+            if (onlySisa && dt != null && dt.Rows.Count > 0 && dt.Columns.Contains("Sisa"))
+            {
+                DataTable filtered = dt.Clone();
+                foreach (DataRow row in dt.Rows)
+                {
+                    if (ToInt(row, "Sisa") > 0)
+                        filtered.ImportRow(row);
+                }
+                dt = filtered;
+            }
+
             DataTable exportDt = BuildAksesorisDetailExportTable(dt);
             Session[SessionAksesorisDetailExport] = exportDt;
             AksesorisDetailRowsHtml = BuildAksesorisDetailRows(dt);
@@ -505,11 +620,14 @@ namespace vtsadm
                 gv.RenderControl(hw);
 
                 Response.Clear();
+                Response.ClearHeaders();
                 Response.Buffer = true;
                 Response.ContentType = "application/vnd.ms-excel";
-                Response.AddHeader("content-disposition", "attachment;filename=" + fileName);
-                Response.Charset = "";
+                Response.AddHeader("content-disposition", "attachment;filename=\"" + fileName + "\"");
+                Response.Charset = "utf-8";
+                Response.ContentEncoding = Encoding.UTF8;
                 string style = @"<style> .textmode { mso-number-format:\@; } </style>";
+                Response.Write('\uFEFF');
                 Response.Write(style);
                 Response.Output.Write(sw.ToString());
                 Response.Flush();
@@ -523,23 +641,31 @@ namespace vtsadm
             export.Columns.Add("Teknisi", typeof(string));
             export.Columns.Add("Type Alat", typeof(string));
             export.Columns.Add("Status", typeof(string));
+            export.Columns.Add("Status Device", typeof(string));
             export.Columns.Add("Qty", typeof(int));
 
             if (source == null || source.Rows.Count == 0)
                 return export;
 
+            int totalQty = 0;
             foreach (DataRow row in source.Rows)
             {
                 string teknisi = ToSafeString(row, "Teknisi");
                 string typeAlat = ToSafeString(row, "TypeAlat");
                 string status = ToSafeString(row, "Status");
+                string deviceStatus = ToSafeString(row, "DeviceStatus");
                 if (string.IsNullOrWhiteSpace(teknisi) &&
                     string.IsNullOrWhiteSpace(typeAlat) &&
                     string.IsNullOrWhiteSpace(status))
                     continue;
 
-                export.Rows.Add(teknisi, typeAlat, status, ToInt(row, "Qty"));
+                int qty = ToInt(row, "Qty");
+                totalQty += qty;
+                export.Rows.Add(teknisi, typeAlat, status, deviceStatus, qty);
             }
+
+            if (export.Rows.Count > 0)
+                export.Rows.Add("TOTAL", string.Empty, string.Empty, string.Empty, totalQty);
 
             return export;
         }
@@ -660,10 +786,16 @@ namespace vtsadm
             return html.ToString();
         }
 
-        private string BuildDeviceDetailRows(DataTable dt)
+        private string BuildDeviceDetailRows(
+            DataTable dt,
+            string filterTechId,
+            string filterTypeId,
+            string filterBucket,
+            string filterDeviceStatus,
+            string filterBranchId)
         {
             if (dt == null || dt.Rows.Count == 0)
-                return EmptyRow(4);
+                return EmptyRow(5);
 
             bool hasRealData = dt.AsEnumerable().Any(r =>
                 !string.IsNullOrWhiteSpace(ToSafeString(r, "Teknisi")) ||
@@ -671,14 +803,16 @@ namespace vtsadm
                 ToInt(r, "Qty") > 0);
 
             if (!hasRealData)
-                return EmptyRow(4);
+                return EmptyRow(5);
 
             StringBuilder html = new StringBuilder();
+            int totalQty = 0;
             foreach (DataRow row in dt.Rows)
             {
                 string teknisi = ToSafeString(row, "Teknisi");
                 string typeAlat = ToSafeString(row, "TypeAlat");
                 string status = ToSafeString(row, "Status");
+                string deviceStatus = ToSafeString(row, "DeviceStatus");
                 string technicianId = ToSafeString(row, "TechnicianID");
                 string deviceTypeId = ToSafeString(row, "DeviceTypeID");
                 int qty = ToInt(row, "Qty");
@@ -687,10 +821,13 @@ namespace vtsadm
                     string.IsNullOrWhiteSpace(status))
                     continue;
 
+                totalQty += qty;
                 html.Append("<tr>");
                 html.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(teknisi));
                 html.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(typeAlat));
                 html.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(status));
+                html.AppendFormat("<td><span class='label label-default'>{0}</span></td>",
+                    HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(deviceStatus) ? "-" : deviceStatus));
                 html.Append("<td class='text-right'>");
                 if (qty > 0)
                 {
@@ -701,8 +838,10 @@ namespace vtsadm
                         string.IsNullOrWhiteSpace(deviceTypeId) ? "ALL" : deviceTypeId,
                         status,
                         string.Empty,
+                        string.IsNullOrWhiteSpace(deviceStatus) ? "ALL" : deviceStatus,
+                        string.IsNullOrWhiteSpace(filterBranchId) ? "ALL" : filterBranchId,
                         "Detail Device - " + status,
-                        teknisi + " / " + typeAlat));
+                        teknisi + " / " + typeAlat + " / " + deviceStatus));
                 }
                 else
                 {
@@ -712,7 +851,30 @@ namespace vtsadm
             }
 
             if (html.Length == 0)
-                return EmptyRow(4);
+                return EmptyRow(5);
+
+            html.Append("<tr class='stok-total-row'>");
+            html.Append("<td colspan='4'><strong>TOTAL</strong></td>");
+            html.Append("<td class='text-right'><strong>");
+            if (totalQty > 0)
+            {
+                html.Append(BuildQtyLink(
+                    totalQty,
+                    "device",
+                    string.IsNullOrWhiteSpace(filterTechId) ? "ALL" : filterTechId,
+                    string.IsNullOrWhiteSpace(filterTypeId) ? "ALL" : filterTypeId,
+                    string.IsNullOrWhiteSpace(filterBucket) ? "STOK DITEKNISI" : filterBucket,
+                    string.Empty,
+                    string.IsNullOrWhiteSpace(filterDeviceStatus) ? "ALL" : filterDeviceStatus,
+                    string.IsNullOrWhiteSpace(filterBranchId) ? "ALL" : filterBranchId,
+                    "Detail Device - TOTAL",
+                    "Filter aktif / seluruh baris di tabel"));
+            }
+            else
+            {
+                html.AppendFormat("{0:N0}", totalQty);
+            }
+            html.Append("</strong></td></tr>");
 
             return html.ToString();
         }
@@ -746,6 +908,7 @@ namespace vtsadm
 
                 string techArg = string.IsNullOrWhiteSpace(technicianId) ? "ALL" : technicianId;
                 string typeArg = string.IsNullOrWhiteSpace(deviceTypeId) ? "ALL" : deviceTypeId;
+                string branchArg = NormalizeFilterId(GetSelectedValue(ddlBranchAksesoris), "ALL");
                 string subtitle = teknisi + " / " + aksesoris;
 
                 html.Append("<tr>");
@@ -754,17 +917,17 @@ namespace vtsadm
                 html.AppendFormat("<td class='text-right'>{0:N0}</td>", qtyCutOff);
                 html.Append("<td class='text-right'>");
                 html.Append(masuk > 0
-                    ? BuildQtyLink(masuk, "aksesoris", techArg, typeArg, string.Empty, "MASUK", "Detail Aksesoris - Masuk", subtitle)
+                    ? BuildQtyLink(masuk, "aksesoris", techArg, typeArg, string.Empty, "MASUK", "ALL", branchArg, "Detail Aksesoris - Masuk", subtitle)
                     : string.Format("{0:N0}", masuk));
                 html.Append("</td><td class='text-right'>");
                 html.Append(terpakai > 0
-                    ? BuildQtyLink(terpakai, "aksesoris", techArg, typeArg, string.Empty, "TERPAKAI", "Detail Aksesoris - Terpakai", subtitle)
+                    ? BuildQtyLink(terpakai, "aksesoris", techArg, typeArg, string.Empty, "TERPAKAI", "ALL", branchArg, "Detail Aksesoris - Terpakai", subtitle)
                     : string.Format("{0:N0}", terpakai));
                 html.Append("</td>");
                 html.AppendFormat("<td class='text-right'>{0:N0}</td>", kembali);
                 html.Append("<td class='text-right'>");
                 html.Append(sisa > 0
-                    ? BuildQtyLink(sisa, "aksesoris", techArg, typeArg, string.Empty, "SISA", "Detail Aksesoris - Sisa", subtitle)
+                    ? BuildQtyLink(sisa, "aksesoris", techArg, typeArg, string.Empty, "SISA", "ALL", branchArg, "Detail Aksesoris - Sisa", subtitle)
                     : string.Format("{0:N0}", sisa));
                 html.Append("</td></tr>");
             }
@@ -796,13 +959,30 @@ namespace vtsadm
             string title,
             string subtitle)
         {
+            return BuildQtyLink(qty, panel, technicianId, deviceTypeId, statusBucket, metric, "ALL", "ALL", title, subtitle);
+        }
+
+        private static string BuildQtyLink(
+            int qty,
+            string panel,
+            string technicianId,
+            string deviceTypeId,
+            string statusBucket,
+            string metric,
+            string deviceStatus,
+            string branchId,
+            string title,
+            string subtitle)
+        {
             return string.Format(
-                "<a href=\"#\" class=\"qty-link\" data-panel=\"{0}\" data-tech=\"{1}\" data-type=\"{2}\" data-bucket=\"{3}\" data-metric=\"{4}\" data-title=\"{5}\" data-subtitle=\"{6}\">{7:N0}</a>",
+                "<a href=\"#\" class=\"qty-link\" data-panel=\"{0}\" data-tech=\"{1}\" data-type=\"{2}\" data-bucket=\"{3}\" data-metric=\"{4}\" data-devstatus=\"{5}\" data-branch=\"{6}\" data-title=\"{7}\" data-subtitle=\"{8}\">{9:N0}</a>",
                 HttpUtility.HtmlAttributeEncode(panel ?? string.Empty),
                 HttpUtility.HtmlAttributeEncode(technicianId ?? "ALL"),
                 HttpUtility.HtmlAttributeEncode(deviceTypeId ?? "ALL"),
                 HttpUtility.HtmlAttributeEncode(statusBucket ?? string.Empty),
                 HttpUtility.HtmlAttributeEncode(metric ?? string.Empty),
+                HttpUtility.HtmlAttributeEncode(string.IsNullOrWhiteSpace(deviceStatus) ? "ALL" : deviceStatus),
+                HttpUtility.HtmlAttributeEncode(string.IsNullOrWhiteSpace(branchId) ? "ALL" : branchId),
                 HttpUtility.HtmlAttributeEncode(title ?? "Detail Unit"),
                 HttpUtility.HtmlAttributeEncode(subtitle ?? string.Empty),
                 qty);
@@ -850,6 +1030,8 @@ namespace vtsadm
             string deviceTypeId,
             string statusBucket,
             string metric,
+            string deviceStatus,
+            string branchId,
             int pageNumber,
             int pageSize)
         {
@@ -875,7 +1057,7 @@ namespace vtsadm
 
                 string spCall;
                 if (!TryBuildUnitDetailSpCall(
-                    panel, technicianId, deviceTypeId, statusBucket, metric,
+                    panel, technicianId, deviceTypeId, statusBucket, metric, deviceStatus, branchId,
                     response.pageNumber, response.pageSize, out spCall, out error))
                 {
                     response.message = error;
@@ -916,7 +1098,9 @@ namespace vtsadm
             string technicianId,
             string deviceTypeId,
             string statusBucket,
-            string metric)
+            string metric,
+            string deviceStatus,
+            string branchId)
         {
             var response = new UnitDetailExportResponse
             {
@@ -947,7 +1131,7 @@ namespace vtsadm
                 {
                     string spCall;
                     if (!TryBuildUnitDetailSpCall(
-                        panel, technicianId, deviceTypeId, statusBucket, metric,
+                        panel, technicianId, deviceTypeId, statusBucket, metric, deviceStatus, branchId,
                         page, UnitExportPageSize, out spCall, out error))
                     {
                         response.message = error;
@@ -1035,6 +1219,8 @@ namespace vtsadm
             string deviceTypeId,
             string statusBucket,
             string metric,
+            string deviceStatus,
+            string branchId,
             int pageNumber,
             int pageSize,
             out string spCall,
@@ -1046,6 +1232,8 @@ namespace vtsadm
             string tech = string.IsNullOrWhiteSpace(technicianId) ? "ALL" : technicianId.Trim();
             string type = string.IsNullOrWhiteSpace(deviceTypeId) ? "ALL" : deviceTypeId.Trim();
             string panelKey = (panel ?? string.Empty).Trim().ToLowerInvariant();
+            string devStatus = string.IsNullOrWhiteSpace(deviceStatus) ? "ALL" : deviceStatus.Trim();
+            string branch = string.IsNullOrWhiteSpace(branchId) ? "ALL" : branchId.Trim();
             int page = pageNumber < 1 ? 1 : pageNumber;
             int size = pageSize < 1 ? 10 : (pageSize > 200 ? 200 : pageSize);
 
@@ -1059,12 +1247,14 @@ namespace vtsadm
                 }
 
                 spCall = string.Format(
-                    "sp_rpt_stok_teknisi_device_units '{0}','{1}','{2}','GPS',{3},{4}",
+                    "sp_rpt_stok_teknisi_device_units '{0}','{1}','{2}','GPS',{3},{4},'{5}','{6}'",
                     EscapeSqlLiteral(tech),
                     EscapeSqlLiteral(type),
                     EscapeSqlLiteral(bucket),
                     page,
-                    size);
+                    size,
+                    EscapeSqlLiteral(devStatus),
+                    EscapeSqlLiteral(branch));
                 return true;
             }
 
@@ -1075,12 +1265,13 @@ namespace vtsadm
                     mode = "SISA";
 
                 spCall = string.Format(
-                    "sp_rpt_stok_teknisi_aksesoris_units '{0}','{1}','{2}',{3},{4}",
+                    "sp_rpt_stok_teknisi_aksesoris_units '{0}','{1}','{2}',{3},{4},'{5}'",
                     EscapeSqlLiteral(tech),
                     EscapeSqlLiteral(type),
                     EscapeSqlLiteral(mode),
                     page,
-                    size);
+                    size,
+                    EscapeSqlLiteral(branch));
                 return true;
             }
 
