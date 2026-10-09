@@ -8046,6 +8046,7 @@
                 var backdrop = getStatusOnlyBackdrop();
                 if (backdrop) {
                     backdrop.classList.remove("open");
+                    backdrop.style.display = "none";
                 }
                 statusOnlyModalState.activeCell = null;
                 statusOnlyModalState.technicianId = "";
@@ -8107,6 +8108,7 @@
 
                 var backdrop = getStatusOnlyBackdrop();
                 if (backdrop) {
+                    backdrop.style.display = "flex";
                     backdrop.classList.add("open");
                 }
             }

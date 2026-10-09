@@ -7605,7 +7605,12 @@ ORDER BY
                     bool isFutureOrToday = cellDate.Date >= DateTime.Today;
                     bool isAssignableStatus = normalizedValue == "AV"
                         || normalizedValue == "AD"
-                        || normalizedValue == "OF";
+                        || normalizedValue == "OF"
+                        || normalizedValue == "OFF"
+                        || normalizedValue == "CT"
+                        || normalizedValue == "C"
+                        || normalizedValue == "IZ"
+                        || normalizedValue == "I";
                     bool availabilityBlocksAssign = isUnavailable
                         && normalizedValue != "OF";
                     bool canAssign = isAssignableStatus
