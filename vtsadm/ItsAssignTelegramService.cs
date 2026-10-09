@@ -132,6 +132,43 @@ namespace vtsadm
             SendNotificationMessage(connString, BuildDeleteMessage(detail));
         }
 
+        public static void NotifyAfterClose(
+            string connString,
+            string trainingId,
+            string scheduleDateText,
+            string trainingDateText,
+            string customerName,
+            string remark,
+            string trainers,
+            string meetTypeLabel,
+            string usrUpd)
+        {
+            if (string.IsNullOrWhiteSpace(trainingId))
+            {
+                return;
+            }
+
+            StringBuilder message = new StringBuilder();
+            message.AppendLine("<b>JOB ORDER CUSTOMER TRAINING SUCCESS</b>");
+            message.AppendLine("<b>Training Job Order</b>");
+            message.AppendLine("<b>" + EscapeHtml(trainingId) + "</b>");
+            message.AppendLine("<b>Customer</b>");
+            message.AppendLine("<b>" + EscapeHtml(customerName) + "</b>");
+            message.AppendLine("<b>Online / Onsite</b>");
+            message.AppendLine("<b>" + EscapeHtml(meetTypeLabel) + "</b>");
+            message.AppendLine("<b>Schedule Date</b>");
+            message.AppendLine("<b>" + EscapeHtml(scheduleDateText) + "</b>");
+            message.AppendLine("<b>Training Date</b>");
+            message.AppendLine("<b>" + EscapeHtml(trainingDateText) + "</b>");
+            message.AppendLine("<b>Remark</b>");
+            message.AppendLine("<b>" + EscapeHtml(remark) + "</b>");
+            message.AppendLine("<b>Trainers</b>");
+            message.AppendLine("<b>" + EscapeHtml(trainers) + "</b>");
+            message.AppendLine("<b>User Update/Create</b>");
+            message.Append("<b>" + EscapeHtml(usrUpd) + "</b>");
+            SendNotificationMessage(connString, message.ToString());
+        }
+
         private static AssignDetail ResolveAssignNotificationDetail(
             string connString,
             string jobId,

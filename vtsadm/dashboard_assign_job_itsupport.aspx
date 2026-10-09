@@ -6637,12 +6637,9 @@
                     return false;
                 }
 
-                // AV/AD/OF/CT/IZ can open assign modal for status change; ITID is validated on open/submit.
-                return status === "AV"
-                    || status === "AD"
-                    || status === "OF"
-                    || status === "CT"
-                    || status === "IZ";
+                // Available opens the assign form. Offline, Cuti, and Izin open the status form
+                // so they can be changed back to Available without a job order.
+                return status === "AV" || status === "AD";
             }
 
             function isStatusOnlyEditableCell(cell) {
@@ -8288,10 +8285,9 @@
 
                 var cellDate = parseIsoDate(cell.getAttribute("data-date"));
                 var isFutureOrToday = cellDate && cellDate.getTime() >= getTodayDateOnly().getTime();
-                var isAssignableClickable = isFutureOrToday && (
-                    upperValue === "OF"
-                    || (!!canAssign && (upperValue === "AV" || upperValue === "AD"))
-                );
+                var isAssignableClickable = isFutureOrToday
+                    && !!canAssign
+                    && (upperValue === "AV" || upperValue === "AD");
                 var isStatusOnlyClickable = isStatusOnlyEditableCell(cell);
                 var isClickable = isAssignableClickable || isStatusOnlyClickable;
                 var isReportClickable = isNumericStatus(value);

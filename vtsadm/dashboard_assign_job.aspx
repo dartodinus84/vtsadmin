@@ -4812,7 +4812,7 @@
 
             function isStatusOnlyStatus(status) {
                 var normalizedStatus = normalizeStatusCode(status);
-                return normalizedStatus === "CT" || normalizedStatus === "IZ";
+                return normalizedStatus === "OF" || normalizedStatus === "CT" || normalizedStatus === "IZ";
             }
 
             function isAssignableCell(cell) {
@@ -4832,10 +4832,6 @@
                 var isFutureOrToday = cellDate.getTime() >= getTodayDateOnly().getTime();
                 if (!isFutureOrToday) {
                     return false;
-                }
-
-                if (status === "OF") {
-                    return true;
                 }
 
                 var canAssignData = cell.getAttribute("data-can-assign") === "1";
@@ -5347,11 +5343,18 @@
                 var selectedStatus = reportModalState.submitAction === "administration"
                     ? "AD"
                     : (reportModalState.targetStatus || "AV").toUpperCase();
+                var selectedOrder = getCurrentReportOrder();
+                if (reportModalState.submitAction !== "administration"
+                    && selectedOrder
+                    && (selectedOrder.JobID || selectedOrder.JobId)
+                    && isStatusOnlyStatus(selectedStatus)) {
+                    window.alert("Hapus Job Order terlebih dahulu sebelum ubah status.");
+                    return;
+                }
                 var isAvailableStatus = selectedStatus === "AV";
                 var selectedDeviceGroup = normalizeJoTypeForApi(reportModalState.joType) === "maintenance"
                     ? "GPS"
                     : normalizeDeviceGroup(reportModalState.deviceGroupId);
-                var selectedOrder = getCurrentReportOrder();
                 if (isAvailableStatus && !selectedOrder) {
                     setReportFeedback("Belum ada JO yang dipilih.", true, false);
                     return;
@@ -6300,10 +6303,9 @@
                 var upperValue = normalizeStatusCode(value);
                 var cellDate = parseIsoDate(cell.getAttribute("data-date"));
                 var isFutureOrToday = cellDate && cellDate.getTime() >= getTodayDateOnly().getTime();
-                var isAssignableClickable = !getIsTechnicianUser() && isFutureOrToday && (
-                    upperValue === "OF"
-                    || (!!canAssign && (upperValue === "AV" || upperValue === "AD"))
-                );
+                var isAssignableClickable = !getIsTechnicianUser() && isFutureOrToday
+                    && !!canAssign
+                    && (upperValue === "AV" || upperValue === "AD");
                 var isStatusOnlyClickable = isStatusOnlyEditableCell(cell);
                 var isClickable = isAssignableClickable || isStatusOnlyClickable;
                 var isReportClickable = isNumericStatus(value);
@@ -7289,7 +7291,12 @@
                         if (!button || button.disabled) {
                             return;
                         }
-                        reportModalState.targetStatus = button.getAttribute("data-status-value") || "AV";
+                        var nextReportStatus = button.getAttribute("data-status-value") || "AV";
+                        if (getCurrentReportOrder() && (getCurrentReportOrder().JobID || getCurrentReportOrder().JobId) && isStatusOnlyStatus(nextReportStatus)) {
+                            window.alert("Hapus Job Order terlebih dahulu sebelum ubah status.");
+                            return;
+                        }
+                        reportModalState.targetStatus = nextReportStatus;
                         var reportStatusButtons = document.querySelectorAll("#assignReportStatusWrap .assign-status-btn");
                         for (var iReportStatus = 0; iReportStatus < reportStatusButtons.length; iReportStatus++) {
                             var statusBtn = reportStatusButtons[iReportStatus];
@@ -7443,7 +7450,12 @@
                         if (!button || button.disabled) {
                             return;
                         }
-                        assignModalState.targetStatus = button.getAttribute("data-status-value") || "AV";
+                        var nextAssignStatus = button.getAttribute("data-status-value") || "AV";
+                        if (assignModalState.selectedOrder && (assignModalState.selectedOrder.JobID || assignModalState.selectedOrder.JobId) && isStatusOnlyStatus(nextAssignStatus)) {
+                            window.alert("Hapus Job Order terlebih dahulu sebelum ubah status.");
+                            return;
+                        }
+                        assignModalState.targetStatus = nextAssignStatus;
                         setActiveStatusButton();
                         setFeedback("", false, false);
                     });
@@ -7490,6 +7502,10 @@
                         }
 
                         var selectedStatus = (assignModalState.targetStatus || "AV").toUpperCase();
+                        if (assignModalState.selectedOrder && (assignModalState.selectedOrder.JobID || assignModalState.selectedOrder.JobId) && isStatusOnlyStatus(selectedStatus)) {
+                            window.alert("Hapus Job Order terlebih dahulu sebelum ubah status.");
+                            return;
+                        }
                         var isAvailableStatus = selectedStatus === "AV";
                         var selectedDeviceGroup = normalizeJoTypeForApi(assignModalState.joType) === "maintenance"
                             ? "GPS"

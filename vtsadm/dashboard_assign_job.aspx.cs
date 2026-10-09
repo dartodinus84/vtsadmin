@@ -15052,25 +15052,16 @@ ORDER BY
             string trainers,
             string usrUpd)
         {
-            string msg = "<b>JOB ORDER CUSTOMER TRAINING SUCCESS</b>\r\n"
-                + "<b>Training Job Order</b>\r\n"
-                + "<b>" + (trainingId ?? string.Empty) + "</b>\r\n"
-                + "<b>Customer</b>\r\n"
-                + "<b>" + (customerName ?? string.Empty) + "</b>\r\n"
-                + "<b>Online / Onsite</b>\r\n"
-                + "<b>" + DescribeMeetTypeForTraining(connString, trainingId) + "</b>\r\n"
-                + "<b>Schedule Date</b>\r\n"
-                + "<b>" + FormatDateForTrainingTelegram(schDateText) + "</b>\r\n"
-                + "<b>Training Date</b>\r\n"
-                + "<b>" + trainingDate.ToString("dd/MM/yyyy") + "</b>\r\n"
-                + "<b>Remark</b>\r\n"
-                + "<b>" + (remark ?? string.Empty) + "</b>\r\n"
-                + "<b>Trainers</b>\r\n"
-                + "<b>" + (trainers ?? string.Empty) + "</b>\r\n"
-                + "<b>User Update/Create</b>\r\n"
-                + "<b>" + (usrUpd ?? string.Empty) + "</b>\r\n";
-            SendLegacyTrainingTelegram(connString, "TelegramChatID3", msg);
-            SendLegacyTrainingTelegram(connString, "TelegramChatID2", msg);
+            ItsAssignTelegramService.NotifyAfterClose(
+                connString,
+                trainingId,
+                FormatDateForTrainingTelegram(schDateText),
+                trainingDate.ToString("dd/MM/yyyy"),
+                customerName,
+                remark,
+                trainers,
+                DescribeMeetTypeForTraining(connString, trainingId),
+                usrUpd);
         }
 
         private static void SendLegacyTrainingTelegram(string connString, string chatIdParam, string text)

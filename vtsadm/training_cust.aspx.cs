@@ -1076,46 +1076,27 @@ namespace vtsadm
 
         protected void Bot(string jono, string jodate, string trainingdate, string cus, string tanda, string trainer)
         {
-            string apitoken = "";
-            string url = "";
-            string chatid = "";
             try
             {
-                string strSQLtelegram = "sp_list_par_global 'TelegramChatID2'";
-                Recordset RecChatID = new Recordset();
-                RecChatID.Open(strSQLtelegram, Session["ClsTypeDBConnStringSQL"].ToString());
-                if (RecChatID.RecordCount() > 0)
-                {
-                    chatid += RecChatID.Fields("ParValue");
-                }
-                string strSQLtelegram2 = "sp_list_par_global 'TelegramApi'";
-                Recordset RecApi = new Recordset();
-                RecApi.Open(strSQLtelegram2, Session["ClsTypeDBConnStringSQL"].ToString());
-                if (RecApi.RecordCount() > 0)
-                {
-                    apitoken += RecApi.Fields("ParValue");
-                }
-
-                string strSQLtelegram3 = "sp_list_par_global 'TelegramUrl'";
-                Recordset RecUrl = new Recordset();
-                RecUrl.Open(strSQLtelegram3, Session["ClsTypeDBConnStringSQL"].ToString());
-                if (RecUrl.RecordCount() > 0)
-                {
-                    url += RecUrl.Fields("ParValue");
-                }
-                string urlString = url;
-                string apiToken = apitoken;
-                string chatId = chatid;
-
-                string text = BodyTelegram(jono,jodate, trainingdate, cus, tanda, trainer);
-                urlString = String.Format(urlString, apiToken, chatId, text);
-
-                WebClient webclient = new WebClient();
-                webclient.DownloadString(urlString);
+                string conn = Session["ClsTypeDBConnStringSQL"] == null
+                    ? string.Empty
+                    : Session["ClsTypeDBConnStringSQL"].ToString();
+                string userId = Session["ClsTypeUserID"] == null
+                    ? string.Empty
+                    : Session["ClsTypeUserID"].ToString();
+                ItsAssignTelegramService.NotifyAfterClose(
+                    conn,
+                    jono,
+                    jodate,
+                    trainingdate,
+                    cus,
+                    tanda,
+                    trainer,
+                    LookupMeetTypeDesc(jono),
+                    userId);
             }
-            catch (Exception ex)
+            catch
             {
-
             }
         }
         private string BodyTelegram(string jono ,string jodate, string trainingdate, string cus, string tanda, string trainer)
