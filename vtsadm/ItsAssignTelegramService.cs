@@ -148,25 +148,95 @@ namespace vtsadm
                 return;
             }
 
+            AssignDetail detail = null;
+            try
+            {
+                detail = LoadAssignDetailByJobId(connString, trainingId.Trim(), 1);
+            }
+            catch
+            {
+                detail = null;
+            }
+
+            if (detail == null)
+            {
+                detail = new AssignDetail
+                {
+                    JobId = trainingId.Trim()
+                };
+                EnrichFromTrainingOrder(connString, detail);
+                EnrichFromCustomer(connString, detail);
+                EnrichFromItsSupport(connString, detail);
+            }
+
+            if (string.IsNullOrWhiteSpace(detail.JobId))
+            {
+                detail.JobId = trainingId.Trim();
+            }
+
+            ApplyKnownMeetTypeLabel(connString, detail, meetTypeLabel);
+            detail.UpdatedBy = FirstNonEmpty(usrUpd, detail.UpdatedBy);
+
+            DateTime? trainingDate = ParseCloseNoticeDate(trainingDateText);
+            DateTime? scheduleDate = detail.SchDate
+                ?? detail.TrainingScheduleDate
+                ?? ParseCloseNoticeDate(scheduleDateText);
+            string category = ResolveCategoryLabel(detail);
+            string displayCustomer = ResolveBotCustomerDisplayName(detail);
+            if (string.IsNullOrWhiteSpace(displayCustomer) || displayCustomer == "-")
+            {
+                displayCustomer = FirstNonEmpty(customerName, "-");
+            }
+
+            string trainingDateLabel = trainingDate.HasValue
+                ? FormatDateId(trainingDate)
+                : FirstNonEmpty(trainingDateText, "-");
+            string dayLabel = trainingDate.HasValue
+                ? FormatDayDateId(trainingDate)
+                : (scheduleDate.HasValue ? FormatDayDateId(scheduleDate) : FirstNonEmpty(trainingDateText, "-"));
+
             StringBuilder message = new StringBuilder();
-            message.AppendLine("<b>JOB ORDER CUSTOMER TRAINING SUCCESS</b>");
-            message.AppendLine("<b>Training Job Order</b>");
-            message.AppendLine("<b>" + EscapeHtml(trainingId) + "</b>");
-            message.AppendLine("<b>Customer</b>");
-            message.AppendLine("<b>" + EscapeHtml(customerName) + "</b>");
-            message.AppendLine("<b>Online / Onsite</b>");
-            message.AppendLine("<b>" + EscapeHtml(meetTypeLabel) + "</b>");
-            message.AppendLine("<b>Schedule Date</b>");
-            message.AppendLine("<b>" + EscapeHtml(scheduleDateText) + "</b>");
-            message.AppendLine("<b>Training Date</b>");
-            message.AppendLine("<b>" + EscapeHtml(trainingDateText) + "</b>");
-            message.AppendLine("<b>Remark</b>");
-            message.AppendLine("<b>" + EscapeHtml(remark) + "</b>");
-            message.AppendLine("<b>Trainers</b>");
-            message.AppendLine("<b>" + EscapeHtml(trainers) + "</b>");
-            message.AppendLine("<b>User Update/Create</b>");
-            message.Append("<b>" + EscapeHtml(usrUpd) + "</b>");
-            SendNotificationMessage(connString, message.ToString());
+            message.AppendLine("✅ <b>NOTIFIKASI CLOSE " + EscapeHtml(category.ToUpperInvariant()) + "</b>");
+            message.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
+            message.AppendLine();
+            message.AppendLine("Jenis : <b>" + EscapeHtml(category) + "</b>");
+            message.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
+            message.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
+            message.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(scheduleDate)) + "</b>");
+            message.AppendLine("Tanggal " + EscapeHtml(category) + " : <b>" + EscapeHtml(trainingDateLabel) + "</b>");
+            message.AppendLine("Online / Onsite : <b>" + EscapeHtml(FirstNonEmpty(detail.MeetTypeDesc, meetTypeLabel, "-")) + "</b>");
+            message.AppendLine();
+            message.AppendLine("Pelanggan : <b>" + EscapeHtml(displayCustomer) + "</b>");
+            message.AppendLine("IT Support : <b>" + EscapeHtml(FirstNonEmpty(detail.TechnicianName, "-")) + "</b>");
+            message.AppendLine("Trainers : <b>" + EscapeHtml(FirstNonEmpty(trainers, "-")) + "</b>");
+            AppendBotMarketingLine(message, detail);
+            message.AppendLine();
+            message.AppendLine("<b>Catatan :</b>");
+            message.AppendLine(EscapeHtml(FirstNonEmpty(remark, "-")));
+            message.AppendLine();
+            message.AppendLine("Hari/tanggal : <b>" + EscapeHtml(dayLabel) + "</b>");
+            AppendBotCustomerContactSection(message, detail);
+            AppendUserUpdateCreateLine(message, detail);
+            AppendTelegramUserTag(message, detail);
+            SendNotificationMessage(connString, message.ToString().TrimEnd());
+        }
+
+        private static DateTime? ParseCloseNoticeDate(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            string text = value.Trim();
+            DateTime parsed;
+            string[] formats = { "dd/MM/yyyy", "d/M/yyyy", "yyyy-MM-dd", "dd-MM-yyyy" };
+            if (DateTime.TryParseExact(text, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed))
+            {
+                return parsed;
+            }
+
+            return ParseDate(text);
         }
 
         private static AssignDetail ResolveAssignNotificationDetail(
@@ -1387,9 +1457,10 @@ namespace vtsadm
             string itSupportName = FirstNonEmpty(detail.TechnicianName, "-");
             string remark = ResolveJobOrderCatatan(detail);
 
-            sb.AppendLine("🛠 <b>NOTIFIKASI PENUGASAN PEKERJAAN</b>");
+            sb.AppendLine("🛠 <b>NOTIFIKASI PENUGASAN " + EscapeHtml(category.ToUpperInvariant()) + "</b>");
             sb.AppendLine("<b>" + EscapeHtml(category) + "━━━━━━━━━━━━━━</b>");
             sb.AppendLine();
+            sb.AppendLine("Jenis : <b>" + EscapeHtml(category) + "</b>");
             sb.AppendLine("Nomor JO : <b>" + EscapeHtml(detail.JobId) + "</b>");
             sb.AppendLine("Tanggal Assign : <b>" + EscapeHtml(FormatDateId(ResolveBotAssignDate(detail))) + "</b>");
             sb.AppendLine("Tanggal Jadwal : <b>" + EscapeHtml(FormatDateId(detail.SchDate ?? detail.TrainingScheduleDate)) + "</b>");
