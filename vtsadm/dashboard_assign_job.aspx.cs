@@ -3405,19 +3405,25 @@ namespace vtsadm
             {
                 sql += " OR UPPER(LTRIM(RTRIM(TechnicianID))) = UPPER('" + safeAliasId + "')";
             }
-            sql += ") "
-                + "INSERT INTO trx_dashboard_assign_it_status (TechnicianID, SchDate, Status, UsrUpd, DtmUpd) "
-                + "VALUES ('" + safeTechnicianId + "', '" + schDateText + "', '" + safeStatus + "', '" + safeUser + "', GETDATE()) ";
-            if (!sameAlias && !string.IsNullOrWhiteSpace(safeAliasId))
+            sql += ") ";
+            if (!string.Equals(status, "UD", StringComparison.OrdinalIgnoreCase))
             {
                 sql += "INSERT INTO trx_dashboard_assign_it_status (TechnicianID, SchDate, Status, UsrUpd, DtmUpd) "
-                    + "VALUES ('" + safeAliasId + "', '" + schDateText + "', '" + safeStatus + "', '" + safeUser + "', GETDATE())";
+                    + "VALUES ('" + safeTechnicianId + "', '" + schDateText + "', '" + safeStatus + "', '" + safeUser + "', GETDATE()) ";
+                if (!sameAlias && !string.IsNullOrWhiteSpace(safeAliasId))
+                {
+                    sql += "INSERT INTO trx_dashboard_assign_it_status (TechnicianID, SchDate, Status, UsrUpd, DtmUpd) "
+                        + "VALUES ('" + safeAliasId + "', '" + schDateText + "', '" + safeStatus + "', '" + safeUser + "', GETDATE())";
+                }
             }
 
             int affectRows = 0;
             string executeMessage = string.Empty;
             bool executeOk = ExecuteItsStatusSql(sql, connString, out affectRows, out executeMessage);
-            if (!executeOk || (affectRows == 0 && !string.Equals(status, "AV", StringComparison.OrdinalIgnoreCase)))
+            if (!executeOk
+                || (affectRows == 0
+                    && !string.Equals(status, "AV", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(status, "UD", StringComparison.OrdinalIgnoreCase)))
             {
                 response.Message = string.IsNullOrWhiteSpace(executeMessage)
                     ? "Status IT Support tidak tersimpan."
@@ -3482,7 +3488,9 @@ namespace vtsadm
                     target["DayName"] = currentDate.ToString("ddd");
                     target["IsWeekend"] = isWeekend ? "1" : "0";
                     string savedStatus = ResolveItsDayStatus(itsDayStatus, trainer, day);
-                    string dayStatus = savedStatus == "AV" || string.IsNullOrEmpty(savedStatus)
+                    bool clearedStatus = string.IsNullOrEmpty(savedStatus)
+                        || savedStatus.Equals("UD", StringComparison.OrdinalIgnoreCase);
+                    string dayStatus = savedStatus == "AV" || clearedStatus
                         ? (savedStatus == "AV" ? "AV" : (totalJob > 0 ? totalJob.ToString() : "AV"))
                         : savedStatus;
                     target["DisplayValue"] = dayStatus;
@@ -7610,7 +7618,8 @@ ORDER BY
                         || normalizedValue == "CT"
                         || normalizedValue == "C"
                         || normalizedValue == "IZ"
-                        || normalizedValue == "I";
+                        || normalizedValue == "I"
+                        || normalizedValue == "UD";
                     bool availabilityBlocksAssign = isUnavailable
                         && normalizedValue != "OF";
                     bool canAssign = isAssignableStatus

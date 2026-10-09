@@ -4835,7 +4835,7 @@
                 }
 
                 var canAssignData = cell.getAttribute("data-can-assign") === "1";
-                return (status === "AV" || status === "AD") && canAssignData;
+                return (status === "AV" || status === "AD" || status === "UD") && canAssignData;
             }
 
             function isStatusOnlyEditableCell(cell) {

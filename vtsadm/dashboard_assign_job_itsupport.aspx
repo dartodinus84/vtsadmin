@@ -6639,7 +6639,7 @@
 
                 // Available opens the assign form. Offline, Cuti, and Izin open the status form
                 // so they can be changed back to Available without a job order.
-                return status === "AV" || status === "AD";
+                return status === "AV" || status === "AD" || status === "UD";
             }
 
             function isStatusOnlyEditableCell(cell) {
