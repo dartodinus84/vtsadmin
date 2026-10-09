@@ -6746,6 +6746,7 @@
     <Content Include="dashboard_customer_detail.aspx" />
     <Content Include="dashboard_deal.aspx" />
     <Content Include="dashboard_device_stock_monitoring.aspx" />
+    <Content Include="dashboard_stok_teknisi.aspx" />
     <Content Include="dashboard_eseal_rent.aspx" />
     <Content Include="dashboard_igo.aspx" />
     <Content Include="dashboard_calendar.aspx" />
@@ -8483,6 +8484,10 @@
     </Compile>
     <Compile Include="dashboard_device_stock_monitoring.aspx.cs">
       <DependentUpon>dashboard_device_stock_monitoring.aspx</DependentUpon>
+      <SubType>ASPXCodeBehind</SubType>
+    </Compile>
+    <Compile Include="dashboard_stok_teknisi.aspx.cs">
+      <DependentUpon>dashboard_stok_teknisi.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>
     </Compile>
     <Compile Include="dashboard_eseal_rent.aspx.cs">
