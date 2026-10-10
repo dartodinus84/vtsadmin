@@ -518,7 +518,6 @@
                                             <th>Teknisi</th>
                                             <th>Type Alat</th>
                                             <th>Status</th>
-                                            <th>Status Device</th>
                                             <th class="text-right">Qty</th>
                                         </tr>
                                     </thead>
@@ -943,7 +942,7 @@
                     contentType: 'application/json; charset=utf-8',
                     dataType: 'text',
                     cache: false,
-                    timeout: 120000,
+                    timeout: 300000,
                     success: function (raw) {
                         setModalLoading(false);
                         clearPageLoaders();

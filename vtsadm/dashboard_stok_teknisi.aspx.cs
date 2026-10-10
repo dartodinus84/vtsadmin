@@ -227,7 +227,7 @@ namespace vtsadm
         {
             DeviceSummaryRowsHtml = EmptyRow(2);
             AksesorisSummaryRowsHtml = EmptyRow(2);
-            DeviceDetailRowsHtml = EmptyRow(5, "Belum ada data. Silakan atur filter lalu klik Tampilkan.");
+            DeviceDetailRowsHtml = EmptyRow(4, "Belum ada data. Silakan atur filter lalu klik Tampilkan.");
             AksesorisDetailRowsHtml = EmptyRow(7, "Pilih teknisi request (atau SEMUA TEKNISI) lalu klik Tampilkan.");
             ErrorMessage = string.Empty;
 
@@ -286,7 +286,7 @@ namespace vtsadm
             catch (Exception ex)
             {
                 ErrorMessage = HttpUtility.HtmlEncode(ex.Message);
-                DeviceDetailRowsHtml = EmptyRow(5);
+                DeviceDetailRowsHtml = EmptyRow(4);
             }
         }
 
@@ -641,7 +641,6 @@ namespace vtsadm
             export.Columns.Add("Teknisi", typeof(string));
             export.Columns.Add("Type Alat", typeof(string));
             export.Columns.Add("Status", typeof(string));
-            export.Columns.Add("Status Device", typeof(string));
             export.Columns.Add("Qty", typeof(int));
 
             if (source == null || source.Rows.Count == 0)
@@ -653,7 +652,6 @@ namespace vtsadm
                 string teknisi = ToSafeString(row, "Teknisi");
                 string typeAlat = ToSafeString(row, "TypeAlat");
                 string status = ToSafeString(row, "Status");
-                string deviceStatus = ToSafeString(row, "DeviceStatus");
                 if (string.IsNullOrWhiteSpace(teknisi) &&
                     string.IsNullOrWhiteSpace(typeAlat) &&
                     string.IsNullOrWhiteSpace(status))
@@ -661,11 +659,11 @@ namespace vtsadm
 
                 int qty = ToInt(row, "Qty");
                 totalQty += qty;
-                export.Rows.Add(teknisi, typeAlat, status, deviceStatus, qty);
+                export.Rows.Add(teknisi, typeAlat, status, qty);
             }
 
             if (export.Rows.Count > 0)
-                export.Rows.Add("TOTAL", string.Empty, string.Empty, string.Empty, totalQty);
+                export.Rows.Add("TOTAL", string.Empty, string.Empty, totalQty);
 
             return export;
         }
@@ -795,7 +793,7 @@ namespace vtsadm
             string filterBranchId)
         {
             if (dt == null || dt.Rows.Count == 0)
-                return EmptyRow(5);
+                return EmptyRow(4);
 
             bool hasRealData = dt.AsEnumerable().Any(r =>
                 !string.IsNullOrWhiteSpace(ToSafeString(r, "Teknisi")) ||
@@ -803,16 +801,18 @@ namespace vtsadm
                 ToInt(r, "Qty") > 0);
 
             if (!hasRealData)
-                return EmptyRow(5);
+                return EmptyRow(4);
 
             StringBuilder html = new StringBuilder();
             int totalQty = 0;
+            string devStatusFilter = string.IsNullOrWhiteSpace(filterDeviceStatus) ? "ALL" : filterDeviceStatus;
+            string branchFilter = string.IsNullOrWhiteSpace(filterBranchId) ? "ALL" : filterBranchId;
+
             foreach (DataRow row in dt.Rows)
             {
                 string teknisi = ToSafeString(row, "Teknisi");
                 string typeAlat = ToSafeString(row, "TypeAlat");
                 string status = ToSafeString(row, "Status");
-                string deviceStatus = ToSafeString(row, "DeviceStatus");
                 string technicianId = ToSafeString(row, "TechnicianID");
                 string deviceTypeId = ToSafeString(row, "DeviceTypeID");
                 int qty = ToInt(row, "Qty");
@@ -826,11 +826,10 @@ namespace vtsadm
                 html.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(teknisi));
                 html.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(typeAlat));
                 html.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(status));
-                html.AppendFormat("<td><span class='label label-default'>{0}</span></td>",
-                    HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(deviceStatus) ? "-" : deviceStatus));
                 html.Append("<td class='text-right'>");
                 if (qty > 0)
                 {
+                    // Status Device hanya di modal unit detail (klik Qty)
                     html.Append(BuildQtyLink(
                         qty,
                         "device",
@@ -838,10 +837,10 @@ namespace vtsadm
                         string.IsNullOrWhiteSpace(deviceTypeId) ? "ALL" : deviceTypeId,
                         status,
                         string.Empty,
-                        string.IsNullOrWhiteSpace(deviceStatus) ? "ALL" : deviceStatus,
-                        string.IsNullOrWhiteSpace(filterBranchId) ? "ALL" : filterBranchId,
+                        devStatusFilter,
+                        branchFilter,
                         "Detail Device - " + status,
-                        teknisi + " / " + typeAlat + " / " + deviceStatus));
+                        teknisi + " / " + typeAlat));
                 }
                 else
                 {
@@ -851,10 +850,10 @@ namespace vtsadm
             }
 
             if (html.Length == 0)
-                return EmptyRow(5);
+                return EmptyRow(4);
 
             html.Append("<tr class='stok-total-row'>");
-            html.Append("<td colspan='4'><strong>TOTAL</strong></td>");
+            html.Append("<td colspan='3'><strong>TOTAL</strong></td>");
             html.Append("<td class='text-right'><strong>");
             if (totalQty > 0)
             {
@@ -865,8 +864,8 @@ namespace vtsadm
                     string.IsNullOrWhiteSpace(filterTypeId) ? "ALL" : filterTypeId,
                     string.IsNullOrWhiteSpace(filterBucket) ? "STOK DITEKNISI" : filterBucket,
                     string.Empty,
-                    string.IsNullOrWhiteSpace(filterDeviceStatus) ? "ALL" : filterDeviceStatus,
-                    string.IsNullOrWhiteSpace(filterBranchId) ? "ALL" : filterBranchId,
+                    devStatusFilter,
+                    branchFilter,
                     "Detail Device - TOTAL",
                     "Filter aktif / seluruh baris di tabel"));
             }
@@ -1019,8 +1018,7 @@ namespace vtsadm
             public string DeviceStatus { get; set; }
         }
 
-        private const int UnitExportMaxRows = 10000;
-        private const int UnitExportPageSize = 200;
+        private const int UnitExportPageSize = 500;
 
         [WebMethod(EnableSession = true)]
         [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
@@ -1127,7 +1125,7 @@ namespace vtsadm
                 int page = 1;
                 int totalCount = 0;
 
-                while (rows.Count < UnitExportMaxRows)
+                while (true)
                 {
                     string spCall;
                     if (!TryBuildUnitDetailSpCall(
@@ -1154,8 +1152,6 @@ namespace vtsadm
                             totalCount = ToInt(row, "TotalCount");
 
                         rows.Add(MapUnitDetailItem(row));
-                        if (rows.Count >= UnitExportMaxRows)
-                            break;
                     }
 
                     if (rows.Count >= totalCount || dt.Rows.Count < UnitExportPageSize)
@@ -1170,14 +1166,12 @@ namespace vtsadm
                     return response;
                 }
 
-                response.totalCount = totalCount;
+                response.totalCount = totalCount > 0 ? totalCount : rows.Count;
                 response.exportedCount = rows.Count;
-                response.truncated = totalCount > rows.Count;
+                response.truncated = false;
                 response.html = BuildUnitDetailExcelHtml(rows);
                 response.success = true;
-                response.message = response.truncated
-                    ? string.Format("Export berhasil. Ditampilkan {0:N0} dari {1:N0} unit (batas export).", rows.Count, totalCount)
-                    : "OK";
+                response.message = "OK";
             }
             catch (Exception ex)
             {
