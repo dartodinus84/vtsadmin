@@ -1855,6 +1855,38 @@ namespace vtsadm
                 || groupId == "ADM";
         }
 
+        private const int ItsAdminScheduleLookbackDays = 5;
+
+        /// <summary>
+        /// IT Support admin may assign and close from today back through this many days.
+        /// Older dates stay locked. Teknisi and non-admin users are unchanged.
+        /// </summary>
+        private static bool RejectItsScheduleDate(DateTime schDate, SaveAssignResponse response)
+        {
+            if (!IsJobTrainingAssignRequestContext()
+                || schDate.Date >= DateTime.Today
+                || ItsAdminCanUseScheduleDate(schDate))
+            {
+                return false;
+            }
+
+            response.Message = IsAssignAdminSession()
+                ? "Admin hanya bisa assign sampai 5 hari ke belakang."
+                : "Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.";
+            return true;
+        }
+
+        private static bool ItsAdminCanUseScheduleDate(DateTime schDate)
+        {
+            if (!IsJobTrainingAssignRequestContext() || !IsAssignAdminSession())
+            {
+                return false;
+            }
+
+            DateTime oldest = DateTime.Today.AddDays(-ItsAdminScheduleLookbackDays);
+            return schDate.Date >= oldest;
+        }
+
         public static bool CurrentUserCanAccessCloseJobTraining()
         {
             if (IsAssignAdminSession())
@@ -7610,7 +7642,8 @@ ORDER BY
                     DateTime cellDate = new DateTime(periodDate.Year, periodDate.Month, day);
                     bool isTodayCell = cellDate.Date == DateTime.Today;
                     bool isTodayAvCell = isTodayCell && normalizedValue == "AV";
-                    bool isFutureOrToday = cellDate.Date >= DateTime.Today;
+                    bool isFutureOrToday = cellDate.Date >= DateTime.Today
+                        || ItsAdminCanUseScheduleDate(cellDate);
                     bool isAssignableStatus = normalizedValue == "AV"
                         || normalizedValue == "AD"
                         || normalizedValue == "OF"
@@ -9838,6 +9871,11 @@ ORDER BY
                 return response;
             }
 
+            if (RejectItsScheduleDate(schDateValue, response))
+            {
+                return response;
+            }
+
             if (requiresJobAssignment && qtyAssign <= 0)
             {
                 response.Message = "Qty assign minimal 1.";
@@ -10080,6 +10118,11 @@ ORDER BY
             if (!DateTime.TryParse(schDate, out schDateValue))
             {
                 response.Message = "Tanggal schedule tidak valid.";
+                return response;
+            }
+
+            if (RejectItsScheduleDate(schDateValue, response))
+            {
                 return response;
             }
 
@@ -14214,9 +14257,11 @@ ORDER BY
                 return response;
             }
 
-            if (scheduleDateValue.Date < DateTime.Today)
+            if (scheduleDateValue.Date < DateTime.Today && !ItsAdminCanUseScheduleDate(scheduleDateValue))
             {
-                response.Message = "Training/Visit hanya bisa ditambahkan untuk tanggal hari ini atau setelahnya.";
+                response.Message = IsJobTrainingAssignRequestContext() && IsAssignAdminSession()
+                    ? "Admin hanya bisa assign sampai 5 hari ke belakang."
+                    : "Training/Visit hanya bisa ditambahkan untuk tanggal hari ini atau setelahnya.";
                 return response;
             }
 
@@ -15277,7 +15322,7 @@ ORDER BY
             CountItsAssignsForDay(resolvedItId, technicianId, schDateValue, out totalAssign, out openAssign);
             string savedStatus = LookupItsDayStatus(resolvedItId, technicianId, schDateValue);
 
-            bool canAssign = schDateValue.Date >= DateTime.Today
+            bool canAssign = (schDateValue.Date >= DateTime.Today || ItsAdminCanUseScheduleDate(schDateValue))
                 && (ItsUserCanAssignToTechnician(resolvedItId)
                     || ItsUserCanAssignToTechnician(technicianId));
 

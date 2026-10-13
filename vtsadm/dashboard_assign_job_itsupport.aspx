@@ -5673,6 +5673,21 @@
             var loginItIdFieldId = "<%= hfLoginItId.ClientID %>";
             var loginItNameFieldId = "<%= hfLoginItName.ClientID %>";
             var loginUserIdFieldId = "<%= hfLoginUserId.ClientID %>";
+            var assignAdminUnlocked = <%= IsAssignAdminSession() ? "true" : "false" %>;
+            var assignAdminLookbackDays = 5;
+
+            function adminCanUseScheduleDate(dateValue) {
+                if (!assignAdminUnlocked) {
+                    return false;
+                }
+                var scheduleDate = dateValue instanceof Date ? dateValue : parseIsoDate(dateValue);
+                if (!scheduleDate) {
+                    return false;
+                }
+                var oldest = getTodayDateOnly();
+                oldest.setDate(oldest.getDate() - assignAdminLookbackDays);
+                return scheduleDate.getTime() >= oldest.getTime();
+            }
 
             function getIsTechnicianUser() {
                 var field = document.getElementById(technicianFlagFieldId);
@@ -6208,7 +6223,7 @@
                 if (assignCard) {
                     if (show) {
                         assignCard.style.display = "none";
-                    } else if (!isPastScheduleDate(reportModalState.schDate || "")) {
+                    } else if (adminCanUseScheduleDate(reportModalState.schDate || "") || !isPastScheduleDate(reportModalState.schDate || "")) {
                         assignCard.style.display = "";
                     }
                 }
@@ -6629,7 +6644,7 @@
                 }
 
                 var isFutureOrToday = cellDate.getTime() >= getTodayDateOnly().getTime();
-                if (!isFutureOrToday) {
+                if (!isFutureOrToday && !adminCanUseScheduleDate(cellDate)) {
                     return false;
                 }
 
@@ -6653,7 +6668,7 @@
                     return false;
                 }
                 var isPastDate = cellDate.getTime() < getTodayDateOnly().getTime();
-                if (isPastDate) {
+                if (isPastDate && !adminCanUseScheduleDate(cellDate)) {
                     return false;
                 }
 
@@ -6978,7 +6993,7 @@
                 var assignCard = document.getElementById("assignReportAssignCard");
                 var intro = document.getElementById("assignReportAssignIntro");
                 var formWrap = document.getElementById("assignReportAssignForm");
-                var isPastDate = isPastScheduleDate(reportModalState.schDate || "");
+                var isPastDate = isPastScheduleDate(reportModalState.schDate || "") && !adminCanUseScheduleDate(reportModalState.schDate || "");
                 if (assignCard) {
                     assignCard.style.display = isPastDate ? "none" : "";
                 }
@@ -7305,8 +7320,10 @@
                     return;
                 }
                 reportModalState.submitAction = actionSource === "administration" ? "administration" : "assign";
-                if (isPastScheduleDate(reportModalState.schDate || "")) {
-                    setReportFeedback("Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.", true, false);
+                if (isPastScheduleDate(reportModalState.schDate || "") && !adminCanUseScheduleDate(reportModalState.schDate || "")) {
+                    setReportFeedback(assignAdminUnlocked
+                        ? "Admin hanya bisa assign sampai 5 hari ke belakang."
+                        : "Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.", true, false);
                     return;
                 }
 
@@ -8286,7 +8303,8 @@
                 syncTodayCellClasses(cell, value);
 
                 var cellDate = parseIsoDate(cell.getAttribute("data-date"));
-                var isFutureOrToday = cellDate && cellDate.getTime() >= getTodayDateOnly().getTime();
+                var isFutureOrToday = (cellDate && cellDate.getTime() >= getTodayDateOnly().getTime())
+                    || adminCanUseScheduleDate(cellDate);
                 var isAssignableClickable = isFutureOrToday
                     && !!canAssign
                     && (upperValue === "AV" || upperValue === "AD");
