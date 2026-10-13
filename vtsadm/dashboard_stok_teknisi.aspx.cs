@@ -1012,13 +1012,15 @@ namespace vtsadm
         {
             public string DeviceID { get; set; }
             public string NoSN { get; set; }
+            public string Branch { get; set; }
             public string Teknisi { get; set; }
             public string TypeAlat { get; set; }
             public string Status { get; set; }
             public string DeviceStatus { get; set; }
         }
 
-        private const int UnitExportPageSize = 500;
+        // Marker export: SP treat pageSize >= 50000 sebagai ambil semua (tanpa paging)
+        private const int UnitExportAllPageSize = 50000;
 
         [WebMethod(EnableSession = true)]
         [ScriptMethod(ResponseFormat = ResponseFormat.Json)]
@@ -1121,43 +1123,33 @@ namespace vtsadm
                     return response;
                 }
 
-                var rows = new List<UnitDetailItem>();
-                int page = 1;
-                int totalCount = 0;
-
-                while (true)
+                // Export only: satu call, SP pageSize >= 50000 = semua baris (paging UI tidak pakai path ini)
+                string spCall;
+                if (!TryBuildUnitDetailSpCall(
+                    panel, technicianId, deviceTypeId, statusBucket, metric, deviceStatus, branchId,
+                    1, UnitExportAllPageSize, true, out spCall, out error))
                 {
-                    string spCall;
-                    if (!TryBuildUnitDetailSpCall(
-                        panel, technicianId, deviceTypeId, statusBucket, metric, deviceStatus, branchId,
-                        page, UnitExportPageSize, out spCall, out error))
-                    {
-                        response.message = error;
-                        return response;
-                    }
+                    response.message = error;
+                    return response;
+                }
 
-                    DataTable dt = ExecSpStatic(spCall, conn, out error);
-                    if (!string.IsNullOrWhiteSpace(error))
-                    {
-                        response.message = error;
-                        return response;
-                    }
+                DataTable dt = ExecSpStatic(spCall, conn, out error);
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    response.message = error;
+                    return response;
+                }
 
-                    if (dt.Rows.Count == 0)
-                        break;
-
+                var rows = new List<UnitDetailItem>();
+                int totalCount = 0;
+                if (dt != null)
+                {
                     foreach (DataRow row in dt.Rows)
                     {
                         if (totalCount == 0)
                             totalCount = ToInt(row, "TotalCount");
-
                         rows.Add(MapUnitDetailItem(row));
                     }
-
-                    if (rows.Count >= totalCount || dt.Rows.Count < UnitExportPageSize)
-                        break;
-
-                    page++;
                 }
 
                 if (rows.Count == 0)
@@ -1168,10 +1160,12 @@ namespace vtsadm
 
                 response.totalCount = totalCount > 0 ? totalCount : rows.Count;
                 response.exportedCount = rows.Count;
-                response.truncated = false;
+                response.truncated = response.exportedCount < response.totalCount;
                 response.html = BuildUnitDetailExcelHtml(rows);
                 response.success = true;
-                response.message = "OK";
+                response.message = response.truncated
+                    ? string.Format("Export terpotong: {0} dari {1} unit.", response.exportedCount, response.totalCount)
+                    : string.Format("OK ({0} unit)", response.exportedCount);
             }
             catch (Exception ex)
             {
@@ -1220,6 +1214,25 @@ namespace vtsadm
             out string spCall,
             out string error)
         {
+            return TryBuildUnitDetailSpCall(
+                panel, technicianId, deviceTypeId, statusBucket, metric, deviceStatus, branchId,
+                pageNumber, pageSize, false, out spCall, out error);
+        }
+
+        private static bool TryBuildUnitDetailSpCall(
+            string panel,
+            string technicianId,
+            string deviceTypeId,
+            string statusBucket,
+            string metric,
+            string deviceStatus,
+            string branchId,
+            int pageNumber,
+            int pageSize,
+            bool forExport,
+            out string spCall,
+            out string error)
+        {
             spCall = string.Empty;
             error = string.Empty;
 
@@ -1229,7 +1242,10 @@ namespace vtsadm
             string devStatus = string.IsNullOrWhiteSpace(deviceStatus) ? "ALL" : deviceStatus.Trim();
             string branch = string.IsNullOrWhiteSpace(branchId) ? "ALL" : branchId.Trim();
             int page = pageNumber < 1 ? 1 : pageNumber;
-            int size = pageSize < 1 ? 10 : (pageSize > 200 ? 200 : pageSize);
+            // Modal/paging: max 200 (logic lama). Export: 50000 → SP ambil semua.
+            int size = forExport
+                ? UnitExportAllPageSize
+                : (pageSize < 1 ? 10 : (pageSize > 200 ? 200 : pageSize));
 
             if (panelKey == "device")
             {
@@ -1302,6 +1318,7 @@ namespace vtsadm
             {
                 DeviceID = ToSafeString(row, "DeviceID"),
                 NoSN = ToSafeString(row, "NoSN"),
+                Branch = ToSafeString(row, "Branch"),
                 Teknisi = ToSafeString(row, "Teknisi"),
                 TypeAlat = ToSafeString(row, "TypeAlat"),
                 Status = ToSafeString(row, "Status"),
@@ -1314,7 +1331,7 @@ namespace vtsadm
             var sb = new StringBuilder();
             sb.Append("<table border='1'>");
             sb.Append("<tr>");
-            sb.Append("<th>No</th><th>DeviceID</th><th>NoSN</th><th>Teknisi</th><th>Type</th><th>Status</th><th>Status Device</th>");
+            sb.Append("<th>No</th><th>DeviceID</th><th>NoSN</th><th>Branch</th><th>Teknisi</th><th>Type</th><th>Status</th><th>Status Device</th>");
             sb.Append("</tr>");
 
             for (int i = 0; i < rows.Count; i++)
@@ -1324,6 +1341,7 @@ namespace vtsadm
                 sb.AppendFormat("<td>{0}</td>", i + 1);
                 sb.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(row.DeviceID ?? string.Empty));
                 sb.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(row.NoSN ?? string.Empty));
+                sb.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(row.Branch ?? string.Empty));
                 sb.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(row.Teknisi ?? string.Empty));
                 sb.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(row.TypeAlat ?? string.Empty));
                 sb.AppendFormat("<td>{0}</td>", HttpUtility.HtmlEncode(row.Status ?? string.Empty));

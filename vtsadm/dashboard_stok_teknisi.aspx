@@ -614,6 +614,7 @@
                                     <th style="width: 40px;">#</th>
                                     <th>DeviceID</th>
                                     <th>NoSN</th>
+                                    <th>Branch</th>
                                     <th>Teknisi</th>
                                     <th>Type</th>
                                     <th>Status</th>
@@ -621,7 +622,7 @@
                                 </tr>
                             </thead>
                             <tbody class="js-stok-body">
-                                <tr><td colspan="7" class="text-center text-muted">Memuat...</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted">Memuat...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -942,7 +943,7 @@
                     contentType: 'application/json; charset=utf-8',
                     dataType: 'text',
                     cache: false,
-                    timeout: 300000,
+                    timeout: 600000,
                     success: function (raw) {
                         setModalLoading(false);
                         clearPageLoaders();
@@ -981,7 +982,7 @@
                 var body = $modal().find('.js-stok-body')[0];
                 if (!body) return;
                 if (!rows || !rows.length) {
-                    body.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Tidak ada data unit.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Tidak ada data unit.</td></tr>';
                     return;
                 }
                 var start = ((state.page - 1) * state.pageSize) + 1;
@@ -992,6 +993,7 @@
                     html += '<td>' + (start + i) + '</td>';
                     html += '<td>' + escapeHtml(r.DeviceID || '-') + '</td>';
                     html += '<td>' + escapeHtml(r.NoSN || '-') + '</td>';
+                    html += '<td>' + escapeHtml(r.Branch || '-') + '</td>';
                     html += '<td>' + escapeHtml(r.Teknisi || '-') + '</td>';
                     html += '<td>' + escapeHtml(r.TypeAlat || '-') + '</td>';
                     html += '<td>' + escapeHtml(r.Status || '-') + '</td>';
