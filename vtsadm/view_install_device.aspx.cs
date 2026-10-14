@@ -59,14 +59,22 @@ namespace vtsadm
                     return;
                 }
 
+                DataTable dt = ds.Tables[0];
                 string sortField = ViewState[sViewStateFieldSort]?.ToString() ?? "";
                 string sortDir = ViewState[sViewStateDirSort]?.ToString() ?? "";
-                if (!string.IsNullOrEmpty(sortField))
+                try
                 {
-                    ds.Tables[0].DefaultView.Sort = sortField + " " + sortDir;
+                    if (!string.IsNullOrEmpty(sortField) && dt.Columns.Contains(sortField))
+                    {
+                        dt.DefaultView.Sort = sortField + " " + sortDir;
+                    }
+                }
+                catch
+                {
+                    dt.DefaultView.Sort = "";
                 }
 
-                GridView2.DataSource = ds;
+                GridView2.DataSource = dt.DefaultView;
                 GridView2.DataBind();
             }
             catch
@@ -153,7 +161,10 @@ namespace vtsadm
                 }
 
                 DataTable dt = ds.Tables[0];
-                if (!dt.Columns.Contains(ColNosn) || !dt.Columns.Contains(ColGpsTime))
+                // Ganti kolom gps_time jadi string writable — buang nilai SP
+                EnsureMongoGpsTimeColumn(dt);
+
+                if (!dt.Columns.Contains(ColNosn))
                 {
                     return;
                 }
@@ -174,11 +185,6 @@ namespace vtsadm
                 }
 
                 Dictionary<string, DateTime> gpsTimeMap = FetchLastGpsTimesFromMongo(distinctNosn.ToList());
-                if (gpsTimeMap.Count == 0)
-                {
-                    return;
-                }
-
                 foreach (DataRow row in dt.Rows)
                 {
                     string nosn = GetNosnFromRow(row);
@@ -190,7 +196,7 @@ namespace vtsadm
                     DateTime gpsTime;
                     if (gpsTimeMap.TryGetValue(nosn, out gpsTime))
                     {
-                        row[ColGpsTime] = gpsTime;
+                        row[ColGpsTime] = gpsTime.ToString("yyyy-MM-dd HH:mm:ss");
                     }
                 }
             }
@@ -199,7 +205,32 @@ namespace vtsadm
             }
         }
 
-        // Mapping: SP result nosn -> MongoDB last_position.gps_sn (string, no numeric conversion)
+        /// <summary>
+        /// Buang gps_time dari SP; sediakan kolom string kosong untuk diisi Mongo saja.
+        /// </summary>
+        private static void EnsureMongoGpsTimeColumn(DataTable dt)
+        {
+            if (dt.Columns.Contains(ColGpsTime))
+            {
+                DataColumn oldCol = dt.Columns[ColGpsTime];
+                int ordinal = oldCol.Ordinal;
+                string tmpName = ColGpsTime + "__mongo";
+                dt.Columns.Add(tmpName, typeof(string));
+                foreach (DataRow row in dt.Rows)
+                {
+                    row[tmpName] = DBNull.Value;
+                }
+                dt.Columns.Remove(ColGpsTime);
+                dt.Columns[tmpName].ColumnName = ColGpsTime;
+                dt.Columns[ColGpsTime].SetOrdinal(ordinal);
+            }
+            else
+            {
+                dt.Columns.Add(ColGpsTime, typeof(string));
+            }
+        }
+
+        // Mapping: SP result nosn -> MongoDB last_position.gps_sn
         private static string GetNosnFromRow(DataRow row)
         {
             if (row == null || row[ColNosn] == null || row[ColNosn] == DBNull.Value)
@@ -211,22 +242,18 @@ namespace vtsadm
             return string.IsNullOrEmpty(nosn) ? null : nosn;
         }
 
-        private static string GetGpsSnFromDocument(BsonDocument doc)
+        /// <summary>
+        /// Pakai MongoGPSDATA (sama device_qc_new / dashboard notif).
+        /// </summary>
+        private static string ResolveMongoConnectionString()
         {
-            if (doc == null || !doc.Contains("gps_sn"))
+            ConnectionStringSettings gpsData = ConfigurationManager.ConnectionStrings["MongoGPSDATA"];
+            if (gpsData != null && !string.IsNullOrWhiteSpace(gpsData.ConnectionString))
             {
-                return null;
+                return gpsData.ConnectionString;
             }
 
-            BsonValue value = doc["gps_sn"];
-            if (value == null || value.IsBsonNull)
-            {
-                return null;
-            }
-
-            // Keep string representation; do not parse/convert to numeric (preserves leading zeros on nosn side)
-            string gpsSn = value.ToString().Trim();
-            return string.IsNullOrEmpty(gpsSn) ? null : gpsSn;
+            return null;
         }
 
         private Dictionary<string, DateTime> FetchLastGpsTimesFromMongo(List<string> distinctNosn)
@@ -235,7 +262,7 @@ namespace vtsadm
 
             try
             {
-                var mongoConnection = ConfigurationManager.ConnectionStrings["MongoGPSDATA"]?.ConnectionString;
+                string mongoConnection = ResolveMongoConnectionString();
                 if (string.IsNullOrWhiteSpace(mongoConnection))
                 {
                     return result;
@@ -245,49 +272,17 @@ namespace vtsadm
                 var database = client.GetDatabase("GPSData");
                 var collection = database.GetCollection<BsonDocument>("last_position");
 
-                const int batchSize = 500;
+                // Batch (jangan 1 query / SN — 245 row bisa timeout → semua GPS Time kosong)
+                const int batchSize = 200;
                 for (int i = 0; i < distinctNosn.Count; i += batchSize)
                 {
-                    var batch = distinctNosn.Skip(i).Take(batchSize).ToList();
-                    var filter = Builders<BsonDocument>.Filter.In("gps_sn", batch);
-                    var projection = Builders<BsonDocument>.Projection
-                        .Include("gps_sn")
-                        .Include("last_gps_time");
-
-                    List<BsonDocument> documents = collection.Find(filter).Project(projection).ToList();
-                    foreach (BsonDocument doc in documents)
+                    var batch = distinctNosn.Skip(i).Take(batchSize).Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+                    if (batch.Count == 0)
                     {
-                        if (!doc.Contains("last_gps_time"))
-                        {
-                            continue;
-                        }
-
-                        string gpsSn = GetGpsSnFromDocument(doc);
-                        if (string.IsNullOrEmpty(gpsSn))
-                        {
-                            continue;
-                        }
-
-                        DateTime? parsed = ParseLastGpsTime(doc["last_gps_time"]);
-                        if (!parsed.HasValue)
-                        {
-                            continue;
-                        }
-
-                        DateTime adjusted = parsed.Value.AddHours(7);
-                        DateTime existing;
-                        if (result.TryGetValue(gpsSn, out existing))
-                        {
-                            if (adjusted > existing)
-                            {
-                                result[gpsSn] = adjusted;
-                            }
-                        }
-                        else
-                        {
-                            result[gpsSn] = adjusted;
-                        }
+                        continue;
                     }
+
+                    FillGpsTimesFromBatch(collection, batch, result);
                 }
             }
             catch
@@ -295,6 +290,141 @@ namespace vtsadm
             }
 
             return result;
+        }
+
+        private static void FillGpsTimesFromBatch(
+            IMongoCollection<BsonDocument> collection,
+            List<string> batch,
+            Dictionary<string, DateTime> result)
+        {
+            try
+            {
+                // $in string + NumberLong agar match tipe apapun di Mongo
+                var snValues = new BsonArray();
+                foreach (string sn in batch)
+                {
+                    snValues.Add(sn);
+                    long snLong;
+                    if (long.TryParse(sn, out snLong))
+                    {
+                        snValues.Add(snLong);
+                    }
+                }
+
+                var pipeline = new[]
+                {
+                    new BsonDocument("$match", new BsonDocument("gps_sn", new BsonDocument("$in", snValues))),
+                    new BsonDocument("$sort", new BsonDocument
+                    {
+                        { "gps_time", -1 },
+                        { "last_gps_time", -1 }
+                    }),
+                    new BsonDocument("$group", new BsonDocument
+                    {
+                        { "_id", "$gps_sn" },
+                        { "gps_time", new BsonDocument("$first", "$gps_time") },
+                        { "last_gps_time", new BsonDocument("$first", "$last_gps_time") }
+                    }),
+                    new BsonDocument("$project", new BsonDocument
+                    {
+                        { "_id", 0 },
+                        { "gps_sn", "$_id" },
+                        { "gps_time", new BsonDocument("$dateAdd", new BsonDocument
+                            {
+                                { "startDate", new BsonDocument("$ifNull", new BsonArray { "$gps_time", "$last_gps_time" }) },
+                                { "unit", "hour" },
+                                { "amount", 7 }
+                            })
+                        }
+                    })
+                };
+
+                List<BsonDocument> docs = collection.Aggregate<BsonDocument>(pipeline).ToList();
+                foreach (BsonDocument doc in docs)
+                {
+                    if (doc == null || !doc.Contains("gps_sn") || !doc.Contains("gps_time") || doc["gps_time"].IsBsonNull)
+                    {
+                        continue;
+                    }
+
+                    string snKey = doc["gps_sn"].ToString().Trim();
+                    if (string.IsNullOrEmpty(snKey))
+                    {
+                        continue;
+                    }
+
+                    DateTime utc = doc["gps_time"].ToUniversalTime();
+                    result[snKey] = new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, utc.Second, DateTimeKind.Unspecified);
+                }
+            }
+            catch
+            {
+                // Fallback Find per SN di batch ini saja
+                foreach (string sn in batch)
+                {
+                    DateTime? gpsTime = TryGetGpsTimeByFind(collection, sn);
+                    if (gpsTime.HasValue)
+                    {
+                        result[sn] = gpsTime.Value;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Fallback: Find by gps_sn, ambil gps_time (atau last_gps_time), +7 di C#.
+        /// </summary>
+        private static DateTime? TryGetGpsTimeByFind(IMongoCollection<BsonDocument> collection, string sn)
+        {
+            try
+            {
+                var snOr = new List<FilterDefinition<BsonDocument>>
+                {
+                    Builders<BsonDocument>.Filter.Eq("gps_sn", sn)
+                };
+                long snLong;
+                if (long.TryParse(sn, out snLong))
+                {
+                    snOr.Add(Builders<BsonDocument>.Filter.Eq("gps_sn", snLong));
+                }
+
+                var filter = Builders<BsonDocument>.Filter.Or(snOr);
+                BsonDocument doc = collection.Find(filter)
+                    .Sort(Builders<BsonDocument>.Sort.Descending("gps_time").Descending("last_gps_time"))
+                    .Limit(1)
+                    .Project(Builders<BsonDocument>.Projection
+                        .Include("gps_sn")
+                        .Include("gps_time")
+                        .Include("last_gps_time"))
+                    .FirstOrDefault();
+
+                if (doc == null)
+                {
+                    return null;
+                }
+
+                BsonValue raw = null;
+                if (doc.Contains("gps_time") && !doc["gps_time"].IsBsonNull)
+                {
+                    raw = doc["gps_time"];
+                }
+                else if (doc.Contains("last_gps_time") && !doc["last_gps_time"].IsBsonNull)
+                {
+                    raw = doc["last_gps_time"];
+                }
+
+                DateTime? parsed = ParseLastGpsTime(raw);
+                if (!parsed.HasValue)
+                {
+                    return null;
+                }
+
+                return parsed.Value.AddHours(7);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static DateTime? ParseLastGpsTime(BsonValue value)
@@ -307,7 +437,8 @@ namespace vtsadm
             switch (value.BsonType)
             {
                 case BsonType.DateTime:
-                    return value.ToUniversalTime();
+                    DateTime utc = value.ToUniversalTime();
+                    return new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, utc.Second, DateTimeKind.Unspecified);
                 case BsonType.String:
                     DateTime dt;
                     if (DateTime.TryParse(value.AsString, out dt))
