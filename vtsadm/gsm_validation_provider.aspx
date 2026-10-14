@@ -111,6 +111,7 @@
                                         <asp:BoundField DataField="Gsm_Status" HeaderText="Status" ItemStyle-Wrap="false" />
                                         <asp:BoundField DataField="ICCID" HeaderText="ICCID" ItemStyle-Wrap="false" />
                                         <asp:BoundField DataField="CustomerName" HeaderText="Customer Name" ItemStyle-Wrap="false" />
+                                        <asp:BoundField DataField="PoliceNo" HeaderText="Police No" ItemStyle-Wrap="false" />
 
                                         <asp:BoundField DataField="MarketingName" HeaderText="Marketing Name" ItemStyle-Wrap="false" />
                                         <asp:BoundField DataField="DeviceTypeDesc" HeaderText="Device Type" ItemStyle-Wrap="false" />
