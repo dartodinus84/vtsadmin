@@ -5674,19 +5674,13 @@
             var loginItNameFieldId = "<%= hfLoginItName.ClientID %>";
             var loginUserIdFieldId = "<%= hfLoginUserId.ClientID %>";
             var assignAdminUnlocked = <%= IsAssignAdminSession() ? "true" : "false" %>;
-            var assignAdminLookbackDays = 5;
 
             function adminCanUseScheduleDate(dateValue) {
                 if (!assignAdminUnlocked) {
                     return false;
                 }
                 var scheduleDate = dateValue instanceof Date ? dateValue : parseIsoDate(dateValue);
-                if (!scheduleDate) {
-                    return false;
-                }
-                var oldest = getTodayDateOnly();
-                oldest.setDate(oldest.getDate() - assignAdminLookbackDays);
-                return scheduleDate.getTime() >= oldest.getTime();
+                return !!scheduleDate;
             }
 
             function getIsTechnicianUser() {
@@ -7321,9 +7315,7 @@
                 }
                 reportModalState.submitAction = actionSource === "administration" ? "administration" : "assign";
                 if (isPastScheduleDate(reportModalState.schDate || "") && !adminCanUseScheduleDate(reportModalState.schDate || "")) {
-                    setReportFeedback(assignAdminUnlocked
-                        ? "Admin hanya bisa assign sampai 5 hari ke belakang."
-                        : "Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.", true, false);
+                    setReportFeedback("Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.", true, false);
                     return;
                 }
 

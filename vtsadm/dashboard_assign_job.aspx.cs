@@ -1855,11 +1855,9 @@ namespace vtsadm
                 || groupId == "ADM";
         }
 
-        private const int ItsAdminScheduleLookbackDays = 5;
-
         /// <summary>
-        /// IT Support admin may assign and close from today back through this many days.
-        /// Older dates stay locked. Teknisi and non-admin users are unchanged.
+        /// IT Support admin may assign and close on any past date.
+        /// Teknisi and non-admin users stay limited to today or later.
         /// </summary>
         private static bool RejectItsScheduleDate(DateTime schDate, SaveAssignResponse response)
         {
@@ -1870,21 +1868,15 @@ namespace vtsadm
                 return false;
             }
 
-            response.Message = IsAssignAdminSession()
-                ? "Admin hanya bisa assign sampai 5 hari ke belakang."
-                : "Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.";
+            response.Message = "Assign Job hanya tersedia untuk tanggal hari ini atau setelahnya.";
             return true;
         }
 
         private static bool ItsAdminCanUseScheduleDate(DateTime schDate)
         {
-            if (!IsJobTrainingAssignRequestContext() || !IsAssignAdminSession())
-            {
-                return false;
-            }
-
-            DateTime oldest = DateTime.Today.AddDays(-ItsAdminScheduleLookbackDays);
-            return schDate.Date >= oldest;
+            return IsJobTrainingAssignRequestContext()
+                && IsAssignAdminSession()
+                && schDate != DateTime.MinValue;
         }
 
         public static bool CurrentUserCanAccessCloseJobTraining()
@@ -14259,9 +14251,7 @@ ORDER BY
 
             if (scheduleDateValue.Date < DateTime.Today && !ItsAdminCanUseScheduleDate(scheduleDateValue))
             {
-                response.Message = IsJobTrainingAssignRequestContext() && IsAssignAdminSession()
-                    ? "Admin hanya bisa assign sampai 5 hari ke belakang."
-                    : "Training/Visit hanya bisa ditambahkan untuk tanggal hari ini atau setelahnya.";
+                response.Message = "Training/Visit hanya bisa ditambahkan untuk tanggal hari ini atau setelahnya.";
                 return response;
             }
 
