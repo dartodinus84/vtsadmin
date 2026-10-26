@@ -188,9 +188,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="form-group form-group-sm">
-                            <div id="divpic" class="form-group form-group-sm" style="height: 300px; text-align: center;">
-                                <img id="ImgInstall" src="_blank" style="height: 100%; width: 100%;">
-                            </div>
+                            <div id="divpic" class="form-group form-group-sm" style="min-height: 160px; max-height: 70vh; overflow: auto; text-align: center;"></div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -342,13 +340,40 @@
             cmdSearch.click();
         }
 
-        function postPic(picFileName) {
-            console.log(picFileName);
-            if (picFileName != '') {
-                $('#modal-pic').modal('show');
-                var img1 = document.getElementById('ImgInstall');
-                img1.src = "Picture/" + picFileName;
-                //img1.he
+        function postPic(trainId, picFileName) {
+            trainId = CheckNbsp(trainId);
+            picFileName = CheckNbsp(picFileName);
+            $('#modal-pic').modal('show');
+            var box = document.getElementById('divpic');
+            box.innerHTML = '<div style="padding:24px;color:#64748b;">Memuat lampiran...</div>';
+            $.getJSON('training_job_picture.ashx', { action: 'list', trainId: trainId, name: picFileName })
+                .done(function (names) {
+                    renderTrainingPictures(box, names);
+                })
+                .fail(function () {
+                    if (picFileName) {
+                        renderTrainingPictures(box, [picFileName]);
+                        return;
+                    }
+                    box.innerHTML = '<div style="padding:24px;color:#64748b;">Lampiran tidak ditemukan.</div>';
+                });
+        }
+
+        function renderTrainingPictures(box, names) {
+            box.innerHTML = '';
+            if (!names || !names.length) {
+                box.innerHTML = '<div style="padding:24px;color:#64748b;">Lampiran tidak ditemukan di folder Picture atau trx_job_assign_picture.</div>';
+                return;
+            }
+            for (var i = 0; i < names.length; i++) {
+                var img = document.createElement('img');
+                img.alt = names[i];
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '420px';
+                img.style.display = 'block';
+                img.style.margin = '8px auto';
+                img.src = 'training_job_picture.ashx?action=file&name=' + encodeURIComponent(names[i]);
+                box.appendChild(img);
             }
         }
         function postDetails(sTrainingID, sReqDate, sCustomerName, sSchDate, sBillAble, sValueStatus, sTrainer, sMarketing, objDetails, objPic, objFunc, sCustID, sRemark, sBillAbleID,

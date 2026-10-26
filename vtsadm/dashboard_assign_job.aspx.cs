@@ -3788,6 +3788,7 @@ namespace vtsadm
                 return;
             }
 
+            EnrichAssignDetailsWithTrainingCategory(details);
             Dictionary<string, string> areaIdAreaGroupMap = LoadAreaIdAreaGroupMap();
 
             foreach (DataRow row in details.Rows)
@@ -3842,7 +3843,7 @@ namespace vtsadm
                 }
                 if (isClosed)
                 {
-                    if (IsAssignDetailVisitOrMaint(row))
+                    if (IsClosedAssignJobVisit(row))
                     {
                         trainer.ClosedVisit++;
                     }
@@ -3850,6 +3851,149 @@ namespace vtsadm
                     {
                         trainer.ClosedTraining++;
                     }
+                }
+            }
+        }
+
+        private static bool IsClosedAssignJobVisit(DataRow row)
+        {
+            if (IsAssignDetailVisitOrMaint(row))
+            {
+                return true;
+            }
+
+            string categoryName = FirstNonEmptyStatic(
+                GetValue(row, "TrainingCategoryName"),
+                GetValue(row, "TrainCategoryName"),
+                GetValue(row, "CategoryName"));
+            string categoryId = FirstNonEmptyStatic(
+                GetValue(row, "TrainCategoryID"),
+                GetValue(row, "TrainingCategoryID"),
+                GetValue(row, "CategoryID"));
+            if (string.IsNullOrWhiteSpace(categoryId) && string.IsNullOrWhiteSpace(categoryName))
+            {
+                return false;
+            }
+
+            return IsVisitCategory(categoryName, categoryId);
+        }
+
+        private static void EnrichAssignDetailsWithTrainingCategory(DataTable details)
+        {
+            if (details == null || details.Rows.Count == 0)
+            {
+                return;
+            }
+
+            if (!details.Columns.Contains("TrainCategoryID"))
+            {
+                details.Columns.Add("TrainCategoryID");
+            }
+
+            if (!details.Columns.Contains("TrainingCategoryName"))
+            {
+                details.Columns.Add("TrainingCategoryName");
+            }
+
+            if (!details.Columns.Contains("CustomerName"))
+            {
+                details.Columns.Add("CustomerName");
+            }
+
+            if (!details.Columns.Contains("BranchName"))
+            {
+                details.Columns.Add("BranchName");
+            }
+
+            List<string> jobIds = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow row in details.Rows)
+            {
+                string jobId = FirstNonEmptyStatic(GetValue(row, "JobID"), GetValue(row, "AssignID")).Trim();
+                if (jobId.Length == 0 || !seen.Add(jobId))
+                {
+                    continue;
+                }
+
+                jobIds.Add(jobId);
+            }
+
+            if (jobIds.Count == 0)
+            {
+                return;
+            }
+
+            Dictionary<string, string[]> lookup = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            const int chunkSize = 80;
+            for (int offset = 0; offset < jobIds.Count; offset += chunkSize)
+            {
+                int take = Math.Min(chunkSize, jobIds.Count - offset);
+                StringBuilder inList = new StringBuilder();
+                for (int i = 0; i < take; i++)
+                {
+                    if (i > 0)
+                    {
+                        inList.Append(",");
+                    }
+
+                    inList.Append("'" + jobIds[offset + i].Replace("'", "''") + "'");
+                }
+
+                DataTable matched = ExecuteJobTrainingQuery(
+                    "SELECT t.TrainingID, ISNULL(t.TrainCategoryID, ''), ISNULL(cat.TrainCategoryDesc, ''), "
+                    + "ISNULL(c.FullName, ''), ISNULL(br.BranchName, '') "
+                    + "FROM trx_training_order t WITH (NOLOCK) "
+                    + "LEFT JOIN ref_train_category cat WITH (NOLOCK) ON cat.TrainCategoryID = t.TrainCategoryID "
+                    + "LEFT JOIN mst_customer c WITH (NOLOCK) ON c.CustID = t.CustID "
+                    + "LEFT JOIN ref_branch br WITH (NOLOCK) ON br.BranchID = c.BranchID "
+                    + "WHERE t.TrainingID IN (" + inList + ")");
+                if (matched == null || matched.Rows.Count == 0 || matched.Columns.Count < 5)
+                {
+                    continue;
+                }
+
+                foreach (DataRow match in matched.Rows)
+                {
+                    string trainingId = Convert.ToString(match[0]).Trim();
+                    if (trainingId.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    lookup[trainingId] = new[]
+                    {
+                        Convert.ToString(match[1]).Trim(),
+                        Convert.ToString(match[2]).Trim(),
+                        Convert.ToString(match[3]).Trim(),
+                        Convert.ToString(match[4]).Trim()
+                    };
+                }
+            }
+
+            if (lookup.Count == 0)
+            {
+                return;
+            }
+
+            foreach (DataRow row in details.Rows)
+            {
+                string jobId = FirstNonEmptyStatic(GetValue(row, "JobID"), GetValue(row, "AssignID")).Trim();
+                string[] info;
+                if (!lookup.TryGetValue(jobId, out info))
+                {
+                    continue;
+                }
+
+                row["TrainCategoryID"] = info[0];
+                row["TrainingCategoryName"] = info[1];
+                if (!string.IsNullOrWhiteSpace(info[2]))
+                {
+                    row["CustomerName"] = info[2];
+                }
+
+                if (!string.IsNullOrWhiteSpace(info[3]))
+                {
+                    row["BranchName"] = info[3];
                 }
             }
         }
@@ -7470,6 +7614,8 @@ ORDER BY
             int[] capacityOff = new int[totalDays + 1];
             int[] capacityCuti = new int[totalDays + 1];
             int[] capacityIzin = new int[totalDays + 1];
+            int monthClosedTraining = 0;
+            int monthClosedVisit = 0;
 
             for (int rowIndex = 0; rowIndex < techGroups.Count; rowIndex++)
             {
@@ -7491,6 +7637,8 @@ ORDER BY
                 monthAssignTotal += Math.Max(0, totalJobAssign);
                 int totalClosedJobNew = techEntry.TotalClosedJobNew;
                 int totalClosedJobMaint = techEntry.TotalClosedJobMaint;
+                monthClosedTraining += Math.Max(0, totalClosedJobNew);
+                monthClosedVisit += Math.Max(0, totalClosedJobMaint);
 
                 if (UseJobTrainingDataSource)
                 {
@@ -7743,11 +7891,23 @@ ORDER BY
 
             litScheduleHeader.Text = BuildScheduleDayHeader(totalDays, periodDate, dayNameMap, weekendMap, capacityTotalJO);
             litScheduleRows.Text = rows.ToString();
+            int monthAvailable = 0;
+            int monthDayJo = 0;
+            for (int day = 1; day <= totalDays; day++)
+            {
+                monthAvailable += capacityAvailable[day];
+                monthDayJo += capacityAssignUnit[day];
+            }
+
             litCapacityRows.Text = BuildCapacityRows(
                 totalDays,
                 capacityCloseUnit,
                 capacityAssignUnit,
                 monthAssignTotal,
+                monthClosedTraining,
+                monthClosedVisit,
+                monthAvailable,
+                monthDayJo,
                 capacityAvailable,
                 capacityJO1,
                 capacityJO2,
@@ -7824,6 +7984,10 @@ ORDER BY
             int[] closeUnit,
             int[] assignUnit,
             int monthAssignTotal,
+            int monthClosedTraining,
+            int monthClosedVisit,
+            int monthAvailable,
+            int monthDayJo,
             int[] available,
             int[] jo1,
             int[] jo2,
@@ -7839,16 +8003,18 @@ ORDER BY
             cap.Append("<td class=\"col-name sticky-name cap-header-cell\">Kapasitas per Hari</td>");
             if (UseJobTrainingDataSource)
             {
-                cap.Append("<td class=\"col-total-assign cap-header-cell\"></td>");
+                cap.Append("<td class=\"col-total-assign cap-header-cell\">" + monthAssignTotal.ToString() + "</td>");
+                cap.Append("<td class=\"col-total cap-header-cell\">" + monthClosedTraining.ToString() + "</td>");
+                cap.Append("<td class=\"col-total-maint cap-header-cell\">" + monthClosedVisit.ToString() + "</td>");
             }
             else
             {
                 cap.Append("<td class=\"col-total-assign cap-header-cell\" title=\"Lihat detail Total JO Assign semua teknisi bulan ini\">");
                 cap.Append(BuildAllAssignJobTrigger(monthAssignTotal.ToString(), monthAssignTotal, periode));
                 cap.Append("</td>");
+                cap.Append("<td class=\"col-total cap-header-cell\"></td>");
+                cap.Append("<td class=\"col-total-maint cap-header-cell\"></td>");
             }
-            cap.Append("<td class=\"col-total cap-header-cell\"></td>");
-            cap.Append("<td class=\"col-total-maint cap-header-cell\"></td>");
             if (!UseJobTrainingDataSource)
             {
                 cap.Append("<td class=\"col-stock cap-header-cell\"></td>");
@@ -7881,13 +8047,14 @@ ORDER BY
                 cap.Append("</tr>");
             }
 
-            AppendCapacityRow(cap, "Available", "cap-avail", totalDays, available);
             if (UseJobTrainingDataSource)
             {
-                AppendCapacityRow(cap, "Total JO", "cap-jo1", totalDays, assignUnit);
+                AppendCapacityRow(cap, "Available", "cap-avail", totalDays, available, monthAvailable, monthClosedTraining, monthClosedVisit);
+                AppendCapacityRow(cap, "Total JO", "cap-jo1", totalDays, assignUnit, monthDayJo, monthClosedTraining, monthClosedVisit);
             }
             else
             {
+                AppendCapacityRow(cap, "Available", "cap-avail", totalDays, available);
                 AppendCapacityRow(cap, "JO 1 Unit", "cap-jo1", totalDays, jo1);
                 AppendCapacityRow(cap, "JO 2 Unit", "cap-jo2", totalDays, jo2);
                 AppendCapacityRow(cap, "JO 3+ Unit", "cap-jo3", totalDays, jo3);
@@ -7904,14 +8071,16 @@ ORDER BY
             AppendCapacityRow(builder, label, cssClass, totalDays, values, null);
         }
 
-        private void AppendCapacityRow(StringBuilder builder, string label, string cssClass, int totalDays, int[] values, int? assignColumnTotal)
+        private void AppendCapacityRow(StringBuilder builder, string label, string cssClass, int totalDays, int[] values, int? assignColumnTotal, int? closedTraining = null, int? closedVisit = null)
         {
             builder.Append("<tr>");
             builder.Append("<td class=\"col-no sticky-no cap-row-label " + cssClass + "\"></td>");
             builder.Append("<td class=\"col-name sticky-name cap-row-label " + cssClass + "\">" + label + "</td>");
             if (UseJobTrainingDataSource)
             {
-                builder.Append("<td class=\"col-total-assign cap-scroll-gap " + cssClass + "\"></td>");
+                builder.Append("<td class=\"col-total-assign cap-scroll-gap " + cssClass + "\">" + (assignColumnTotal.HasValue ? assignColumnTotal.Value.ToString() : "") + "</td>");
+                builder.Append("<td class=\"col-total cap-scroll-gap " + cssClass + "\">" + (closedTraining.HasValue ? closedTraining.Value.ToString() : "") + "</td>");
+                builder.Append("<td class=\"col-total-maint cap-scroll-gap " + cssClass + "\">" + (closedVisit.HasValue ? closedVisit.Value.ToString() : "") + "</td>");
             }
             else
             {
@@ -7921,9 +8090,9 @@ ORDER BY
                     builder.Append(assignColumnTotal.Value.ToString());
                 }
                 builder.Append("</td>");
+                builder.Append("<td class=\"col-total cap-scroll-gap " + cssClass + "\"></td>");
+                builder.Append("<td class=\"col-total-maint cap-scroll-gap " + cssClass + "\"></td>");
             }
-            builder.Append("<td class=\"col-total cap-scroll-gap " + cssClass + "\"></td>");
-            builder.Append("<td class=\"col-total-maint cap-scroll-gap " + cssClass + "\"></td>");
             if (!UseJobTrainingDataSource)
             {
                 builder.Append("<td class=\"col-stock cap-scroll-gap " + cssClass + "\"></td>");
@@ -11570,12 +11739,14 @@ ORDER BY
                 periodDate = DateTime.Now;
             }
 
-            string normalizedPeriode = periodDate.ToString("yyyy-MM");
-            DataTable source = LoadJobTrainingRowsForSchedule(normalizedPeriode);
+            DateTime monthStart = new DateTime(periodDate.Year, periodDate.Month, 1);
+            DataTable source = LoadTrxJobAssignDetailRows(monthStart, monthStart.AddMonths(1));
             if (source == null || source.Rows.Count == 0)
             {
                 return mapped;
             }
+
+            EnrichAssignDetailsWithTrainingCategory(source);
 
             string closeTypeNorm = (closeType ?? string.Empty).Trim().ToLowerInvariant();
             bool includeAllTypes = string.IsNullOrWhiteSpace(closeTypeNorm)
@@ -11584,41 +11755,27 @@ ORDER BY
             bool wantVisit = closeTypeNorm == "maintenance" || closeTypeNorm == "visit";
 
             Dictionary<string, JobTrainingTrainerSchedule> itsUsers = BuildItsUserScheduleMap(31);
-            string wantedUserId = TrimToLength((technicianId ?? string.Empty).Trim(), 20);
+            string wantedUserId = (technicianId ?? string.Empty).Trim();
             string wantedName = (technicianName ?? string.Empty).Trim();
-            Dictionary<string, string> technicianByJobId = BuildJobTechnicianIdByJobMap(periodDate);
+            bool wantUnassigned = wantedUserId.Equals("UNASSIGNED", StringComparison.OrdinalIgnoreCase)
+                || wantedName.Equals("Unassigned", StringComparison.OrdinalIgnoreCase);
+            JobTrainingTrainerSchedule wantedTrainer = FindItsTrainerByTechnicianKey(itsUsers, wantedUserId);
 
             foreach (DataRow row in source.Rows)
             {
-                if (!JobMatchesTechnicianId(row, wantedUserId, wantedName, itsUsers, technicianByJobId))
-                {
-                    continue;
-                }
-
-                string categoryName = FirstNonEmptyStatic(
-                    GetValue(row, "TrainingCategoryName"),
-                    GetValue(row, "TrainCategoryName"),
-                    GetValue(row, "CategoryName"),
-                    GetValue(row, "Category"));
-                string categoryId = FirstNonEmptyStatic(
-                    GetValue(row, "TrainCategoryID"),
-                    GetValue(row, "TrainingCategoryID"),
-                    GetValue(row, "CategoryID"));
-                if (!IsJobTrainingScheduleCategory(row, categoryName, categoryId))
-                {
-                    continue;
-                }
-
-                bool isVisit = IsVisitCategory(categoryName, categoryId);
-                if (!includeAllTypes && wantVisit != isVisit)
+                string statusRaw = FirstNonEmptyStatic(
+                    GetValue(row, "Status"),
+                    GetValue(row, "StatusCode"),
+                    GetValue(row, "ValueStatus"));
+                if (!IsClosedAssignDetailStatus(statusRaw))
                 {
                     continue;
                 }
 
                 string schDateRaw = FirstNonEmptyStatic(
-                    GetValue(row, "sSchDate"),
                     GetValue(row, "SchDate"),
-                    GetValue(row, "ScheduleDate"));
+                    GetValue(row, "ScheduleDate"),
+                    GetValue(row, "sSchDate"));
                 DateTime schDate;
                 if (!TryParseTrainingDate(schDateRaw, out schDate)
                     || schDate.Year != periodDate.Year
@@ -11627,22 +11784,41 @@ ORDER BY
                     continue;
                 }
 
+                string rowTechnicianId = FirstNonEmptyStatic(
+                    GetValue(row, "TechnicianID"),
+                    GetValue(row, "TechnicianId"),
+                    GetValue(row, "ITID")).Trim();
+                if (wantUnassigned)
+                {
+                    if (!string.IsNullOrWhiteSpace(rowTechnicianId))
+                    {
+                        continue;
+                    }
+                }
+                else if (!ClosedAssignRowMatchesTrainer(rowTechnicianId, wantedUserId, wantedName, wantedTrainer, itsUsers))
+                {
+                    continue;
+                }
+
+                bool isVisit = IsClosedAssignJobVisit(row);
+                if (!includeAllTypes && wantVisit != isVisit)
+                {
+                    continue;
+                }
+
                 string customerName = FirstNonEmptyStatic(
                     GetValue(row, "CustomerName"),
-                    GetValue(row, "CustName"),
                     GetValue(row, "FullName"),
-                    GetValue(row, "CustID"));
-                string jobId = FirstNonEmptyStatic(GetValue(row, "TrainingID"), GetValue(row, "JobID"));
-                string rawStatus = FirstNonEmptyStatic(
-                    GetValue(row, "Status"),
-                    GetValue(row, "ValueStatus"),
-                    GetValue(row, "StatusCode"));
+                    GetValue(row, "Customer"),
+                    GetValue(row, "CustID"),
+                    "-");
+                string jobId = FirstNonEmptyStatic(GetValue(row, "JobID"), GetValue(row, "AssignID"), "-");
 
                 DataRow target = mapped.NewRow();
                 target["JobID"] = jobId;
-                target["AssignID"] = jobId;
+                target["AssignID"] = FirstNonEmptyStatic(GetValue(row, "AssignID"), jobId);
                 target["JobType"] = isVisit ? "Visit" : "Training";
-                target["TechnicianID"] = FirstNonEmptyStatic(wantedUserId, "-");
+                target["TechnicianID"] = FirstNonEmptyStatic(rowTechnicianId, wantedUserId, "-");
                 target["TechnicianName"] = FirstNonEmptyStatic(wantedName, "-");
                 target["DeviceGroupID"] = "-";
                 target["DeviceTypeDesc"] = isVisit ? "Visit" : "Training";
@@ -11651,7 +11827,7 @@ ORDER BY
                 target["CustomerName"] = customerName;
                 target["FullName"] = customerName;
                 target["AreaName"] = FirstNonEmptyStatic(GetValue(row, "BranchName"), GetValue(row, "AreaName"), "-");
-                target["Status"] = rawStatus;
+                target["Status"] = statusRaw;
                 target["TotalUnit"] = 1;
                 mapped.Rows.Add(target);
             }
@@ -11659,13 +11835,42 @@ ORDER BY
             return mapped;
         }
 
+        private static bool ClosedAssignRowMatchesTrainer(
+            string rowTechnicianId,
+            string wantedUserId,
+            string wantedName,
+            JobTrainingTrainerSchedule wantedTrainer,
+            Dictionary<string, JobTrainingTrainerSchedule> itsUsers)
+        {
+            if (string.IsNullOrWhiteSpace(rowTechnicianId))
+            {
+                return false;
+            }
+
+            JobTrainingTrainerSchedule rowTrainer = FindItsTrainerByTechnicianKey(itsUsers, rowTechnicianId);
+            if (wantedTrainer != null && rowTrainer != null)
+            {
+                return wantedTrainer.TrainerId.Equals(rowTrainer.TrainerId, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (rowTechnicianId.Equals(wantedUserId, StringComparison.OrdinalIgnoreCase)
+                || TrimToLength(rowTechnicianId, 20).Equals(TrimToLength(wantedUserId, 20), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return rowTrainer != null
+                && !string.IsNullOrWhiteSpace(wantedName)
+                && rowTrainer.TrainerName.Equals(wantedName, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static ClosedJobModalResponse BindJobTrainingClosedJobModal(
             string technicianName,
             DataTable allJobsSource,
             string closeType)
         {
-            int closedTraining = CountDistinctClosedJobsByType(allJobsSource, false);
-            int closedVisit = CountDistinctClosedJobsByType(allJobsSource, true);
+            int closedTraining = CountJobRowsByVisitFlag(allJobsSource, false);
+            int closedVisit = CountJobRowsByVisitFlag(allJobsSource, true);
 
             bool wantVisit = NormalizeClosedJobType(closeType) == "maintenance";
             DataTable listSource = FilterJobTrainingClosedJobsByType(allJobsSource, wantVisit);
@@ -11673,8 +11878,8 @@ ORDER BY
             string html = hasData
                 ? BuildJobTrainingJobsTableHtml(listSource)
                 : BuildClosedJobEmptyStateHtml(wantVisit
-                    ? "Belum ada Job Visit untuk IT Support ini pada periode terpilih."
-                    : "Belum ada Job Training untuk IT Support ini pada periode terpilih.");
+                    ? "Belum ada Closed JO Visit untuk IT Support ini pada periode terpilih."
+                    : "Belum ada Closed JO Training untuk IT Support ini pada periode terpilih.");
 
             ClosedJobModalResponse response = ShowClosedJobModal(
                 technicianName,
@@ -11744,6 +11949,26 @@ ORDER BY
             }
 
             return code;
+        }
+
+        private static int CountJobRowsByVisitFlag(DataTable source, bool visitOnly)
+        {
+            if (source == null || source.Rows.Count == 0)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (DataRow row in source.Rows)
+            {
+                bool isVisit = GetValue(row, "JobType").IndexOf("Visit", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (visitOnly == isVisit)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static int CountDistinctClosedJobsByType(DataTable source, bool visitOnly)

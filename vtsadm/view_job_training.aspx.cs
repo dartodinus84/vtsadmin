@@ -205,6 +205,17 @@ namespace vtsadm
 
             }
         }
+        private static string JsArg(string value)
+        {
+            string text = HttpUtility.HtmlDecode(value ?? "");
+            if (text == "\u00a0" || text == "&nbsp;")
+            {
+                text = "";
+            }
+
+            return text.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "").Replace("\n", "");
+        }
+
         protected void GridView2_RowDataBound(object sender, GridViewRowEventArgs e)
         {
             try
@@ -240,7 +251,7 @@ namespace vtsadm
                     CmdFunc.OnClientClick = "postFunc('" + e.Row.Cells[18].Text.ToString() + "'); return false;";
 
                     LinkButton CmdPic = (LinkButton)e.Row.FindControl("CmdPic");
-                    CmdPic.OnClientClick = "postPic('" + e.Row.Cells[24].Text.ToString() + "'); return false;";
+                    CmdPic.OnClientClick = "postPic('" + JsArg(e.Row.Cells[18].Text) + "','" + JsArg(e.Row.Cells[24].Text) + "'); return false;";
 
                     
 

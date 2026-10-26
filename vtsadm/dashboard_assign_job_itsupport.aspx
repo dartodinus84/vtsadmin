@@ -7662,8 +7662,8 @@
                 closedJobRequestToken = requestToken;
                 var normalizedCloseType = (closeType || "").toLowerCase() === "maintenance" ? "maintenance" : "new_install";
                 var closeTypeLabel = normalizedCloseType === "maintenance"
-                    ? "Daftar Job Visit (semua status)"
-                    : "Daftar Job Training (semua status)";
+                    ? "Daftar Closed JO Visit"
+                    : "Daftar Closed JO Training";
 
                 if (title) {
                     title.textContent = techName;

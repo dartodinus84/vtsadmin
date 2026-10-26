@@ -11365,6 +11365,9 @@
     <Compile Include="vehicle_counting_zoning_image.ashx.cs">
       <DependentUpon>vehicle_counting_zoning_image.ashx</DependentUpon>
     </Compile>
+    <Compile Include="training_job_picture.ashx.cs">
+      <DependentUpon>training_job_picture.ashx</DependentUpon>
+    </Compile>
     <Compile Include="user.aspx.cs">
       <DependentUpon>user.aspx</DependentUpon>
       <SubType>ASPXCodeBehind</SubType>
@@ -12482,6 +12485,7 @@
     <Content Include="UploadJurnalInvoice.ashx" />
     <Content Include="vehicle_counting_zoning_upload.ashx" />
     <Content Include="vehicle_counting_zoning_image.ashx" />
+    <Content Include="training_job_picture.ashx" />
     <Content Include="vehicle_counting_zoning_api.ashx" />
     <Content Include="mdvr_channel.ashx" />
     <Content Include="device_maint_new_device.ashx" />
