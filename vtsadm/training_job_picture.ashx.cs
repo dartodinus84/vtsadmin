@@ -184,7 +184,7 @@ namespace vtsadm
                 return;
             }
 
-            string folder = context.Server.MapPath("~/Picture/");
+            string folder = context.Server.MapPath("~/Picture/trx_job_assign_picture/");
             Directory.CreateDirectory(folder);
             File.WriteAllBytes(Path.Combine(folder, name), bytes);
 
@@ -224,6 +224,7 @@ namespace vtsadm
         {
             string[] folders = new[]
             {
+                context.Server.MapPath("~/Picture/trx_job_assign_picture/"),
                 context.Server.MapPath("~/Picture/"),
                 context.Server.MapPath("~/trx_job_assign_picture/")
             };

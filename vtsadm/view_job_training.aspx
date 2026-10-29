@@ -362,7 +362,7 @@
         function renderTrainingPictures(box, names) {
             box.innerHTML = '';
             if (!names || !names.length) {
-                box.innerHTML = '<div style="padding:24px;color:#64748b;">Lampiran tidak ditemukan di folder Picture atau trx_job_assign_picture.</div>';
+                box.innerHTML = '<div style="padding:24px;color:#64748b;">Lampiran tidak ditemukan di folder Picture/trx_job_assign_picture.</div>';
                 return;
             }
             for (var i = 0; i < names.length; i++) {
