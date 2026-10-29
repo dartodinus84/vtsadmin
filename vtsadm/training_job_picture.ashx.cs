@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
 using System.Data.OleDb;
 using System.Data.SqlClient;
@@ -15,6 +16,13 @@ namespace vtsadm
     {
         public void ProcessRequest(HttpContext context)
         {
+            string action = (context.Request["action"] ?? "").Trim().ToLowerInvariant();
+            if (action == "save")
+            {
+                SaveFromAfterSales(context);
+                return;
+            }
+
             if (context.Session == null || context.Session["ClsTypeIsLogin"] == null)
             {
                 context.Response.StatusCode = 403;
@@ -22,7 +30,6 @@ namespace vtsadm
                 return;
             }
 
-            string action = (context.Request["action"] ?? "").Trim().ToLowerInvariant();
             if (action == "list")
             {
                 WriteList(context);
@@ -128,6 +135,89 @@ namespace vtsadm
             context.Response.ContentType = contentType;
             context.Response.Cache.SetCacheability(HttpCacheability.NoCache);
             context.Response.TransmitFile(path);
+        }
+
+        private static void SaveFromAfterSales(HttpContext context)
+        {
+            string configured = ConfigurationManager.AppSettings["TmcClosePictureKey"] ?? "";
+            string sent = context.Request.Headers["X-Tmc-Picture-Key"] ?? "";
+            if (configured.Length == 0 || !SameKey(configured, sent))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.Write("Forbidden.");
+                return;
+            }
+
+            string name = SafeFileName(context.Request["name"]);
+            if (name.Length == 0 || !Regex.IsMatch(name, @"^TRH\d{1,10}_(\d{2}|sign)\.(jpg|jpeg|png)$", RegexOptions.IgnoreCase))
+            {
+                context.Response.StatusCode = 400;
+                context.Response.Write("Nama file tidak valid.");
+                return;
+            }
+
+            int length = context.Request.ContentLength;
+            if (length <= 0 || length > 4 * 1024 * 1024)
+            {
+                context.Response.StatusCode = 400;
+                context.Response.Write("Ukuran gambar tidak valid.");
+                return;
+            }
+
+            byte[] bytes = new byte[length];
+            int read = 0;
+            while (read < length)
+            {
+                int n = context.Request.InputStream.Read(bytes, read, length - read);
+                if (n <= 0)
+                {
+                    break;
+                }
+
+                read += n;
+            }
+
+            if (read != length || !IsImage(bytes))
+            {
+                context.Response.StatusCode = 400;
+                context.Response.Write("File bukan gambar.");
+                return;
+            }
+
+            string folder = context.Server.MapPath("~/Picture/");
+            Directory.CreateDirectory(folder);
+            File.WriteAllBytes(Path.Combine(folder, name), bytes);
+
+            context.Response.ContentType = "text/plain";
+            context.Response.Write("OK");
+        }
+
+        private static bool SameKey(string configured, string sent)
+        {
+            if (configured.Length != sent.Length)
+            {
+                return false;
+            }
+
+            int diff = 0;
+            for (int i = 0; i < configured.Length; i++)
+            {
+                diff |= configured[i] ^ sent[i];
+            }
+
+            return diff == 0;
+        }
+
+        private static bool IsImage(byte[] bytes)
+        {
+            if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            {
+                return true;
+            }
+
+            return bytes.Length >= 8
+                && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
         }
 
         private static string FindFile(HttpContext context, string name)
